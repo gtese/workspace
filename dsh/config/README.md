@@ -3,6 +3,7 @@
 | 文件 | 用途 |
 |---|---|
 | `dsh.env.example` | 共享配置模板。真实文件部署在 `/eda/apps/deepseek/etc/dsh.env`（644），**不要提交真实 key** |
+| `dsh.env.deployed.sanitized` | 线上共享配置脱敏样例（API Key 为占位符，不可直接使用） |
 | `pki/tri-enterprise-root.pem` | 公司内部根证书（公开证书），用于 Node 访问 `*.tri.local` |
 
 真实配置结构：

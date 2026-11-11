@@ -81,6 +81,7 @@ sudo ./scripts/add-host-link.sh
 - [`docs/troubleshooting.md`](docs/troubleshooting.md)：常见故障排查
 - [`docs/security.md`](docs/security.md)：共享 Key 的安全模型、轮换与后续演进
 - [`docs/faq.md`](docs/faq.md)：会话历史持久化、root 权限、Key 可见性等常见问题
+- [`docs/用户手册.md`](docs/用户手册.md)：给普通用户的使用说明（启动、历史、注意事项）
 
 ## 注意
 
