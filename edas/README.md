@@ -124,8 +124,9 @@ cd /opt/tri-portal
 | 仓库 | 提交 |
 |---|---|
 | `it/slurm` | `b1359f9` docs: OOD 访问地址迁移到 edas.tri.local |
-| `it/oidc` | `fb06ec8` feat: OOD client 地址迁移到 edas.tri.local |
+| `it/oidc` | `0f91ffb` docs: .env.example 中 OOD 地址更新为 edas.tri.local |
 | `it/portal` | `ad4b066` docs: 集群门户卡片地址改为 edas.tri.local |
+| `workspace` | `6bc00e0` docs: add EDAS OOD migration dossier |
 
 ---
 
