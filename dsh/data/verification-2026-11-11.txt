@@ -1,0 +1,38 @@
+# dsh 升级验证记录（2026-11-11）
+# 升级: 0.2.0-rc.2 -> 0.2.2-rc.1
+# 主机: opsnas 107（安装节点） + trivm131/132/133（共享 NFS）
+
+版本（四台一致）:
+  172.16.50.107: 0.2.2-rc.1
+  172.16.50.131: 0.2.2-rc.1
+  172.16.50.132: 0.2.2-rc.1
+  172.16.50.133: 0.2.2-rc.1
+
+备份:
+  /eda/apps/deepseek-backup-0.2.0-rc.2-20261111.tar.gz  (116M)
+
+npm 升级输出摘要:
+  added 139 packages, removed 25 packages, and changed 515 packages in 7m
+  npm warn allow-scripts: 5 packages install scripts not executed
+    (@deepseek-ai/dsh-subprocess-local, koffi, node-pty, @google/genai, protobufjs)
+  -> 已实测 koffi / node-pty 预编译产物可加载，pty spawn 正常
+
+verify.sh（trivm132, 普通用户 linyiyao）:
+================================================
+== 版本
+   OK  dsh --version -> 0.2.2-rc.1
+
+== headless 对话
+   输出: verify-ok
+   OK  模型对话正常
+
+== 工具调用（whoami）
+   输出: linyiyao
+   OK  bash 工具正常
+
+== Web UI 启动与认证
+   no-token=401 token=303
+   OK  Web UI/token 正常
+
+全部通过
+================================================

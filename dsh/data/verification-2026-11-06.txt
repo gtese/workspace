@@ -1,0 +1,60 @@
+# dsh 部署验证记录
+# 生成时间: 2026-11-06 10:23:29 CST
+
+## 主机: trivm131.tri.local (172.16.50.131)
+hostname: trivm131.tri.local
+os: Rocky Linux release 8.10 (Green Obsidian)
+kernel: 4.18.0-553.174.1.el8_10.x86_64
+dsh: 0.2.0-rc.2
+node: v24.18.1
+link: /eda/apps/deepseek/bin/dsh-desktop
+nfs: 172.16.20.13:/fs/eda_nas/eda_apps nfs    ro,nosuid,nodev,relatime,vers=3,rsize=1048576,wsize=1048576,namlen=255,hard,fatal_neterrors=none,proto=tcp,timeo=600,retrans=2,sec=sys,mountaddr=172.16.20.13,mountvers=3,mountport=8752,mountproto=tcp,local_lock=none,addr=172.16.20.13
+selinux: Enforcing
+
+### 1) headless 对话
+$ dsh --profile headless "你好，请只回复：端到端-ok"
+端到端-ok
+
+### 2) headless 工具调用
+$ dsh --profile headless "运行 whoami 命令，然后只回复命令的输出"
+linyiyao
+
+## 主机: opsnas.tri.local (172.16.50.107)
+hostname: opsnas.tri.local
+os: Rocky Linux release 8.10 (Green Obsidian)
+dsh: 0.2.0-rc.2
+node: v24.18.1
+link: /eda/apps/deepseek/bin/dsh-desktop
+nfs: 172.16.20.13:/fs/eda_nas/eda_apps nfs    rw,nosuid,nodev,relatime,vers=3,rsize=1048576,wsize=1048576,namlen=255,hard,fatal_neterrors=none,proto=tcp,timeo=600,retrans=2,sec=sys,mountaddr=172.16.20.13,mountvers=3,mountport=8752,mountproto=tcp,local_lock=none,addr=172.16.20.13
+
+### 3) headless 对话
+$ dsh --profile headless "你好，请只回复：107-ok"
+107-ok
+
+## 追加验证: trivm132 / trivm133（2026-11-06 10:40）
+
+### trivm132.tri.local (172.16.50.132)
+hostname: trivm132.tri.local
+os: Rocky Linux release 8.10 (Green Obsidian)
+dsh: 0.2.0-rc.2
+link: /eda/apps/deepseek/bin/dsh-desktop
+nfs: nfs    ro,nosuid,nodev,relatime,vers=3,r...
+
+$ dsh --profile headless "你好，请只回复：132-ok"
+132-ok
+
+$ dsh --profile headless "运行 whoami..."
+linyiyao
+
+### trivm133.tri.local (172.16.50.133)
+hostname: trivm133.tri.local
+os: Rocky Linux release 8.10 (Green Obsidian)
+dsh: 0.2.0-rc.2
+link: /eda/apps/deepseek/bin/dsh-desktop
+nfs: nfs    ro,nosuid,nodev,relatime,vers=3,r...
+
+$ dsh --profile headless "你好，请只回复：133-ok"
+133-ok
+
+$ dsh --profile headless "运行 whoami..."
+linyiyao

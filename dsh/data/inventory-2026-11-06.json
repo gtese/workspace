@@ -1,0 +1,80 @@
+{
+  "generated_at": "2026-11-06T10:23:00+08:00",
+  "prefix": "/eda/apps/deepseek",
+  "hosts": [
+    {
+      "host": "opsnas.tri.local",
+      "ip": "172.16.50.107",
+      "role": "installer",
+      "os": "Rocky Linux 8.10",
+      "nfs": "rw"
+    },
+    {
+      "host": "trivm131.tri.local",
+      "ip": "172.16.50.131",
+      "role": "desktop",
+      "os": "Rocky Linux 8.10",
+      "nfs": "ro"
+    },
+    {
+      "host": "trivm132.tri.local",
+      "ip": "172.16.50.132",
+      "role": "desktop",
+      "os": "Rocky Linux 8.10",
+      "nfs": "ro"
+    },
+    {
+      "host": "trivm133.tri.local",
+      "ip": "172.16.50.133",
+      "role": "desktop",
+      "os": "Rocky Linux 8.10",
+      "nfs": "ro"
+    }
+  ],
+  "versions": {
+    "node": "24.18.1",
+    "dsh": "0.2.0-rc.2",
+    "dsh_dependency_count": 176,
+    "pnpm": "11.28.11",
+    "npm": "11.16.0",
+    "open_webui": "0.12.4"
+  },
+  "models": [
+    "deepseek-flash",
+    "deepseek-v4-pro"
+  ],
+  "gateway": {
+    "url": "https://chat.tri.local/api",
+    "protocol": "Anthropic Messages",
+    "auth": "共享 Open WebUI API Key"
+  },
+  "paths": {
+    "launcher": "/eda/apps/deepseek/bin/dsh-desktop",
+    "shim": "/eda/apps/deepseek/bin/dsh-owui-shim.mjs",
+    "env": "/eda/apps/deepseek/etc/dsh.env",
+    "ca": "/eda/apps/deepseek/certs/tri-enterprise-root.pem",
+    "node": "/eda/apps/deepseek/bin/node",
+    "link": "/usr/local/bin/dsh"
+  },
+  "sha256": {
+    "dsh-desktop": "7cf8b8b259f6e50c70928190fca3b9d171b702e7db747f5a31730181e93d34ff",
+    "dsh-owui-shim.mjs": "b567f0fdee4af94a491d53c95ba32e1bfaabed6e530b4b7ce116050e1899b990",
+    "dsh.env": "d44356b8ceccecf2a21a4c4314b36e1a9e0696c19764dd1473483ce359ffd698",
+    "tri-enterprise-root.pem": "522b76da2b540fecc6452f076ec00d6d674c9c034d522ac3e3c0d6def7794c98",
+    "node": "f3432a45b03b2da0d270095fdd8813dc34cbea73f5fc8b18c7a384b7cf9b333a"
+  },
+  "ca": {
+    "subject": "DC=local, DC=tri, CN=Enterprise Root CA",
+    "issuer": "DC=local, DC=tri, CN=Enterprise Root CA",
+    "not_before": "2026-10-22T03:13:34Z",
+    "not_after": "2046-10-22T03:23:28Z",
+    "sha256_fingerprint": "B4:30:C8:4A:27:93:6B:EE:97:4C:F6:46:A2:2B:8F:7A:A9:0A:CF:D2:4E:96:3C:6F:4E:C8:81:37:95:C2:45:EF"
+  },
+  "nfs": {
+    "source": "172.16.20.13:/fs/eda_nas/eda_apps",
+    "mount": "/eda/apps",
+    "size": "20T",
+    "used": "6.1T"
+  },
+  "known_issue": "Open WebUI 0.12.4 Anthropic /api/v1/messages streaming returns empty content blocks; mitigated by dsh-owui-shim.mjs"
+}

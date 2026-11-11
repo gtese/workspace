@@ -1,0 +1,126 @@
+#!/bin/sh
+# DeepSeek Harness 桌面启动器
+#   dsh                          → 启动 Web UI（随机端口，桌面环境自动打开浏览器）
+#   dsh --version                → 版本
+#   dsh --profile headless "..." → 一次性任务
+#   dsh web --port 18080         → 指定端口
+#
+# 共享配置（模型网关 + 共享 key）在 /eda/apps/deepseek/etc/dsh.env；
+# 用户可以用 ~/.config/dsh/env 覆盖。
+
+PREFIX=/eda/apps/deepseek
+PATH="$PREFIX/bin:$PATH"
+NODE_EXTRA_CA_CERTS="$PREFIX/certs/tri-enterprise-root.pem"
+export PATH NODE_EXTRA_CA_CERTS
+
+# 管理员共享配置
+SHARED_ENV="$PREFIX/etc/dsh.env"
+if [ -f "$SHARED_ENV" ]; then
+  . "$SHARED_ENV"
+fi
+
+# 用户自己的覆盖（可选）
+CONF="$HOME/.config/dsh/env"
+if [ -f "$CONF" ]; then
+  . "$CONF"
+fi
+export DEEPSEEK_BASE_URL
+if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+  export DEEPSEEK_API_KEY
+fi
+
+# 判断是否是需要模型的启动（--version/--help/plugin 等不需要）
+NEED_BOOT=1
+case "${1:-}" in
+  plugin|--version|-V|--help|-h|--dump-config|--dump-default-config|--dump-config-schema)
+    NEED_BOOT=0
+    ;;
+esac
+
+WANTS_WEB=0
+if [ "$#" -eq 0 ]; then
+  WANTS_WEB=1
+elif [ "$1" = "web" ]; then
+  WANTS_WEB=1
+elif [ "$1" = "--profile" ] && [ "${2:-}" = "web" ]; then
+  WANTS_WEB=1
+fi
+
+if [ "$NEED_BOOT" = 1 ] && [ "$WANTS_WEB" = 1 ]; then
+  if [ -z "${DEEPSEEK_API_KEY:-}" ] && [ -t 0 ]; then
+    printf '请输入你的 Open WebUI API Key（输入不显示，回车确认）: ' >&2
+    IFS= read -r -s KEY || true
+    printf '\n' >&2
+    if [ -n "$KEY" ]; then
+      DEEPSEEK_API_KEY="$KEY"
+      export DEEPSEEK_API_KEY
+      mkdir -p "${HOME}/.config/dsh"
+      ( umask 077; printf "export DEEPSEEK_API_KEY='%s'\n" "$KEY" > "$CONF" )
+      printf '已保存到 %s（权限 600）。以后直接输入 dsh 即可。\n' "$CONF" >&2
+    fi
+  fi
+  if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+    printf '提示：还没有 DEEPSEEK_API_KEY，模型调用会失败。\n可以编辑 %s 写入：export DEEPSEEK_API_KEY='"'"'你的key'"'"'\n' "$CONF" >&2
+  fi
+fi
+
+# 不带参数：启动 Web UI，端口交给系统分配
+if [ "$#" -eq 0 ]; then
+  set -- web --port 0
+  if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    set -- "$@" --no-open
+  fi
+fi
+
+# 不需要模型/不走 OWUI 的场景直接透传
+case "${1:-}" in
+  plugin|--version|-V|--help|-h|--dump-config|--dump-default-config|--dump-config-schema)
+    exec "$PREFIX/bin/node" "$PREFIX/lib/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@"
+    ;;
+esac
+
+# 如果模型网关是 Open WebUI：起一个本地兼容代理（把 Anthropic 流式转成 OWUI 非流式）
+SHIM_PID=""
+DSH_PID=""
+PORTFILE=""
+cleanup() {
+  [ -n "$SHIM_PID" ] && kill "$SHIM_PID" 2>/dev/null
+  [ -n "$DSH_PID" ] && kill "$DSH_PID" 2>/dev/null
+  [ -n "$PORTFILE" ] && rm -f "$PORTFILE"
+}
+trap cleanup EXIT INT TERM HUP
+
+case "${DEEPSEEK_BASE_URL:-}" in
+  *chat.tri.local*)
+    if [ -f "$PREFIX/bin/dsh-owui-shim.mjs" ] && [ -x "$PREFIX/bin/node" ]; then
+      PORTFILE=$(mktemp /tmp/dsh-shim.XXXXXX 2>/dev/null || true)
+      if [ -n "$PORTFILE" ]; then
+        rm -f "$PORTFILE"
+        DSH_SHIM_UPSTREAM="$DEEPSEEK_BASE_URL" "$PREFIX/bin/node" "$PREFIX/bin/dsh-owui-shim.mjs" "$PORTFILE" >/dev/null &
+        SHIM_PID=$!
+        i=0
+        while [ $i -lt 50 ]; do
+          [ -s "$PORTFILE" ] && break
+          sleep 0.2
+          i=$((i + 1))
+        done
+        if [ -s "$PORTFILE" ]; then
+          DEEPSEEK_BASE_URL="http://127.0.0.1:$(cat "$PORTFILE")"
+          export DEEPSEEK_BASE_URL
+        else
+          kill "$SHIM_PID" 2>/dev/null
+          SHIM_PID=""
+          printf 'dsh: 警告：本地兼容代理启动失败，尝试直连 %s\n' "$DEEPSEEK_BASE_URL" >&2
+        fi
+      fi
+    fi
+    ;;
+esac
+
+"$PREFIX/bin/node" "$PREFIX/lib/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@" &
+DSH_PID=$!
+wait "$DSH_PID"
+RC=$?
+cleanup
+trap - EXIT INT TERM HUP
+exit $RC
