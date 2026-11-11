@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-11T01:45:00.000Z",
+  "updatedBy": "ops",
+  "apps": [
+    {
+      "id": "work",
+      "name": "科研项目职能支持",
+      "desc": "工时填报、项目审批、研发费用归集与备查资料",
+      "url": "https://work.tri.local",
+      "icon": "📊",
+      "category": "研发",
+      "external": false,
+      "coming": false,
+      "sso": true,
+      "public": false,
+      "adminOnly": false,
+      "hidden": false
+    },
+    {
+      "id": "chat",
+      "name": "企业 AI 助手",
+      "desc": "问技术问题、查公司资料，回答带引用出处",
+      "url": "https://chat.tri.local",
+      "icon": "💬",
+      "category": "AI 助手",
+      "external": false,
+      "coming": false,
+      "sso": true,
+      "public": false,
+      "adminOnly": false,
+      "hidden": false
+    },
+    {
+      "id": "gitlab",
+      "name": "代码与文档仓库",
+      "desc": "GitLab：代码托管、README 文档自动同步进知识库",
+      "url": "https://git.tri.local",
+      "icon": "🐙",
+      "category": "研发",
+      "external": true,
+      "coming": false,
+      "sso": false,
+      "public": false,
+      "adminOnly": false,
+      "hidden": false
+    },
+    {
+      "id": "slurm",
+      "name": "集群门户（Open OnDemand）",
+      "desc": "查看节点/作业、提交作业、文件管理与远程桌面",
+      "url": "https://edas.tri.local",
+      "icon": "⚙️",
+      "category": "运维",
+      "external": true,
+      "coming": false,
+      "sso": true,
+      "public": false,
+      "adminOnly": false,
+      "hidden": false
+    }
+  ],
+  "categories": [
+    "研发",
+    "AI 助手",
+    "运维",
+    "文档",
+    "其他"
+  ]
+}

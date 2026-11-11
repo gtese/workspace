@@ -1,0 +1,33 @@
+---
+cluster: "tricluster"
+
+attributes:
+  desktop: "gnome"
+  bc_vnc_idle: 0
+  bc_vnc_resolution:
+    required: true
+  bc_account:
+    label: "Account"
+    help: "Slurm 记账账户，不是用户名。普通员工选 staff；EDA 项目选 eda；不确定可留空"
+  bc_num_hours:
+    label: "Number of hours"
+    value: 1
+    min: 1
+    max: 48
+  bc_num_slots:
+    label: "Number of nodes"
+    value: 1
+    min: 1
+    max: 2
+  bc_queue:
+    label: "Queue (分区)"
+    help: "留空使用默认分区 eda15x（151-155），推荐留空。一般不要填。"
+    value: ""
+
+form:
+  - desktop
+  - bc_account
+  - bc_num_hours
+  - bc_num_slots
+  - bc_queue
+  - bc_vnc_resolution
