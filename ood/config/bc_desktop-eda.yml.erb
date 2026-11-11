@@ -1,0 +1,68 @@
+---
+title: "EDA Desktop"
+cluster: "tricluster"
+submit: "submit/ood.yml.erb"
+
+<%
+  require "open3"
+  node_ids = %w[150 151 152 153 154 155]
+  node_rows = node_ids.map do |n|
+    ip = "172.16.50.#{n}"
+    total_gb = used_gb = free_gb = jobs = 0
+    state = "?"
+    begin
+      out, = Open3.capture2("/usr/bin/scontrol", "show", "node", "-o", ip)
+      vals = out.scan(/([A-Za-z0-9_]+)=([^\s]+)/).to_h
+      total_mb = vals["RealMemory"].to_i
+      used_mb = vals["AllocMem"].to_i
+      total_gb = total_mb / 1024
+      used_gb = used_mb / 1024
+      free_gb = [(total_mb - used_mb) / 1024, 0].max
+      state = vals["State"].to_s.split("+").first
+      jout, = Open3.capture2("/usr/bin/squeue", "-h", "-w", ip, "-t", "RUNNING", "-o", "%i")
+      jobs = jout.lines.count { |line| !line.strip.empty? }
+    rescue StandardError
+    end
+    [n, total_gb, used_gb, free_gb, jobs, state]
+  end
+%>
+
+attributes:
+  desktop: "gnome"
+  bc_vnc_idle: 0
+  bc_vnc_resolution:
+    required: true
+  bc_account:
+    label: "Account"
+    help: "Slurm 记账账户，不是用户名。普通员工选 staff；EDA 项目选 eda；不确定可留空"
+  bc_num_hours:
+    label: "Number of hours"
+    value: 1
+    min: 1
+    max: 48
+  bc_node:
+    label: "Node"
+    help: "选择桌面运行的单个节点；括号内为当前总内存/已用/可用及运行作业数。"
+    widget: select
+    value: "151"
+    options:
+<% node_rows.each do |n, total, used, free, jobs, state| %>
+      - ["<%= n %> | 总 <%= total %>G | 已用 <%= used %>G | 可用 <%= free %>G | 作业 <%= jobs %> | <%= state %>", "<%= n %>"]
+<% end %>
+  bc_mem:
+    label: "Memory (GB)"
+    help: "节点内存大小，单位 GB。默认 32G。"
+    value: 32
+    min: 1
+    max: 1900
+    step: 1
+    widget: number_field
+    required: true
+
+form:
+  - desktop
+  - bc_account
+  - bc_num_hours
+  - bc_node
+  - bc_mem
+  - bc_vnc_resolution

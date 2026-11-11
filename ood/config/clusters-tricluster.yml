@@ -1,0 +1,38 @@
+---
+v2:
+  metadata:
+    title: "TRI EDA Cluster"
+    url: "https://edas.tri.local"
+    hidden: false
+
+  login:
+    host: "edas.tri.local"
+
+  job:
+    adapter: "slurm"
+    cluster: "tricluster"
+    bin: "/bin"
+    bin_overrides:
+      sbatch: "/bin/sbatch"
+      squeue: "/bin/squeue"
+      scontrol: "/bin/scontrol"
+      sacct: "/bin/sacct"
+      scancel: "/bin/scancel"
+
+  batch_connect:
+    basic:
+      script_wrapper: |
+        module purge
+        %s
+    vnc:
+      script_wrapper: |
+        module purge
+        export PATH="/usr/bin:/bin:$PATH"
+        %s
+
+  custom:
+    # 资源限制提示
+    max_nodes: 4
+    partitions:
+      - eda15x
+      - eda

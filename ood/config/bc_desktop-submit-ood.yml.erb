@@ -1,0 +1,14 @@
+---
+batch_connect:
+  template: "vnc"
+cluster: "tricluster"
+<%
+  node = bc_node.present? ? bc_node.to_s : "151"
+  partition = node == "150" ? "eda" : "eda15x"
+%>
+script:
+  native:
+    - "--nodes=1"
+    - "--mem=<%= bc_mem.blank? ? 32 : bc_mem.to_i %>G"
+    - "--partition=<%= partition %>"
+    - "--nodelist=172.16.50.<%= node %>"
