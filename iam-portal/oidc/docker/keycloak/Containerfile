@@ -1,0 +1,56 @@
+# ============================================================
+# Keycloak 运行时镜像（本仓自建）
+# ============================================================
+# 与官方镜像的差别只有两点，但都必要：
+#
+# 1) 内置企业根 CA
+#    官方镜像没有 tri.local 根 CA，Keycloak 用 LDAPS 连 AD 会报
+#      javax.naming.CommunicationException ... PKIX path building failed
+#    Keycloak 26 的信任库顺序：--truststore-paths（要求可写）→ 镜像内置
+#    /etc/pki/ca-trust/extracted/java/cacerts。这里直接用 keytool 把根 CA
+#    写进内置 cacerts，运行时只读即可，不需要任何挂载。
+#    注意：不调用 update-ca-trust —— 官方镜像精简了 p11-kit，会报
+#    "libp11-kit.so.0: cannot open shared object file"。
+#
+# 2) 预构建（build）
+#    生产模式 `start --optimized` 要求镜像里已有构建产物，否则首次启动会
+#    每 3 秒重启一次并提示 "The '--optimized' flag was used for first ever
+#    server start"。这里把 KC_DB / KC_CACHE / KC_HEALTH_ENABLED 等**构建期**
+#    选项固化进镜像（运行期选项如 KC_DB_URL、KC_HOSTNAME 仍在 compose 传入）。
+#
+# 构建：
+#   deploy/deploy.sh build
+#   实际执行：podman build -f docker/keycloak/Containerfile \
+#     -t localhost/tri-oidc-keycloak:1.0.0 deploy/certs
+#   （构建上下文是 deploy/certs，因为这里只 COPY 该目录下的证书）
+#
+# 升级 Keycloak 版本时：改下面的 KEYCLOAK_IMAGE 后重新 build 即可。
+# ============================================================
+
+ARG KEYCLOAK_IMAGE=docker.1panel.live/keycloak/keycloak:26.8.1
+FROM ${KEYCLOAK_IMAGE}
+
+USER root
+
+# ---- 1. 企业根 CA ----
+COPY tri.local_ca.crt /etc/pki/ca-trust/source/anchors/tri.local_ca.crt
+RUN keytool -importcert -noprompt -trustcacerts \
+      -alias tri-enterprise-root \
+      -file /etc/pki/ca-trust/source/anchors/tri.local_ca.crt \
+      -cacerts -storepass changeit \
+ && keytool -list -cacerts -storepass changeit -alias tri-enterprise-root >/dev/null
+
+# ---- 2. 预构建（仅构建期生效的选项）----
+ENV KC_DB=postgres \
+    KC_CACHE=ispn \
+    KC_CACHE_STACK=tcp \
+    KC_HEALTH_ENABLED=true \
+    KC_METRICS_ENABLED=true \
+    KC_HTTP_ENABLED=true \
+    KC_PROXY_HEADERS=xforwarded \
+    KC_HOSTNAME_STRICT=true
+RUN /opt/keycloak/bin/kc.sh build
+
+USER 1000
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
+CMD ["start", "--optimized"]

@@ -1,0 +1,28 @@
+# ============================================================
+# 门户 CI —— 静态校验（不自动部署）
+# 部署由人工执行 ./deploy/deploy.sh build && up
+# ============================================================
+stages: [lint]
+
+lint:source:
+  stage: lint
+  tags: [shell]
+  script:
+    - echo "== 1. JS 语法（Node 容器内检查，避免宿主无 node）=="
+    - for f in src/*.js src/public/app.js; do
+        podman run --rm -v "$PWD/$f":/x.js:ro docker.1panel.live/library/node:20-alpine node --check /x.js
+          && echo "  ✓ $f" || { echo "  ✗ $f"; exit 1; };
+      done
+    - echo "== 2. Python 验收脚本语法 =="
+    - python3 -m py_compile deploy/scripts/verify.py deploy/scripts/verify-edit.py
+    - echo "== 3. Shell 语法 =="
+    - bash -n deploy/deploy.sh healthcheck.sh
+    - echo "== 4. compose 语法 =="
+    - cd deploy && cp .env.example .env && sed -i 's/^OIDC_CLIENT_SECRET=$/OIDC_CLIENT_SECRET=test/' .env && podman-compose -f compose.yaml config >/dev/null && echo "  ✓ compose"
+    - echo "== 5. 禁止提交密钥 =="
+    - cd .. && ! grep -rIE "(OIDC_CLIENT_SECRET=[a-f0-9]{20,}|BEGIN .*PRIVATE KEY|PASSWORD=[^ ]{6,})"
+        --include='*.js' --include='*.yaml' --include='*.yml' --include='*.sh' --include='*.json' .
+        || { echo "发现疑似密钥"; exit 1; }
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'

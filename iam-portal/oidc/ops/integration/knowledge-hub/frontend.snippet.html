@@ -1,0 +1,58 @@
+<!--
+  ============================================================
+  前端改造（web/index.html）— 三处小改动
+  ============================================================
+
+  1) 登录卡片：删掉账号/密码表单，换成一个<a>链接（整页跳转，不能用 fetch）
+  2) 401 处理 guard()：跳 /api/auth/oidc/login 而不是显示本地登录页
+  3) 退出按钮：调用 /api/auth/logout/oidc 拿 logoutUrl 后整页跳转
+-->
+
+<!-- ============ 1. 登录页（替换 showLogin() 里的 innerHTML）============ -->
+<div class="login-card">
+  <h1>企业知识沉淀平台</h1>
+  <div class="sub">请使用公司域账号登录</div>
+  <a class="btn btn-primary" href="/api/auth/oidc/login?returnTo=%2F"
+     style="width:100%;justify-content:center;margin:6px 0 10px">使用公司账号登录</a>
+  <div class="hint" style="margin-top:6px">
+    登录由公司统一身份平台处理，本平台不会保存您的密码；
+    登录一次即可访问已接入统一身份的其它系统。
+  </div>
+  <div class="hint" style="margin-top:10px">
+    登录即代表你同意企业知识管理规范：提交的内容需经审核后才会共享给同事。
+  </div>
+  <div id="loginErr" class="hidden"></div>
+</div>
+
+<!-- ============ 2. guard()：401 时跳统一身份 ============ -->
+<script>
+// 原实现：if (err && err.status === 401) { showLogin(); return true; }
+// 改为：
+function guard(err) {
+  if (err && err.status === 401) {
+    var back = encodeURIComponent(location.pathname + location.search);
+    location.href = '/api/auth/oidc/login?returnTo=' + back;
+    return true;
+  }
+  return false;
+}
+
+// showLogin() 里原来的 <form id="loginForm"> + doLogin() 整段删除。
+// 保留 showLogin() 作为"未登录时展示登录卡片"的入口即可（内部不再有表单 JS）。
+</script>
+
+<!-- ============ 3. 退出按钮 ============ -->
+<script>
+el('logoutBtn').onclick = function () {
+  // 先清本地会话，再整页跳到 IdP 结束会话（否则其它系统仍是登录态）
+  api('POST', '/api/auth/logout/oidc')
+    .then(function (res) { window.location.href = res.logoutUrl || 'https://sso.tri.local/realms/tri/protocol/openid-connect/logout?post_logout_redirect_uri=' + encodeURIComponent(location.origin + '/'); })
+    .catch(function () { window.location.href = 'https://sso.tri.local/realms/tri/protocol/openid-connect/logout'; });
+};
+</script>
+
+<!--
+  另外两处：
+  - PUBLIC_PATHS 增加 '/api/auth/oidc/login'、'/api/auth/oidc/callback'（否则被全局鉴权拦住）
+  - /api/login（口令）路由在 AUTH_MODE=oidc 时不要注册
+-->

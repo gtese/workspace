@@ -1,0 +1,55 @@
+# ============================================================
+# 企业应用门户（portal.tri.local）— 编排定义
+# ============================================================
+# 单容器、零依赖。由宿主机 nginx 做 TLS 终止并反代到 127.0.0.1:8090。
+#
+#   cp .env.example .env && vi .env
+#   podman-compose -f compose.yaml up -d
+#
+# 更新应用列表：改 src/apps.js → 重建镜像（./deploy.sh update）
+# ============================================================
+services:
+  portal:
+    image: localhost/tri-portal:1.0.0
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: tri-portal
+    restart: unless-stopped
+    environment:
+      PORT: "8090"
+      HOST: "0.0.0.0"
+      TZ: Asia/Shanghai
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # ---- 统一身份（Keycloak）----
+      OIDC_ISSUER: ${OIDC_ISSUER:-https://sso.tri.local/realms/tri}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-portal}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?必须在 .env 中设置 OIDC_CLIENT_SECRET}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-https://portal.tri.local/auth/callback}
+      OIDC_POST_LOGOUT_URI: ${OIDC_POST_LOGOUT_URI:-https://portal.tri.local/}
+      # 请求 groups 便于将来按 AD 组收敛可见应用（可选）
+      OIDC_SCOPE: ${OIDC_SCOPE:-openid profile email roles groups}
+      # 企业根 CA（容器内路径；compose 已挂 ./certs -> /etc/portal-certs）
+      OIDC_CA_FILE: ${OIDC_CA_FILE:-/app/certs/tri.local_ca.crt}
+
+      # ---- 会话 ----
+      SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-480}
+      SESSION_COOKIE_NAME: portal_sid
+      # 应用列表与排序的存储目录（数据卷，容器重建不丢）
+      DATA_DIR: /app/data
+    ports:
+      # 宿主端口可配置：122 上 8090 被 TrendRadar 占用，故默认 8095
+      - "127.0.0.1:${HOST_PORT:-8095}:8090"
+    volumes:
+      # 门户配置（应用列表/排序）持久化：容器重建不丢
+      - tri-portal-data:/app/data
+    # CA 已烤进镜像（/app/certs）；如需在宿主机轮换证书，可取消下面注释改为挂载
+    #   - ./certs:/etc/portal-certs:ro
+    # 与其它系统一致：podman 内置 DNS 偶发问题时的兜底（本服务无容器间依赖，留空即可）
+    logging:
+      driver: journald
+
+volumes:
+  tri-portal-data:
+    name: tri-portal-data

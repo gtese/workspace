@@ -1,0 +1,54 @@
+# 研发工时填报与分摊系统 —— 应用镜像
+# 构建：podman build -t rnd-timesheet:1.0.0 -f deploy/Containerfile .
+# 说明：前端在构建阶段编译，产物由后端 Fastify 静态托管，单容器即可对外服务。
+
+# ---------- 阶段 1：构建前端 ----------
+FROM docker.1ms.run/library/node:20-alpine AS webbuild
+WORKDIR /build
+COPY web/package.json web/pnpm-lock.yaml* ./
+RUN npm install --no-audit --no-fund
+COPY web/ ./
+RUN npm run build
+
+# ---------- 阶段 2：运行时 ----------
+FROM docker.1ms.run/library/node:20-alpine
+LABEL org.opencontainers.image.title="研发工时填报与分摊系统" \
+      org.opencontainers.image.version="1.0.0"
+
+# 时区设为上海，保证「每月最后一个工作日」等日期判断与本地一致。
+# 注意：Alpine 下必须**保留** tzdata，否则 TZ 环境变量形同虚设、
+# 进程仍以 UTC 运行，涉及 DATE 的计算会整体偏移一天。
+RUN apk add --no-cache tzdata ca-certificates curl \
+ && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+ && echo "Asia/Shanghai" > /etc/timezone
+
+ENV NODE_ENV=production \
+    TZ=Asia/Shanghai \
+    PORT=3000
+
+WORKDIR /app
+
+# 仅安装生产依赖
+COPY server/package.json server/pnpm-lock.yaml* ./
+RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
+
+# 后端源码与迁移脚本
+COPY server/src ./src
+COPY server/migrations ./migrations
+
+# 前端产物
+COPY --from=webbuild /build/dist ./web/dist
+
+# 显式指定前端目录，避免依赖相对路径推断
+ENV WEB_ROOT=/app/web/dist
+
+# 以非 root 运行
+RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
+USER app
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:3000/api/health || exit 1
+
+CMD ["node", "src/index.js"]

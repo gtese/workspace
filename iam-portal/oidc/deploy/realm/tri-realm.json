@@ -1,0 +1,253 @@
+// ============================================================
+// Keycloak realm 定义：tri（企业统一身份）
+// ============================================================
+// 用法：
+//   ./deploy/deploy.sh provision          # 首次导入（不存在才创建）
+//   ./deploy/deploy.sh reconfigure        # 已存在则按本文件更新（幂等）
+//
+// 设计要点（详见 docs/部署文档.md 与 docs/管理手册.md）：
+//  1) 认证交给 AD（LDAP 用户联邦，READ_ONLY），本 realm 不存用户密码；
+//  2) 组 → 角色映射在 Keycloak 侧维护，业务系统只读角色，不读 AD 组名；
+//  3) 准入（谁能登录）由 AD 组决定；业务角色由 Keycloak 的 realm role 决定；
+//  4) 所有 client 先用占位 secret，由 provision 脚本按 .env 写入真实值。
+//
+// 注意：Keycloak 26.x 的 partial import / realm import 对未识别字段容错较弱，
+//      修改本文件后请先执行 ./deploy/scripts/validate-realm.py 做结构校验。
+// ============================================================
+{
+  "realm": "tri",
+  "enabled": true,
+  "displayName": "TRI 统一身份",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>TRI 统一身份</span></div>",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+
+  // ---- 会话策略：与业务系统现有 480 分钟对齐（见方案文档 7.2）----
+  // 修改前请阅读 docs/管理手册.md §4「会话时长取舍」
+  "ssoSessionIdleTimeout": 28800,
+  "ssoSessionMaxLifespan": 86400,
+  "ssoSessionIdleTimeoutRememberMe": 0,
+  "ssoSessionMaxLifespanRememberMe": 0,
+  "clientSessionIdleTimeout": 28800,
+  "clientSessionMaxLifespan": 86400,
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "refreshTokenMaxReuse": 0,
+  "revokeRefreshToken": false,
+
+  // ---- 令牌与签名 ----
+  "defaultSignatureAlgorithm": "RS256",
+  "notBefore": 0,
+  "verifiableCredentialEnabled": false,
+
+  // ---- 登录入口：域名化 + 与 Mac Safari 兼容的 cookie 策略 ----
+  "attributes": {
+    "frontendUrl": "https://sso.tri.local",
+    "cibaBackchannelTokenDeliveryMode": "poll",
+    "cibaExpiresIn": "120",
+    "cibaAuthRequestedUserHint": "login_hint",
+    "oauth2DeviceCodeLifespan": "600",
+    "oauth2DevicePollingInterval": "5",
+    "parRequestUriLifespan": "60"
+  },
+
+  "roles": {
+    "realm": [
+      { "name": "ts:admin",    "description": "工时系统管理员" },
+      { "name": "ts:finance",  "description": "工时系统财务角色" },
+      { "name": "kb:admin",    "description": "知识平台管理员" },
+      { "name": "kb:reviewer", "description": "知识审核人" },
+      { "name": "cluster:admin","description": "集群管理后台管理员" }
+    ]
+  },
+
+  // ---- 业务 client：先占位，真实 secret 由 provision 脚本注入 ----
+  "clients": [
+    {
+      "clientId": "man-timesheet",
+      "name": "研发工时系统",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "__PLACEHOLDER_MAN__",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://man.tri.local",
+      "baseUrl": "/",
+      "redirectUris": ["https://man.tri.local/*"],
+      "webOrigins": ["https://man.tri.local"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://man.tri.local/*",
+        "backchannel.logout.session.required": "true",
+        "access.token.lifespan": "300"
+      }
+    },
+    {
+      "clientId": "knowledge-hub",
+      "name": "企业知识平台",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "__PLACEHOLDER_KB__",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "rootUrl": "https://ai.tri.local",
+      "baseUrl": "/",
+      "redirectUris": ["https://ai.tri.local/*"],
+      "webOrigins": ["https://ai.tri.local"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://ai.tri.local/*",
+        "access.token.lifespan": "300"
+      }
+    },
+    {
+      "clientId": "chat-openwebui",
+      "name": "企业 AI 助手（Open WebUI）",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "__PLACEHOLDER_CHAT__",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "rootUrl": "https://chat.tri.local",
+      "baseUrl": "/",
+      "redirectUris": ["https://chat.tri.local/*"],
+      "webOrigins": ["https://chat.tri.local"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://chat.tri.local/*",
+        "access.token.lifespan": "300"
+      }
+    },
+    {
+      "clientId": "slurm-web",
+      "name": "集群管理后台",
+      "enabled": false,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "__PLACEHOLDER_SLURM__",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "rootUrl": "https://cluster.tri.local",
+      "baseUrl": "/",
+      "redirectUris": ["https://cluster.tri.local/*"],
+      "webOrigins": ["https://cluster.tri.local"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://cluster.tri.local/*"
+      }
+    }
+  ],
+
+  // ---- 目视验收用 client（授权码 + PKCE，公开客户端，仅允许内网回调）----
+  "clientScopes": [
+    {
+      "name": "roles",
+      "description": "realm 角色（业务授权）",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "groups",
+      "description": "AD 组（仅供排障，不下发到业务令牌）",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "false",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    }
+  ],
+
+  // ---- 默认浏览器流程：用户名密码（由 AD 联邦提供），可选 OTP ----
+  "userFederationProviders": [],
+  "userFederationMappers": [],
+  "authenticationFlows": [
+    {
+      "alias": "browser-with-optional-otp",
+      "description": "浏览器流程：AD 账号口令 + 可选 TOTP（管理员后续启用）",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "auth-cookie", "requirement": "ALTERNATIVE", "priority": 10, "userSetupAllowed": false, "authenticatorFlow": false },
+        { "authenticator": "identity-provider-redirector", "requirement": "ALTERNATIVE", "priority": 20, "userSetupAllowed": false, "authenticatorFlow": false },
+        {
+          "flowAlias": "forms-subflow",
+          "requirement": "ALTERNATIVE",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true
+        }
+      ]
+    },
+    {
+      "alias": "forms-subflow",
+      "description": "登录表单子流程（用户名口令 + 低优先级 OTP）",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "auth-username-password-form", "requirement": "REQUIRED", "priority": 10, "userSetupAllowed": false, "authenticatorFlow": false },
+        { "authenticator": "auth-otp-form", "requirement": "CONDITIONAL", "priority": 20, "userSetupAllowed": true, "authenticatorFlow": false }
+      ]
+    }
+  ],
+  "browserFlow": "browser-with-optional-otp",
+
+  "eventsEnabled": true,
+  "eventsExpiration": 15552000,
+  "eventsListeners": ["jboss-logging"],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true
+}

@@ -1,0 +1,29 @@
+{
+  "name": "rnd-timesheet-server",
+  "version": "5.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TraceWork — 科研项目职能支持平台",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node src/migrate.js",
+    "sync-ad": "node src/jobs/syncAd.js"
+  },
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "@fastify/cookie": "^9.4.0",
+    "@fastify/helmet": "^11.1.1",
+    "@fastify/rate-limit": "^9.1.0",
+    "@fastify/static": "^7.0.4",
+    "pg": "^8.12.0",
+    "ldapts": "^7.2.1",
+    "jose": "^5.9.6",
+    "zod": "^3.23.8",
+    "exceljs": "^4.4.0",
+    "pino": "^9.4.0"
+  }
+}

@@ -1,0 +1,7 @@
+deploy/.env
+deploy/certs/*.crt
+deploy/certs/*.key
+node_modules/
+*.log
+__pycache__/
+.DS_Store

@@ -1,0 +1,15 @@
+# 密钥与个人环境（绝不入库）
+deploy/.env
+deploy/certs/*.key
+deploy/secrets/*
+!deploy/secrets/.gitkeep
+
+# 备份与临时产物
+*.sql.gz
+*.log
+__pycache__/
+*.pyc
+.venv/
+
+# 导出的 realm 含明文 client secret，不入库
+deploy/realm/exported-realm.json

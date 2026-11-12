@@ -1,0 +1,27 @@
+# ============================================================
+# GitLab CI —— 配置静态校验（不部署，部署由人工执行 deploy.sh）
+# ============================================================
+# 目的：保证每次改动至少不会破坏 JSON / compose / nginx / Python 语法，
+#       并且不会把密钥误提交进仓库。
+stages: [lint]
+
+variables:
+  GIT_STRATEGY: fetch
+
+lint:config:
+  stage: lint
+  tags: [shell]
+  script:
+    - echo "== 1. realm JSON 结构校验（去掉注释后必须是合法 JSON）=="
+    - python3 deploy/scripts/lint-realm.py
+    - echo "== 2. Python 脚本语法 =="
+    - python3 -m py_compile deploy/scripts/configure.py deploy/scripts/verify-oidc.py
+    - echo "== 3. Shell 语法 =="
+    - bash -n deploy/deploy.sh
+    - echo "== 4. compose 语法 =="
+    - podman-compose -f deploy/compose.yaml config >/dev/null
+    - echo "== 5. 禁止提交密钥 =="
+    - "! grep -rIE '(PRIVATE KEY-----|BEGIN RSA|secret=.{20,}|PASSWORD=.{6,})' --include='*.yaml' --include='*.yml' --include='*.json' --include='*.sh' --include='*.py' . || (echo '发现疑似密钥，请移除'; exit 1)"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'

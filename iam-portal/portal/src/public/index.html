@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>企业应用门户</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+</head>
+<body class="centered">
+<main class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">TRI</span>
+      <div>
+        <h1>企业应用门户</h1>
+        <p class="sub">一次登录，进入你需要的系统</p>
+      </div>
+    </div>
+    <div class="userbox" id="userbox">
+      <div class="userinfo" id="userinfo" hidden>
+        <span class="avatar" id="avatar">?</span>
+        <div>
+          <strong id="uname">加载中…</strong>
+          <div class="muted small" id="uemail"></div>
+        </div>
+      </div>
+      <button class="btn primary" id="loginBtn" hidden>登录</button>
+      <button class="btn ghost" id="editBtn" hidden>✏️ 编辑</button>
+      <button class="btn ghost" id="logoutBtn" hidden>退出</button>
+    </div>
+  </header>
+
+  <section class="notice" id="ssoNotice" hidden>
+    <strong>统一身份已生效</strong>：标记「免登录」的应用点进去不需要再输口令；
+    标记「需单独登录」的应用尚未接入统一身份。
+  </section>
+
+  <section class="grid" id="grid" aria-live="polite"></section>
+
+  <footer class="foot">
+    <span>统一身份：<a href="https://sso.tri.local" target="_blank" rel="noopener">sso.tri.local</a></span>
+    <span class="muted" id="footNote"></span>
+  </footer>
+</main>
+
+<!-- ==================== 编辑面板 ==================== -->
+<div class="editor-mask" id="editorMask" hidden>
+  <div class="editor" role="dialog" aria-modal="true" aria-label="编辑门户">
+    <header class="editor-head">
+      <div>
+        <h2>编辑门户</h2>
+        <p class="muted small">拖动卡片排序，点「编辑」修改内容，改完点「保存」</p>
+      </div>
+      <div class="editor-actions">
+        <button class="btn ghost" id="resetBtn" type="button">恢复默认</button>
+        <button class="btn" id="cancelBtn" type="button">取消</button>
+        <button class="btn primary" id="saveBtn" type="button">保存</button>
+      </div>
+    </header>
+
+    <div class="editor-body">
+      <div class="editor-toolbar">
+        <button class="btn" id="addBtn" type="button">＋ 新增应用</button>
+        <span class="muted small" id="editorHint">直接拖动左侧手柄可调整顺序</span>
+      </div>
+      <ul class="edit-list" id="editList"></ul>
+    </div>
+
+    <p class="editor-msg" id="editorMsg" hidden></p>
+  </div>
+</div>
+
+<!-- ==================== 单张卡片编辑弹层 ==================== -->
+<div class="modal-mask" id="modalMask" hidden>
+  <form class="modal" id="appForm" autocomplete="off">
+    <h3 id="modalTitle">编辑应用</h3>
+    <div class="form-grid">
+      <label>图标<input name="icon" maxlength="8" placeholder="💬"></label>
+      <label class="span2">名称 *<input name="name" required maxlength="40" placeholder="企业 AI 助手"></label>
+      <label class="span2">说明<input name="desc" maxlength="120" placeholder="一句话说明它能做什么"></label>
+      <label class="span2">地址（https）*<input name="url" type="url" required placeholder="https://xxx.tri.local"></label>
+      <label>分组<input name="category" maxlength="20" list="catList" placeholder="研发"></label>
+      <label>ID<input name="id" maxlength="40" pattern="[A-Za-z0-9_-]+" placeholder="留空自动生成"></label>
+    </div>
+    <datalist id="catList"></datalist>
+    <div class="checks">
+      <label><input type="checkbox" name="sso"> 已接入统一身份（免登录）</label>
+      <label><input type="checkbox" name="external"> 新标签页打开</label>
+      <label><input type="checkbox" name="coming"> 即将上线（置灰）</label>
+      <label><input type="checkbox" name="adminOnly"> 仅管理员可见</label>
+      <label><input type="checkbox" name="public"> 未登录也展示</label>
+      <label><input type="checkbox" name="hidden"> 隐藏</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" type="button" id="modalCancel">取消</button>
+      <button class="btn primary" type="submit">确定</button>
+    </div>
+  </form>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

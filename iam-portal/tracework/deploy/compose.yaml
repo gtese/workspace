@@ -1,0 +1,125 @@
+# 研发工时填报与分摊系统 —— 编排定义
+#
+# 使用：
+#   cp .env.example .env && vi .env          # 填写密钥
+#   podman-compose -f compose.yaml up -d     # 启动
+#   podman-compose -f compose.yaml logs -f   # 查看日志
+#
+# 网络：app 与 db 在同一 podman 网络中；仅 app 暴露到宿主机 127.0.0.1:3000，
+#       由宿主机 nginx 负责 443 TLS 终止与域名分流。
+
+services:
+  db:
+    image: docker.1ms.run/library/postgres:16-alpine
+    container_name: rnd-ts-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-timesheet}
+      POSTGRES_USER: ${POSTGRES_USER:-timesheet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必须在 .env 中设置 POSTGRES_PASSWORD}
+      # 中文排序与大小写处理
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: Asia/Shanghai
+    volumes:
+      - rnd-ts-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-timesheet} -d ${POSTGRES_DB:-timesheet}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    networks:
+      rnd-ts:
+        ipv4_address: 10.89.1.10
+
+  app:
+    image: localhost/rnd-timesheet:1.0.0
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+    container_name: rnd-ts-app
+    restart: unless-stopped
+    volumes:
+      # 企业根 CA：OIDC 校验 sso.tri.local 证书时使用（只读）
+      - ./certs:/etc/ts-certs:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      TZ: Asia/Shanghai
+      PORT: "3000"
+      HOST: 0.0.0.0
+      TRUST_PROXY: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # ---- 数据库 ----
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-timesheet}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?}
+      PGDATABASE: ${POSTGRES_DB:-timesheet}
+
+      # ---- 会话 ----
+      SESSION_SECRET: ${SESSION_SECRET:?必须在 .env 中设置 SESSION_SECRET}
+      SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-480}
+      SESSION_COOKIE_SECURE: "true"
+
+      # ---- 认证模式 ----
+      # ldap：域账号+口令直连 AD（回滚用）
+      # oidc：跳统一身份 sso.tri.local，本系统不再接触口令
+      AUTH_MODE: ${AUTH_MODE:-ldap}
+
+      # ---- OIDC（统一身份）----
+      OIDC_ISSUER: ${OIDC_ISSUER:-https://sso.tri.local/realms/tri}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-man-timesheet}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-https://work.tri.local/api/auth/oidc/callback}
+      OIDC_SCOPE: ${OIDC_SCOPE:-openid profile email groups}
+      OIDC_POST_LOGOUT_URI: ${OIDC_POST_LOGOUT_URI:-https://work.tri.local/}
+      # 容器内挂载的企业根 CA，用于校验 sso.tri.local 证书
+      OIDC_CA_FILE: /etc/ts-certs/tri.local_ca.crt
+
+      # ---- AD / LDAP ----
+      LDAP_ENABLED: ${LDAP_ENABLED:-true}
+      LDAP_URLS: ${LDAP_URLS:-ldap://172.16.10.111,ldap://172.16.10.112}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-DC=tri,DC=local}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-sa_ldap@tri.local}
+      # oidc 模式下可不配（登录不再走 LDAP bind），ldap 模式必填
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-}
+      # 用户登录时用 "<用户名>@<后缀>" 作为 UPN 发起 bind。
+      # 这里刻意不使用 {username} 模板：podman-compose 1.0.6 会破坏含花括号的值。
+      # 留空则自动从 LDAP_BIND_DN 推导（sa_ldap@tri.local -> @tri.local）。
+      LDAP_UPN_SUFFIX: ${LDAP_UPN_SUFFIX:-}
+      LDAP_ALLOWED_GROUPS: ${LDAP_ALLOWED_GROUPS:-Group_AllStaffs}
+      LDAP_ADMIN_GROUPS: ${LDAP_ADMIN_GROUPS:-Group_Roots,Domain Admins}
+      LDAP_TLS_VERIFY: ${LDAP_TLS_VERIFY:-true}
+      LDAP_SYNC_INTERVAL_MINUTES: ${LDAP_SYNC_INTERVAL_MINUTES:-60}
+
+      # ---- 业务参数 ----
+      APP_BASE_URL: ${APP_BASE_URL:-https://work.tri.local}
+      APPROVAL_SLA_WORKDAYS: ${APPROVAL_SLA_WORKDAYS:-2}
+      DEFAULT_ATTENDANCE_HOURS: ${DEFAULT_ATTENDANCE_HOURS:-0}
+    ports:
+      - "127.0.0.1:3000:3000"
+    # 额外固定数据库地址：podman 内置 DNS 偶发 EAI_AGAIN，
+    # 应用侧已做解析重试，这里再兜一层静态 hosts 映射。
+    # 固定 IP 由下面的 ipv4_address 指定，保证与 extra_hosts 一致。
+    extra_hosts:
+      - "db:10.89.1.10"
+    networks:
+      rnd-ts:
+        ipv4_address: 10.89.1.11
+
+volumes:
+  rnd-ts-pgdata:
+    name: rnd-ts-pgdata
+
+networks:
+  rnd-ts:
+    name: rnd-ts
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.89.1.0/24
+          gateway: 10.89.1.1
