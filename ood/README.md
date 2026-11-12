@@ -19,6 +19,7 @@
 | [用户手册](docs/用户手册.md) | 登录、启动桌面、连接 VNC、EDA 使用 |
 | [运维手册](docs/运维手册.md) | Apache/PUN/OIDC/VNC/websockify 配置与排障 |
 | [变更记录](docs/变更记录.md) | 2026-11-11 迁移和修复记录 |
+| [**图文用户指南**](docs/图文用户指南.md) | 🆕 Web 登录、GUI 桌面、Web Shell 提交作业（带截图） |
 
 ## 3. 配置（脱敏）
 
