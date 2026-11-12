@@ -477,7 +477,7 @@ SELECT to_char(day, 'YYYY-MM-DD') AS day_key, is_workday FROM calendar_days
 ```bash
 # 后端
 cd server && npm install
-PGHOST=127.0.0.1 PGPASSWORD=xxx SESSION_SECRET=$(openssl rand -base64 48) \
+PGHOST=127.0.0.1 PGPASSWORD="<生成值>" SESSION_SECRET=$(openssl rand -base64 48) \
   LDAP_BIND_PASSWORD=xxx npm run dev
 
 # 前端（开发服务器，API 代理到 127.0.0.1:3000）
