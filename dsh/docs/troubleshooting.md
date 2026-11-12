@@ -114,3 +114,50 @@ pkill -f '@deepseek-ai/dsh/lib/bin.js'
 - `--host 0.0.0.0` 被 dsh 主动拒绝，属安全设计；不要绕过。
 - 端口默认 `--port 0`（系统分配），多人多机不会冲突；需要固定端口时用 `dsh web --port <端口>`。
 - 用户数据在 `~/.dsh`，重置用户的 dsh 状态可 `mv ~/.dsh ~/.dsh.bak` 后重新运行。
+
+## 12. 裸 `dsh` 报 `error: --profile <name> is required`
+
+**原因**：用户的 PATH 里先命中了**自己的旧版 dsh**（如 `~/.local/bin/dsh`），它是标准 CLI，而不是共享启动器；标准 CLI 裸跑要求 `--profile`。共享启动器 `/usr/local/bin/dsh` 才会默认 `web --port 0`。
+
+**排查**：
+```bash
+command -v dsh
+type -a dsh
+cat ~/.local/bin/dsh      # 看是否指向 ~/.local/share/deepseek-harness
+/usr/local/bin/dsh --version   # 共享版本应为 0.2.2-rc.1
+```
+
+**处理**（二选一）：
+- 把 `~/.local/bin/dsh` 备份改名，让 PATH 落到 `/usr/local/bin/dsh`；
+- 或把 `~/.local/bin/dsh` 改成转发共享启动器：
+  ```bash
+  mv ~/.local/bin/dsh ~/.local/bin/dsh.personal
+  printf '#!/bin/sh\nexec /usr/local/bin/dsh "$@"\n' > ~/.local/bin/dsh
+  chmod 755 ~/.local/bin/dsh
+  ```
+  切换前建议备份 `~/.dsh`（旧版本 profile 会在首次启动时迁移）。
+
+## 13. `dsh web` 报 `EADDRINUSE: address already in use 127.0.0.1:3080`
+
+**原因**：同一台桌面 VM 是多人共用，默认端口 3080 已被**其他用户**的 dsh web 占用；个人安装的 `dsh web` 默认用 3080。
+
+**排查**：
+```bash
+ss -ltnp | grep ':3080'
+ps -eo user,pid,lstart,cmd | grep -E 'dsh.*web' | grep -v grep
+```
+
+**处理**：
+- 用共享启动器 `dsh`（默认 `--port 0` 随机端口，不会冲突）；
+- 或自己的 dsh 显式指定端口：`dsh web --port 0` / `dsh web --port <唯一端口>`；
+- 不要 kill 别人的 dsh 进程，也不要让多个人共用默认端口。
+
+## 14. 启动失败日志在哪
+
+dsh 启动失败时会在用户 home 写诊断日志：
+
+```
+~/.dsh/logs/startup-<时间戳>-<uuid>.log
+```
+
+其中包含 `dshVersion`、`nodeVersion`、`profile`、失败插件、错误堆栈（如 `EADDRINUSE`）。个人 npm 安装的安装日志在 `~/.local/share/deepseek-harness/logs/npm-install.log`。
