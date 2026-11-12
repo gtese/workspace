@@ -1,0 +1,30 @@
+# ============================================================
+# 公众号 RSS 源清单（we-mp-rss 输出，服务器 172.16.50.122:8001）
+#   由 newsbot 抓取后归入各分类的「公众号」栏
+#   URL 规则：{base}/feed/{id}.xml
+# ============================================================
+enabled: true
+base: "http://127.0.0.1:8001"
+
+feeds:
+  - {name: "机器之心",         id: "MP_WXS_3073282833", enabled: true}
+  - {name: "新智元",           id: "MP_WXS_3271041950", enabled: true}
+  - {name: "AI科技评论",       id: "MP_WXS_3098132220", enabled: true}
+  - {name: "计算机视觉研究院", id: "MP_WXS_3545025459", enabled: true}
+  - {name: "DeepTech深科技",   id: "MP_WXS_3075228534", enabled: true}
+  - {name: "爱范儿",           id: "MP_WXS_2831008240", enabled: true}
+  - {name: "硅星人Pro",        id: "MP_WXS_3926568365", enabled: true}
+  - {name: "虎嗅APP",          id: "MP_WXS_1432156401", enabled: true}
+  - {name: "钛媒体",           id: "MP_WXS_2398235760", enabled: true}
+  - {name: "智东西",           id: "MP_WXS_3081486433", enabled: true}
+  - {name: "IT桔子",           id: "MP_WXS_2392467062", enabled: true}
+  - {name: "极客公园",         id: "MP_WXS_1304308441", enabled: true}
+  - {name: "36氪",             id: "MP_WXS_3264997043", enabled: true}
+  - {name: "量子位",           id: "MP_WXS_3236757533", enabled: true}
+  - {name: "PaperWeekly",      id: "MP_WXS_3201788143", enabled: true}
+  - {name: "王不二丶bOol",     id: "MP_WXS_3988471547", enabled: true}
+  - {name: "甲子光年",         id: "MP_WXS_3599245772", enabled: true}
+  - {name: "BlackAi3.0",       id: "MP_WXS_3621258120", enabled: true}
+  - {name: "AI前线",           id: "MP_WXS_3554086560", enabled: true}
+  - {name: "非凡产研",         id: "MP_WXS_3592892496", enabled: true}
+  - {name: "创业邦",           id: "MP_WXS_2399032780", enabled: true}

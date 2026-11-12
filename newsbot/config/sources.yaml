@@ -1,0 +1,29 @@
+# ============================================================
+# 新闻源清单（2026-09-28 于服务器 172.16.50.122 实测）
+#   hint  = 该源的主要归类倾向（分类打分时 +2，不强制）
+#   allow = 该源允许进入的类目白名单（不填=不限）；用于抑制跨类噪声
+#   enabled=false 的源为实测不可用，保留待补
+#   2026-09-28 第二轮：中文源不变，新增 37 个实测可用英文源
+#   2026-09-28 第三轮：服务器复核通过，新增 14 源（中文 4 / 英文 10）
+#   2026-10-13：移除全部英文 RSS 源，仅保留中文源
+# ============================================================
+
+sources:
+  # ---------- 类1：AI模型 / 推理芯片 / 计算架构 ----------
+  - {name: "量子位",            url: "https://www.qbitai.com/feed",          hint: "c1", allow: ["c1", "c2"],       enabled: true}
+  - {name: "智东西",            url: "https://www.zhidx.com/rss",            hint: "c1", allow: ["c1", "c3"],       enabled: true}
+  - {name: "雷峰网",            url: "https://www.leiphone.com/feed",        hint: "c1", allow: ["c1", "c2"],       enabled: true}
+  - {name: "极客公园",          url: "https://www.geekpark.net/rss",         hint: "c1", allow: ["c1", "c2"],       enabled: true}
+  - {name: "IT之家",            url: "https://www.ithome.com/rss/",          hint: "c1", allow: ["c1", "c2", "c3"], enabled: true}
+
+  # ---------- 类2：AI EDA / Agentic 工程 ----------
+  - {name: "IC技术圈",          url: "https://iccircle.com/feed",            hint: "c2", allow: ["c2", "c3"],       enabled: true}
+  - {name: "InfoQ 中国",        url: "https://www.infoq.cn/feed",            hint: "c2", allow: ["c2"],             enabled: true}
+  - {name: "开源中国",                 url: "https://www.oschina.net/news/rss",     hint: "c2", allow: ["c1", "c2"], enabled: true}
+
+  # ---------- 类3：AI硬件客户需求 ----------
+  - {name: "钛媒体",            url: "https://www.tmtpost.com/rss.xml",      hint: "c3", allow: ["c1", "c3", "c4"], enabled: true}
+
+  # ---------- 类4：融资动态 ----------
+  - {name: "虎嗅",              url: "https://rss.huxiu.com/",               hint: "c4", allow: ["c1", "c2", "c4"], enabled: true}
+  - {name: "华尔街见闻",                url: "https://dedicated.wallstreetcn.com/rss.xml",     hint: "c4", allow: ["c1", "c4"], enabled: true}

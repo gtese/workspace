@@ -1,0 +1,10 @@
+# 运行态与凭据不入仓
+venv/
+__pycache__/
+*.pyc
+logs/
+state/
+*.bak
+*.bak.*
+._*
+.DS_Store
