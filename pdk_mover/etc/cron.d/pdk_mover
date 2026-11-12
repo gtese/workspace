@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+# 每 15 分钟：按项目白名单把 PDK 中转区新文件迁移到 NAS 正式区，有动作才发邮件
+*/15 * * * * root /usr/local/sbin/pdk_mover.sh >/dev/null 2>&1

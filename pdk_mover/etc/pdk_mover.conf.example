@@ -1,0 +1,28 @@
+# pdk_mover.conf — PDK 中转区 → NAS 正式区 迁移配置
+# 部署位置: /etc/pdk_mover.conf  权限 0600  属主 root
+# 注意: 含 SMTP 口令，不要提交到 Git（.gitignore 已排除 etc/pdk_mover.conf）
+
+# ---- 目录 ----
+SRC_ROOT=/eda/workspace/transfer/backend/nas_cifs/pdk/release
+DST_ROOT=/nas_cifs/pdk/release
+
+# 启用的项目（相对 SRC_ROOT），空格分隔。新节点上线加一项即可，无需改脚本
+PROJECTS="tsmc/n6"
+
+# 允许迁移的二级目录（相对项目根），两端必须都存在
+ALLOW_DIRS="io/cdl io/db io/gds io/lef io/lib ram/avm ram/cdl ram/db ram/gds ram/lef ram/libs rom/avm rom/cdl rom/db rom/gds rom/lef rom/libs"
+
+# ---- 行为 ----
+MIN_AGE=2                 # 文件写入完成多少分钟后才搬运
+DRYRUN=0                  # 1 = 只打印计划不移动（演练）
+LOG=/var/log/pdk_mover.log
+WORK=/var/lib/pdk_mover
+
+# ---- 邮件 ----
+SMTP_HOST=smtp.qiye.aliyun.com
+SMTP_PORT=25
+MAIL_FROM=noreply@example.com
+SMTP_USER=noreply@example.com
+SMTP_PASS=__CHANGE_ME__
+MAIL_TO=ops-pdk@example.com
+MAIL_CC=ops-oncall@example.com

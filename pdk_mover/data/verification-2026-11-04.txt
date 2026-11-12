@@ -1,0 +1,43 @@
+# 验证记录 — 2026-11-04 v4 上线
+
+来源：opsnas.tri.local，`/var/log/pdk_mover.log` 与沙箱 `/root/pdk_v4_test_20261104_112957`。
+
+## 沙箱用例（SRC_ROOT / DST_ROOT 指向沙箱，未触碰真实路径）
+
+| # | 用例 | 构造 | 预期 | 结果 |
+|---|---|---|---|---|
+| 1 | 新建搬运 | 目标无同名 | moved +1 | 通过 |
+| 2 | 同名覆盖 | 目标已有旧版 B-OLD | overwritten +1，目标变 B-new | 通过 |
+| 3 | 子目录递归 | 源 `ram/db/sub/inside.db`，目标 `ram/db/sub` 已存在 | 搬到 `ram/db/sub/inside.db` | 通过 |
+| 4 | 目标子目录缺失 | 目标无 `sub`，源有 `newdir/deep/x` | 源文件保留 + 1 条告警 | 通过 |
+| 5 | 空目录回收 | 搬完后 `ram/db/sub` 为空 | 目录被删除 | 通过 |
+| 6 | 源端残留 | 全部用例后统计 | 中转区 0 文件、0 空目录 | 通过 |
+| 7 | DRYRUN | `DRYRUN=1` | 仅打印计划，无任何改动 | 通过 |
+
+沙箱汇总行：`[total] scanned=N moved=N overwritten=N failed=N dryrun=0`
+
+## 线上部署
+
+| 项 | 值 |
+|---|---|
+| 安装时间 | 2026-11-04 11:29 |
+| 主脚本 | `/usr/local/sbin/pdk_mover.sh`（v4，755 root） |
+| v3 备份 | `/usr/local/sbin/pdk_mover.sh.bak.20261104_112957` |
+| v2 备份 | `/usr/local/sbin/pdk_mover.sh.v2.bak.20261104` |
+| 首轮 DRYRUN | `scanned=0 moved=0 overwritten=0 failed=0`（中转区已空，符合预期） |
+| cron | `/etc/cron.d/pdk_mover`，`*/15 * * * *`，未改动 |
+
+## v2 → v4 期间的现场清理
+
+| 时间 | 动作 | 结果 |
+|---|---|---|
+| 2026-11-03 | 中转区 `ram/lef` 存在与正式区内容一致的重复文件 | md5 比对后删除 7 个（如 `ip/lef/PLLTS6FFFRACG4.lef` 同内容 2 份） |
+| 2026-11-03 | `ram/db/sub/inside.db` 因 v2 不递归长期滞留 | v3/v4 递归后已搬入正式区 |
+| 2026-11-04 | 中转区文件计数 | COUNT=0 |
+
+## 权限修复记录
+
+| 时间 | 问题 | 处理 |
+|---|---|---|
+| 2026-11-03 | 白名单目录 17 个为 `drwxr-s---`（0750），属组 `group_backupend` 无写权限 | 递归 `chmod 2775` 修复 |
+| 2026-11-03 | rsync 从 CIFS 同步骨架会继承 `dir_mode=0750` | 记为待办：新增节点后须补 chmod 或 `install -d -m 2775` |
