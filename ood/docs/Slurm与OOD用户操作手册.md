@@ -34,7 +34,8 @@ Open OnDemand（OOD）是 Slurm 的 Web 门户，提供：
 
 - 浏览器登录（统一身份 SSO）
 - **EDA Desktop**：浏览器里的 VNC 图形桌面
-- **Web Shell**：浏览器终端，直接提交 sbatch
+- **Web Shell**：Jobs 菜单中的浏览器终端，直接提交 sbatch
+- **Files**：浏览器文件管理，允许上传，下载已关闭
 - Jobs：查看活动作业、历史作业
 - 不需要在本地安装 VNC、X Server 或 EDA 图形环境
 
@@ -259,7 +260,7 @@ Node 下拉框示例：
 
 ### 4.5 浏览器提交 JOB（Web Shell）
 
-如果不想用 ssh，可以在 OOD 中打开：
+如果不想用 ssh，可以在 OOD 的 **Jobs → Web Shell** 中打开：
 
     https://edas.tri.local/pun/sys/shell
 
@@ -275,6 +276,16 @@ Node 下拉框示例：
     sbatch hello.slurm
 
 ![OOD Web Shell](images/05-shell.png)
+
+### 4.6 文件上传（Files）
+
+顶部菜单 **Files → Home Directory** 可以上传文件。
+
+- **Upload 可用**
+- **Download 已关闭**
+- 大文件建议上传到 `/eda/workspace/users/$USER` 对应的目录
+
+> Shell 是终端，仍可执行命令；如果安全策略要求完全禁止下载，需要进一步限制终端命令和网络访问，不能只依赖 Files 的下载按钮。
 
 ---
 
@@ -388,7 +399,9 @@ squeue 默认只显示 PENDING / RUNNING。作业结束后请用：
     登录 OOD：  https://edas.tri.local
     GUI：       Interactive Apps → EDA Desktop
     连接桌面：  My Interactive Sessions → Launch EDA Desktop
-    Web Shell： https://edas.tri.local/pun/sys/shell
+    Web Shell： Jobs → Web Shell
+                https://edas.tri.local/pun/sys/shell
+    文件上传：  Files → Home Directory → Upload
     数据目录：  /eda/workspace/users/$USER
     提交作业：  sbatch hello.slurm
     查看队列：  squeue -u $USER

@@ -34,6 +34,7 @@ config/keycloak-ood-client.sanitized.json
 config/ood-env
 config/ondemand-ood.yml
 config/dashboard-initializer-ood.rb
+config/shell-manifest.yml
 ```
 
 所有 `oidc_client_secret`、`oidc_crypto_passphrase`、`OIDCClientSecret`、`OIDCCryptoPassphrase` 均已替换为 `<redacted>`。
