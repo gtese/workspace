@@ -1,3 +1,4 @@
 OOD_DASHBOARD_TITLE="Tri EDA Cluster"
 OOD_UPLOAD_ENABLED=true
 OOD_DOWNLOAD_ENABLED=false
+OOD_DATAROOT="/eda/workspace/users/$USER/ondemand/data/sys/dashboard"
