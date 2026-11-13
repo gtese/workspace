@@ -210,7 +210,6 @@ VPN 场景先按第 2.2 节通过堡垒机进入。
 
 | 字段 | 填写说明 | 示例 |
 |---|---|---|
-| Account | Slurm 记账账户，不是用户名 | staff |
 | Number of hours | 桌面最长运行时间 | 1 |
 | Node | 选择 150-155；下拉框显示实时内存/作业数 | 151 |
 | Memory (GB) | 本节点申请内存，单位 GB | 32 |
@@ -303,7 +302,7 @@ Node 下拉框示例：
 
        mkdir -p /eda/workspace/users/$USER/slurm-logs
 
-5. Account 是 Slurm 记账账户，不是用户名。普通员工使用 staff。
+5. Account 已取消填写，作业自动使用默认账户 staff。
 
 6. 没有指定分区时默认 eda15x（151-155）。
 

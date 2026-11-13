@@ -32,9 +32,6 @@ attributes:
   bc_vnc_idle: 0
   bc_vnc_resolution:
     required: true
-  bc_account:
-    label: "Account"
-    help: "Slurm 记账账户，不是用户名。普通员工选 staff；EDA 项目选 eda；不确定可留空"
   bc_num_hours:
     label: "Number of hours"
     value: 1
@@ -61,7 +58,6 @@ attributes:
 
 form:
   - desktop
-  - bc_account
   - bc_num_hours
   - bc_node
   - bc_mem
