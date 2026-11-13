@@ -9,6 +9,7 @@ submit: "submit/ood.yml.erb"
   node_rows = node_ids.map do |n|
     ip = "172.16.50.#{n}"
     total_gb = used_gb = free_gb = jobs = 0
+    total_cpus = alloc_cpus = free_cpus = 0
     state = "?"
     begin
       out, = Open3.capture2("/usr/bin/scontrol", "show", "node", "-o", ip)
@@ -26,7 +27,7 @@ submit: "submit/ood.yml.erb"
       jobs = jout.lines.count { |line| !line.strip.empty? }
     rescue StandardError
     end
-    [n, total_gb, used_gb, free_gb, jobs, state, free_cpus, total_cpus]
+    [n, total_gb, used_gb, free_gb, jobs, state, free_cpus, alloc_cpus, total_cpus]
   end
 %>
 <%
@@ -55,12 +56,12 @@ attributes:
     required: true
   bc_node:
     label: "Node"
-    help: "选择桌面运行的单个节点；括号内为空闲 CPU、内存和运行作业数，默认选择空闲 CPU 最多的节点。"
+    help: "选择桌面运行的单个节点；括号内依次为 CPU 可用/已用/总、内存可用/已用/总、运行作业数；默认选择空闲 CPU 最多的节点。"
     widget: select
     value: "<%= default_node %>"
     options:
-<% node_rows.each do |n, total, used, free, jobs, state, free_cpus, total_cpus| %>
-      - ["<%= n %> | 空闲CPU <%= free_cpus %>/<%= total_cpus %> | 总内存 <%= total %>G | 已用 <%= used %>G | 可用 <%= free %>G | 作业 <%= jobs %> | <%= state %>", "<%= n %>"]
+<% node_rows.each do |n, total, used, free, jobs, state, free_cpus, alloc_cpus, total_cpus| %>
+      - ["<%= n %> | CPU <%= free_cpus %>/<%= alloc_cpus %>/<%= total_cpus %> | 内存 <%= free %>/<%= used %>/<%= total %>G | 作业 <%= jobs %> | <%= state %>", "<%= n %>"]
 <% end %>
   bc_mem:
     label: "Memory (GB)"
