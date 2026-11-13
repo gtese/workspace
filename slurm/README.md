@@ -25,6 +25,7 @@ eda15x  Default=YES  Nodes=172.16.50.[151-155]
 | [新人快速上手](docs/07-新人快速上手.md) | 堡垒机登录、建目录、单命令/脚本、查看作业 |
 | [提交作业指南](docs/06-提交作业指南.md) | EDA 作业示例与错误处理 |
 | [配置文件说明](docs/04-配置文件.md) | slurm.conf、cgroup、OOD、SELinux、防火墙 |
+| [Slurm 与 OOD 用户操作手册](../ood/docs/Slurm与OOD用户操作手册.md) | 登录、命令行作业、GUI 桌面、FAQ |
 
 根目录 [README](../README.md) 和 `docs/` 下还有安装、管理、故障案例等完整文档。
 

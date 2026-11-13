@@ -19,7 +19,8 @@
 | [用户手册](docs/用户手册.md) | 登录、启动桌面、连接 VNC、EDA 使用 |
 | [运维手册](docs/运维手册.md) | Apache/PUN/OIDC/VNC/websockify 配置与排障 |
 | [变更记录](docs/变更记录.md) | 2026-11-11 迁移和修复记录 |
-| [**图文用户指南**](docs/图文用户指南.md) | 🆕 Web 登录、GUI 桌面、Web Shell 提交作业（带截图） |
+| [**图文用户指南**](docs/图文用户指南.md) | Web 登录、GUI 桌面、Web Shell 提交作业（带截图） |
+| [**Slurm 与 OOD 用户操作手册**](docs/Slurm与OOD用户操作手册.md) | 🆕 两系统介绍、内网/VPN 登录、命令行/GUI 提交、注意事项 |
 
 ## 3. 配置（脱敏）
 
