@@ -19,12 +19,19 @@ submit: "submit/ood.yml.erb"
       used_gb = used_mb / 1024
       free_gb = [(total_mb - used_mb) / 1024, 0].max
       state = vals["State"].to_s.split("+").first
+      total_cpus = vals["CPUTot"].to_i
+      alloc_cpus = vals["CPUAlloc"].to_i
+      free_cpus = [total_cpus - alloc_cpus, 0].max
       jout, = Open3.capture2("/usr/bin/squeue", "-h", "-w", ip, "-t", "RUNNING", "-o", "%i")
       jobs = jout.lines.count { |line| !line.strip.empty? }
     rescue StandardError
     end
-    [n, total_gb, used_gb, free_gb, jobs, state]
+    [n, total_gb, used_gb, free_gb, jobs, state, free_cpus, total_cpus]
   end
+%>
+<%
+  preferred_rows = node_rows.reject { |row| row[0] == "150" }
+  default_node = (preferred_rows.max_by { |row| row[6] } || node_rows.max_by { |row| row[6] }).first rescue "151"
 %>
 
 attributes:
@@ -48,12 +55,12 @@ attributes:
     required: true
   bc_node:
     label: "Node"
-    help: "选择桌面运行的单个节点；括号内为当前总内存/已用/可用及运行作业数。"
+    help: "选择桌面运行的单个节点；括号内为空闲 CPU、内存和运行作业数，默认选择空闲 CPU 最多的节点。"
     widget: select
-    value: "151"
+    value: "<%= default_node %>"
     options:
-<% node_rows.each do |n, total, used, free, jobs, state| %>
-      - ["<%= n %> | 总 <%= total %>G | 已用 <%= used %>G | 可用 <%= free %>G | 作业 <%= jobs %> | <%= state %>", "<%= n %>"]
+<% node_rows.each do |n, total, used, free, jobs, state, free_cpus, total_cpus| %>
+      - ["<%= n %> | 空闲CPU <%= free_cpus %>/<%= total_cpus %> | 总内存 <%= total %>G | 已用 <%= used %>G | 可用 <%= free %>G | 作业 <%= jobs %> | <%= state %>", "<%= n %>"]
 <% end %>
   bc_mem:
     label: "Memory (GB)"
