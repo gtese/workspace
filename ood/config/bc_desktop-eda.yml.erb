@@ -37,6 +37,15 @@ attributes:
     value: 1
     min: 1
     max: 48
+  bc_cpus:
+    label: "CPU cores"
+    help: "桌面作业每个节点的 CPU 核数，按实际需要填写。"
+    value: 4
+    min: 1
+    max: 112
+    step: 1
+    widget: number_field
+    required: true
   bc_node:
     label: "Node"
     help: "选择桌面运行的单个节点；括号内为当前总内存/已用/可用及运行作业数。"
@@ -59,6 +68,7 @@ attributes:
 form:
   - desktop
   - bc_num_hours
+  - bc_cpus
   - bc_node
   - bc_mem
   - bc_vnc_resolution

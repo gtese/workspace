@@ -9,6 +9,7 @@ cluster: "tricluster"
 script:
   native:
     - "--nodes=1"
+    - "--cpus-per-task=<%= bc_cpus.blank? ? 4 : bc_cpus.to_i %>"
     - "--mem=<%= bc_mem.blank? ? 32 : bc_mem.to_i %>G"
     - "--partition=<%= partition %>"
     - "--nodelist=172.16.50.<%= node %>"
