@@ -34,6 +34,18 @@ function slurm_job_submit(job_desc, part_list, submit_uid)
     -- 此时 job_desc.partition 为 nil，必须按默认分区同样强制内存声明。
     local DEFAULT_PARTITION = "eda15x"
     if part == nil then part = DEFAULT_PARTITION end
+
+    -- 作业时长上限：128 小时。分区 MaxTime 之外再显式拒绝，
+    -- 避免超过上限的作业进入 PENDING PartitionConfig 队列。
+    local MAX_TIME_MINUTES = 128 * 60
+    local t = job_desc.time_limit
+    if t ~= nil and t > 0 and t < 1.5e19 and t > MAX_TIME_MINUTES then
+        local msg = "提交被拒绝：作业时长上限为 128 小时（5-08:00:00）。" ..
+            "当前请求: " .. tostring(t) .. " 分钟。请把 --time 改为 128:00:00 或更短。"
+        slurm.log_user(msg)
+        slurm.log_info("job_submit: REJECT time limit %d > %d (uid=%u)", t, MAX_TIME_MINUTES, submit_uid)
+        return slurm.ERROR
+    end
     if enforced[tostring(part)] then
         if mem_unset(job_desc.pn_min_memory) then
             local msg = string.format(
