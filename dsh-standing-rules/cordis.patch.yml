@@ -1,0 +1,13 @@
+# Bundle layer: one plugin row that injects the user's standing rules into the
+# system prompt of every conversation.
+#
+# `rulesFile` is a path in the host's process environment. `~`, `$HOME`,
+# `$DSH_HOME` are expanded when the plugin loads; relative paths resolve
+# against `$DSH_HOME` (default `~/.dsh`).
+- insert:
+    - id: standing-rules
+      name: '@linyiyao/dsh-standing-rules'
+      config:
+        rulesFile: '$DSH_HOME/rules.md'
+        maxBytes: 32768
+        order: 100

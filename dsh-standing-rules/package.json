@@ -1,0 +1,28 @@
+{
+  "name": "@linyiyao/dsh-standing-rules",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inject user-maintained standing rules into every DSH conversation as a system-prompt section.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "rules.example.md",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
