@@ -8,6 +8,13 @@ AIGC:
     PropagateID: 8c4394cfff83f2eb5d568afaa7d5d896_522be03ade3911f1997d52540024e231
     ReservedCode2: Tq0eZKDUjG2Omw+ko7+i+4XdQdLhhptJftHWOtaYhtmZE9tyYPKcWKWA8GtgWB3Iuut++oxMZE6PIYMNGnW2ha2tRF7mYM/CRy4tSD1S60VOCfx0klEs6wxG/Q94ySEl7JL8DgLRag28fIaQ8ls/uL0BfYMVlID96xlbazyqp3lvMRonT4+M9eGiDh4=
 ---
+## [v4.1] - 2026-11-17
+
+### Changed
+- cron 轮询周期由 15 分钟缩短为 5 分钟（`etc/cron.d/pdk_mover`：`*/15` → `*/5`）
+- 最迟迁移时延由约 2–17 分钟降为约 2–7 分钟（`MIN_AGE` 稳定期仍为 2 分钟，未改动）
+- README / SYNC 中周期与时延表述同步
+
 
 # CHANGELOG
 

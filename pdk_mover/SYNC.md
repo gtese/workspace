@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 8c4394cfff83f2eb5d568afaa7d5d896_01ea0c32de3a11f1bc42525400638852
+    ReservedCode1: BdYT65Ifb+nScXYXDbfgspqa4ptJmZ+Uh3iS2V4736ZCMZqRk3ZaYHZ2dV2zfXtG5NKzAq4+DlPzFVdbvGFdr2TVZBhLJzO6hkwXozQsBD4R+ohdwgrUYgaqOQRfpsE7fbk+IwkBw0hFw+PFk7wn1QpyNF6iE8u6//5zMlEUtHv2o2c21edxga0+tjc=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 8c4394cfff83f2eb5d568afaa7d5d896_01ea0c32de3a11f1bc42525400638852
+    ReservedCode2: BdYT65Ifb+nScXYXDbfgspqa4ptJmZ+Uh3iS2V4736ZCMZqRk3ZaYHZ2dV2zfXtG5NKzAq4+DlPzFVdbvGFdr2TVZBhLJzO6hkwXozQsBD4R+ohdwgrUYgaqOQRfpsE7fbk+IwkBw0hFw+PFk7wn1QpyNF6iE8u6//5zMlEUtHv2o2c21edxga0+tjc=
+---
+
 # SYNC — 与内网源仓库的同步关系
 
 ## 源仓库
@@ -7,7 +18,7 @@
 | 主仓库 | `https://git.tri.local/it/filetran.git`（内网 GitLab，仅内网可达） |
 | 分支 | `main` |
 | 当前对应提交 | `0ee2a81` feat!: v4 简化搬运规则（目标存在即覆盖、源端不留） |
-| 运行主机 | `opsnas.tri.local`（172.16.50.107），cron 每 15 分钟 |
+| 运行主机 | `opsnas.tri.local`（172.16.50.107），cron 每 5 分钟 |
 
 本目录是源仓库的**公开镜像**，用于跨设备查阅与备份；实际部署请从内网源仓库拉取。
 
@@ -39,8 +50,9 @@ rsync -a --exclude '.git' --exclude 'etc/pdk_mover.conf' \
       ~/tmp/filetran/{README.md,CHANGELOG.md,install.sh,bin,etc,docs} \
       ~/deepseek/workspace/pdk_mover/
 
-# 脱敏检查（必须为零命中）
-grep -rnE "Trace@|ssuwlatgq|SMTP_PASS=[^\"'$]" ~/deepseek/workspace/pdk_mover/ || echo "clean"
+# 脱敏检查（必须零命中：口令类关键字 + 明文赋值）
+grep -rnE "SMTP_PASS=[^\"'$]|password *= *[^ ]|set pw |sshpass" ~/deepseek/workspace/pdk_mover/ \
+  | grep -v "__CHANGE_ME__" || echo "clean"
 
 # 提交
 cd ~/deepseek/workspace && git add pdk_mover && git commit -m "docs: sync pdk_mover (v4)"
@@ -55,3 +67,4 @@ cd ~/deepseek/workspace && git add pdk_mover && git commit -m "docs: sync pdk_mo
 ## 安全提醒
 
 本目录推送至 GitHub 公开仓库（`github.com/gtese/workspace`），提交前务必执行上面的脱敏检查。
+*（内容由AI生成，仅供参考）*
