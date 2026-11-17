@@ -8,6 +8,8 @@ AIGC:
     PropagateID: 8c4394cfff83f2eb5d568afaa7d5d896_522be03ade3911f1997d52540024e231
     ReservedCode2: Tq0eZKDUjG2Omw+ko7+i+4XdQdLhhptJftHWOtaYhtmZE9tyYPKcWKWA8GtgWB3Iuut++oxMZE6PIYMNGnW2ha2tRF7mYM/CRy4tSD1S60VOCfx0klEs6wxG/Q94ySEl7JL8DgLRag28fIaQ8ls/uL0BfYMVlID96xlbazyqp3lvMRonT4+M9eGiDh4=
 ---
+# CHANGELOG
+
 ## [v4.1] - 2026-11-17
 
 ### Changed
@@ -16,7 +18,6 @@ AIGC:
 - README / SYNC 中周期与时延表述同步
 
 
-# CHANGELOG
 
 ## v4 — 2026-11-04
 
