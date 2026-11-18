@@ -1,9 +1,10 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { FolderTree, Info, ShieldAlert, Timer } from 'lucide-vue-next'
+import { ChevronRight, FolderTree, Info, ShieldAlert, Timer } from 'lucide-vue-next'
 import Modal from './ui/Modal.vue'
 import BaseButton from './ui/BaseButton.vue'
 import DirPicker from './DirPicker.vue'
+import RepositoryPicker from './RepositoryPicker.vue'
 import { useAuthStore } from '../stores/auth.js'
 import { api } from '../api/index.js'
 import { toast } from '../lib/toast.js'
@@ -21,6 +22,7 @@ const auth = useAuthStore()
 const saving = ref(false)
 const pickerOpen = ref(false)
 const pickerInitial = ref('/')
+const repoPickerOpen = ref(false)
 const errors = reactive({})
 
 function parseJson(value, fallback) {
@@ -68,6 +70,17 @@ const form = reactive(initialForm())
 
 const isEditing = computed(() => !!props.plan?.id)
 const paths = computed(() => splitLines(form.pathsText))
+const selectedRepo = computed(() => props.repositories.find((r) => r.id === form.repository_id) || null)
+
+const REPO_TYPES = { local: '本地目录', nfs: 'NFS', cifs: 'SMB/CIFS', ftp: 'FTP(S)' }
+function repoPath(repo) {
+  if (!repo) return ''
+  return repo.mountpoint || repo.config?.path || repo.config?.export || repo.config?.share || repo.config?.dir || ''
+}
+function onRepoPicked(id) {
+  form.repository_id = id
+  repoPickerOpen.value = false
+}
 const excludes = computed(() => splitLines(form.excludesText))
 
 function clearErrors() {
@@ -199,14 +212,24 @@ async function save() {
             <p v-if="errors.client_id" class="mt-1 text-xs text-red-600">{{ errors.client_id }}</p>
           </div>
           <div>
-            <label class="bc-label">存储库 <span class="text-red-500">*</span></label>
-            <select v-model="form.repository_id" class="bc-input">
-              <option value="">请选择存储库</option>
-              <option v-for="repo in repositories" :key="repo.id" :value="repo.id">
-                {{ repo.name }}（{{ repo.type }}）
-              </option>
-            </select>
+            <label class="bc-label">存储库 / 备份池 <span class="text-red-500">*</span></label>
+            <button
+              type="button"
+              class="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm transition hover:border-brand-400 hover:bg-brand-50/40"
+              @click="repoPickerOpen = true"
+            >
+              <span v-if="selectedRepo" class="min-w-0">
+                <span class="flex flex-wrap items-center gap-2">
+                  <span class="font-medium text-slate-800">{{ selectedRepo.name }}</span>
+                  <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{{ REPO_TYPES[selectedRepo.type] || selectedRepo.type }}</span>
+                </span>
+                <span class="mt-0.5 block truncate font-mono text-[11px] text-slate-400">{{ repoPath(selectedRepo) }}</span>
+              </span>
+              <span v-else class="text-slate-400">点击浏览并选择存储库对象</span>
+              <ChevronRight class="h-4 w-4 shrink-0 text-slate-400" />
+            </button>
             <p v-if="errors.repository_id" class="mt-1 text-xs text-red-600">{{ errors.repository_id }}</p>
+            <p class="mt-1 text-[11px] text-slate-400">以文件浏览器方式列出可用备份池对象，例如 data2-projects。</p>
           </div>
         </div>
       </section>
@@ -404,6 +427,14 @@ async function save() {
       :initial-path="pickerInitial"
       title="选择要备份的目录或文件"
       @confirm="onPick"
+    />
+
+    <RepositoryPicker
+      :open="repoPickerOpen"
+      :repositories="repositories"
+      :selected-id="form.repository_id"
+      @close="repoPickerOpen = false"
+      @confirm="onRepoPicked"
     />
   </Modal>
 </template>
