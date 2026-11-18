@@ -107,6 +107,20 @@ func ensureLocal(mountpoint string) Response {
 	if err := os.MkdirAll(mountpoint, 0o700); err != nil {
 		return fail(err.Error())
 	}
+	// 本地目录由管理员（root）在 Web 上创建时，自动交给备份服务用户，
+	// 避免"目录已存在但 backup 不可写"。
+	if u, err := user.Lookup(*backupUser); err == nil {
+		uid, e1 := strconv.Atoi(u.Uid)
+		gid, e2 := strconv.Atoi(u.Gid)
+		if e1 == nil && e2 == nil {
+			if err := os.Chown(mountpoint, uid, gid); err != nil {
+				return fail(fmt.Sprintf("目录授权失败: %v", err))
+			}
+		}
+	}
+	if err := os.Chmod(mountpoint, 0o700); err != nil {
+		return fail(err.Error())
+	}
 	return Response{OK: true, Mountpoint: mountpoint}
 }
 
@@ -229,8 +243,19 @@ func verifyWritable(mountpoint, user string) error {
 func handle(req Request) Response {
 	switch req.Op {
 	case "ensure":
-		mountpoint, err := validateRepo(req)
-		if err != nil { return fail(err.Error()) }
+		var mountpoint string
+		if req.Type == "local" {
+			p := strings.TrimSpace(req.Config.Path)
+			if p == "" { p = strings.TrimSpace(req.Mountpoint) }
+			if p == "" || !filepath.IsAbs(p) || strings.Contains(p, "..") || p == "/" {
+				return fail("本地路径非法")
+			}
+			mountpoint = filepath.Clean(p)
+		} else {
+			var err error
+			mountpoint, err = validateRepo(req)
+			if err != nil { return fail(err.Error()) }
+		}
 		var resp Response
 		switch req.Type {
 		case "local":

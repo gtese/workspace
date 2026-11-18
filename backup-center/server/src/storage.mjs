@@ -36,13 +36,27 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
   }
 
   async function ensureMounted(row) {
+    const config = row.config || (row.config_enc ? JSON.parse(decryptText(masterKey, row.config_enc)) : {});
     if (row.type === 'local') {
+      // 优先让 root 挂载助手创建目录并 chown 到 backup，兼容"管理员已手工 mkdir 但属主为 root"的场景
+      if (cfg.mountd.enabled) {
+        try {
+          await mountd.ensure({ repo_id: row.id, type: 'local', config, mountpoint: row.mountpoint });
+          return;
+        } catch (e) {
+          // 挂载助手不可用时退回本进程 mkdir（目录已存在且可写时仍可成功）
+        }
+      }
       fs.mkdirSync(row.mountpoint, { recursive: true, mode: 0o700 });
       return;
     }
-    await mountd.ensure({
-      repo_id: row.id, type: row.type, config: JSON.parse(decryptText(masterKey, row.config_enc)), mountpoint: row.mountpoint,
-    });
+    await mountd.ensure({ repo_id: row.id, type: row.type, config, mountpoint: row.mountpoint });
+  }
+
+  function unwritableMessage(dir) {
+    return `目录不可写：${dir}。服务以 backup 用户运行，请先执行 ` +
+      `chown -R backup:backup ${dir}（或 chmod 0770 并确保 backup 组可写），` +
+      `再重试；也可由管理员用 root 创建目录后交给 backup。`;
   }
 
   function writable(dir) {
@@ -59,6 +73,17 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
     if (store.get('SELECT id FROM repositories WHERE name=?', String(name).trim())) {
       throw new ApiError(409, 'conflict', '存储库名称已存在');
     }
+    // 本地路径不允许被多个存储库复用（防止同一目录被两个仓库并发写入）
+    if (type === 'local') {
+      const dup = store.all("SELECT id,name,mountpoint FROM repositories WHERE type='local'");
+      let target;
+      try { target = path.resolve(config.path); } catch { target = config.path; }
+      for (const d of dup) {
+        if (path.resolve(d.mountpoint) === target) {
+          throw new ApiError(409, 'conflict', `该本地路径已被存储库「${d.name}」使用`);
+        }
+      }
+    }
     const repoId = id('r', 6);
     const mountpoint = mountpointFor(type, config, repoId);
     const enc = encryptText(masterKey, JSON.stringify(config));
@@ -67,7 +92,7 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
       repoId, row.name, type, enc, mountpoint, 'active', nowIso());
     try {
       await ensureMounted(row);
-      if (!writable(mountpoint)) throw new ApiError(500, 'storage_unwritable', `目录不可写：${mountpoint}`);
+      if (!writable(mountpoint)) throw new ApiError(500, 'storage_unwritable', unwritableMessage(mountpoint));
     } catch (e) {
       store.run("UPDATE repositories SET status='error', last_error=? WHERE id=?", String(e.message || e), repoId);
       throw e;
@@ -105,7 +130,7 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
       const fresh = get(repoId, { reveal: true });
       try {
         await ensureMounted(fresh);
-        if (!writable(fresh.mountpoint)) throw new ApiError(500, 'storage_unwritable', `目录不可写：${fresh.mountpoint}`);
+        if (!writable(fresh.mountpoint)) throw new ApiError(500, 'storage_unwritable', unwritableMessage(fresh.mountpoint));
         store.run("UPDATE repositories SET status='active', last_error=NULL WHERE id=?", repoId);
       } catch (e) {
         store.run("UPDATE repositories SET status='error', last_error=? WHERE id=?", String(e.message || e), repoId);
@@ -212,7 +237,7 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
     const repo = get(repoId, { reveal: true });
     if (!repo) throw new ApiError(404, 'not_found', '存储库不存在');
     await ensureMounted(repo);
-    if (!writable(repo.mountpoint)) throw new ApiError(500, 'storage_unwritable', `目录不可写：${repo.mountpoint}`);
+    if (!writable(repo.mountpoint)) throw new ApiError(500, 'storage_unwritable', unwritableMessage(repo.mountpoint));
     const probe = path.join(repo.mountpoint, `.probe-${Date.now()}`);
     fs.writeFileSync(probe, 'ok', { mode: 0o600 });
     fs.rmSync(probe, { force: true });
