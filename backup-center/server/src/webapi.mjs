@@ -68,7 +68,20 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
     sendJson(ctx.res, 200, { ok: true });
   });
 
+  router.add('GET', '/api/auth/config', async (ctx) => {
+    sendJson(ctx.res, 200, {
+      local: true,
+      oidc_enabled: !!cfg.oidc.enabled,
+      oidc_issuer: cfg.oidc.enabled ? cfg.oidc.issuer : '',
+      site_name: 'TRI 集中备份平台',
+    });
+  });
+
   router.add('GET', '/auth/oidc/start', async (ctx) => {
+    if (!cfg.oidc.enabled) {
+      ctx.res.writeHead(302, { Location: '/login?oidc=disabled' });
+      return ctx.res.end();
+    }
     const { url } = await auth.oidcStart(ctx.query.get('next') || '/');
     ctx.res.writeHead(302, { Location: url });
     ctx.res.end();

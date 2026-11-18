@@ -8,6 +8,7 @@ export const api = {
     login: (username, password) =>
       http.post('/api/auth/login', { username, password }, { redirectOn401: false, toastError: true }),
     logout: () => http.post('/api/auth/logout', undefined, { toastError: false }),
+    config: () => http.get('/api/auth/config', { toastError: false, redirectOn401: false }),
   },
 
   clients: {

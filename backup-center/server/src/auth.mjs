@@ -189,10 +189,16 @@ export function createAuth({ cfg, store }) {
     const claims = verifyJwt(tok.id_token, keys.keys || [], {
       issuer: cfg.oidc.issuer.replace(/\/$/, ''), clientId: cfg.oidc.client_id, nonce: row.nonce,
     });
-    const groups = Array.isArray(claims.groups) ? claims.groups : [];
+    const asList = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+    const groups = asList(claims.groups);
+    const roles = [...asList(claims.roles), ...asList(claims.realm_access && claims.realm_access.roles)];
+    const norm = (s) => String(s || '').toLowerCase().replace(/^\/+/, '');
+    const adminMatchers = [cfg.oidc.admin_group, cfg.oidc.admin_role, 'Group_Roots', 'backup:admin']
+      .filter(Boolean).map(norm);
+    const hasAdmin = [...groups, ...roles].some((v) => adminMatchers.includes(norm(v)));
     let role = 'viewer';
-    if (groups.includes(cfg.oidc.admin_group)) role = 'admin';
-    else if (groups.includes(cfg.oidc.operator_group)) role = 'operator';
+    if (hasAdmin) role = 'admin';
+    else if (cfg.oidc.operator_group && [...groups, ...roles].some((v) => norm(v) === norm(cfg.oidc.operator_group))) role = 'operator';
     const username = String(claims.preferred_username || claims.email || claims.sub).slice(0, 128);
     let user = store.get('SELECT * FROM users WHERE username=?', username);
     if (!user) {

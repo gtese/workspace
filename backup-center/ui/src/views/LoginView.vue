@@ -26,6 +26,8 @@ const showPassword = ref(false)
 const error = ref('')
 const health = ref(null)
 const healthError = ref(false)
+const oidcEnabled = ref(false)
+const oidcChecked = ref(false)
 
 onMounted(async () => {
   try {
@@ -37,6 +39,17 @@ onMounted(async () => {
     }
   } catch {
     healthError.value = true
+  }
+  try {
+    const cfg = await api.auth.config()
+    oidcEnabled.value = !!cfg?.oidc_enabled
+  } catch {
+    oidcEnabled.value = false
+  } finally {
+    oidcChecked.value = true
+  }
+  if (route.query.oidc === 'disabled') {
+    error.value = '统一身份登录尚未启用，请先使用本地管理员账号登录'
   }
 })
 
@@ -189,22 +202,27 @@ async function submit() {
             </BaseButton>
           </form>
 
-          <div class="my-6 flex items-center gap-3">
-            <span class="h-px flex-1 bg-slate-200" />
-            <span class="text-xs text-slate-400">或</span>
-            <span class="h-px flex-1 bg-slate-200" />
-          </div>
+          <template v-if="oidcEnabled">
+            <div class="my-6 flex items-center gap-3">
+              <span class="h-px flex-1 bg-slate-200" />
+              <span class="text-xs text-slate-400">或</span>
+              <span class="h-px flex-1 bg-slate-200" />
+            </div>
 
-          <a
-            href="/auth/oidc/start"
-            class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-          >
-            <ShieldCheck class="h-4 w-4 text-brand-600" />
-            统一身份登录（Keycloak）
-          </a>
+            <a
+              href="/auth/oidc/start"
+              class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+            >
+              <ShieldCheck class="h-4 w-4 text-brand-600" />
+              统一身份登录（Keycloak）
+            </a>
 
-          <p class="mt-6 text-center text-xs leading-5 text-slate-400">
-            本地账号用于应急管理；企业账号经 Keycloak 单点登录后自动创建并映射角色。
+            <p class="mt-6 text-center text-xs leading-5 text-slate-400">
+              企业账号经 Keycloak 单点登录；Group_Roots 成员为管理员，其他成员只读。
+            </p>
+          </template>
+          <p v-else-if="oidcChecked" class="mt-6 text-center text-xs leading-5 text-slate-400">
+            统一身份登录尚未启用，请使用本地管理员账号登录。
           </p>
         </div>
       </div>
