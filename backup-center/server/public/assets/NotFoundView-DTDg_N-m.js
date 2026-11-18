@@ -1,0 +1,6 @@
+import{c as o,a as n,b as t,d as s,e as a,k as r,R as l,q as c,f as i}from"./index-DSqfeU2J.js";import{H as m}from"./house-BkrRgOan.js";/**
+ * @license lucide-vue-next v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const d=o("CompassIcon",[["path",{d:"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z",key:"9ktpf1"}],["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}]]),x={class:"flex min-h-[60vh] flex-col items-center justify-center text-center"},f={class:"mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-200/70 text-slate-500"},h={__name:"NotFoundView",setup(p){return(u,e)=>(c(),n("div",x,[t("span",f,[s(a(d),{class:"h-8 w-8"})]),e[1]||(e[1]=t("p",{class:"text-4xl font-semibold tracking-tight text-slate-800"},"404",-1)),e[2]||(e[2]=t("p",{class:"mt-2 text-sm text-slate-500"},"页面不存在或已被移除。",-1)),s(a(l),{to:{name:"dashboard"},class:"mt-5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700"},{default:r(()=>[s(a(m),{class:"h-4 w-4"}),e[0]||(e[0]=i(" 返回概览 ",-1))]),_:1})]))}};export{h as default};

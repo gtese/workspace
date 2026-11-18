@@ -93,7 +93,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const data = await api.enroll.list()
+    const data = await api.enroll.list('all')
     requests.value = listOf(data, 'requests', 'enroll_requests')
   } catch (err) {
     error.value = err?.message || '加载待审批节点失败'
