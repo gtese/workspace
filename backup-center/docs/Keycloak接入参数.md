@@ -1,6 +1,6 @@
 # Keycloak 接入参数（backup-center 集中备份平台）
 
-> 交给 IdP/Keycloak 管理员创建 client 用。服务端已就绪，只差 client 凭据。
+> 状态：**已完成配置（2026-11-18）**；本文件保留作为参数与验收记录。client `backup-center`、mapper、`backup:admin`→`Group_Roots` 均已生效。
 > 系统名称：**TRI 集中备份平台（backup-center）**
 > 访问域名：**https://backup.tri.local**
 > Keycloak：realm **tri**，issuer `https://sso.tri.local/realms/tri`

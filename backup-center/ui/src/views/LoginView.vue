@@ -50,6 +50,9 @@ onMounted(async () => {
   }
   if (route.query.oidc === 'disabled') {
     error.value = '统一身份登录尚未启用，请先使用本地管理员账号登录'
+  } else if (route.query.oidc_error) {
+    const desc = typeof route.query.oidc_desc === 'string' ? route.query.oidc_desc : ''
+    error.value = `统一身份登录失败：${desc || String(route.query.oidc_error)}`
   }
 })
 

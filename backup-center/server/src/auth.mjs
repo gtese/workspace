@@ -160,7 +160,7 @@ export function createAuth({ cfg, store }) {
     u.searchParams.set('client_id', cfg.oidc.client_id);
     u.searchParams.set('response_type', 'code');
     u.searchParams.set('redirect_uri', cfg.oidc.redirect_uri);
-    u.searchParams.set('scope', 'openid profile email groups');
+    u.searchParams.set('scope', cfg.oidc.scope || 'openid profile email');
     u.searchParams.set('state', state);
     u.searchParams.set('nonce', nonce);
     u.searchParams.set('code_challenge', challenge);

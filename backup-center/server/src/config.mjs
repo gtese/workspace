@@ -33,6 +33,7 @@ const DEFAULTS = {
     redirect_uri: '',
     post_logout_uri: '',
     ca_file: '/etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt',
+    scope: 'openid profile email',
     admin_group: 'Group_Roots',
     admin_role: 'backup:admin',
     operator_group: '',

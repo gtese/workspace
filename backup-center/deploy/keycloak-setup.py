@@ -32,6 +32,7 @@ import urllib.request
 
 BASE = os.environ.get("KC_BASE_URL", "https://sso.tri.local").rstrip("/")
 REALM = os.environ.get("KC_REALM", "tri")
+ADMIN_REALM = os.environ.get("KC_ADMIN_REALM", "master")
 ADMIN_USER = os.environ.get("KC_ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("KC_ADMIN_PASSWORD", "")
 CLIENT_ID = os.environ.get("BC_CLIENT_ID", "backup-center")
@@ -73,7 +74,7 @@ def call(method, path, token=None, body=None, form=None):
 
 
 def login():
-    status, data = call("POST", f"/realms/{REALM}/protocol/openid-connect/token", form={
+    status, data = call("POST", f"/realms/{ADMIN_REALM}/protocol/openid-connect/token", form={
         "client_id": "admin-cli", "grant_type": "password",
         "username": ADMIN_USER, "password": ADMIN_PASS,
     })

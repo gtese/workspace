@@ -88,6 +88,12 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('GET', '/auth/oidc/callback', async (ctx) => {
+    const oidcError = ctx.query.get('error');
+    if (oidcError) {
+      const desc = ctx.query.get('error_description') || '';
+      ctx.res.writeHead(302, { Location: `/login?oidc_error=${encodeURIComponent(oidcError)}&oidc_desc=${encodeURIComponent(desc)}` });
+      return ctx.res.end();
+    }
     const { session, returnTo, user } = await auth.oidcCallback(ctx.query.get('code'), ctx.query.get('state'));
     ctx.res.setHeader('Set-Cookie', cookieHeader(cookieName, session.sid, { secure: secureCookie, maxAge: 8 * 3600 }));
     audit({ actor: user.username, action: 'auth.oidc_login', target: user.username, ip: clientIp(ctx.req) });
