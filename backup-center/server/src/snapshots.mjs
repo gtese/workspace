@@ -2,24 +2,26 @@ import { ApiError, parseJson } from './util.mjs';
 import { listSnapshots, listSnapshotFiles, resticTag, resticForget, spawnRestic } from './restic.mjs';
 
 export function createSnapshots({ cfg, store, storage, jobs }) {
-  function ctx(clientId) {
+  function ctx(clientId, repositoryId = null) {
     const client = store.get('SELECT * FROM clients WHERE id=?', clientId);
     if (!client) throw new ApiError(404, 'not_found', '节点不存在');
-    const repo = storage.clientRepository(clientId);
-    if (!repo) throw new ApiError(409, 'config', '节点尚未分配存储库');
-    const cred = storage.clientRepoPassword(clientId);
-    return { client, repo, dir: storage.clientRepoDir(repo, clientId), password: cred.password };
+    const repoId = repositoryId || client.repository_id;
+    if (!repoId) throw new ApiError(409, 'config', '节点尚未分配存储库');
+    const repo = storage.clientRepository(clientId, repoId);
+    if (!repo) throw new ApiError(404, 'not_found', '存储库不存在');
+    const cred = storage.clientRepoPassword(clientId, repoId);
+    return { client, repo, repositoryId: repoId, dir: storage.clientRepoDir(repo, clientId), password: cred.password };
   }
 
-  async function list(clientId) {
-    const { client, dir, password } = ctx(clientId);
+  async function list(clientId, repositoryId = null) {
+    const { client, dir, password, repositoryId: rid } = ctx(clientId, repositoryId);
     const snaps = await listSnapshots(cfg, dir, password, { host: client.id });
     return snaps.map((s) => {
       const tags = s.tags || [];
       const sum = s.summary || {};
       return {
         id: s.id, short_id: s.short_id, time: s.time, hostname: s.hostname,
-        paths: s.paths || [], tags, pinned: tags.includes('pinned'),
+        repository_id: rid, paths: s.paths || [], tags, pinned: tags.includes('pinned'),
         files: sum.total_files_processed || 0,
         bytes: sum.total_bytes_processed || 0,
         data_added: sum.data_added_packed || sum.data_added || 0,
@@ -28,8 +30,8 @@ export function createSnapshots({ cfg, store, storage, jobs }) {
     }).sort((a, b) => (a.time < b.time ? 1 : -1));
   }
 
-  async function ls(clientId, snapshotId, dirPath) {
-    const { dir, password } = ctx(clientId);
+  async function ls(clientId, snapshotId, dirPath, repositoryId = null) {
+    const { dir, password } = ctx(clientId, repositoryId);
     const target = normalizePath(dirPath || '/');
     const nodes = await listSnapshotFiles(cfg, dir, password, snapshotId, target);
     const seen = new Set();
@@ -50,19 +52,19 @@ export function createSnapshots({ cfg, store, storage, jobs }) {
       });
     }
     entries.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : b.type === 'dir' ? 1 : 0));
-    const roots = await snapshotRoots(clientId, snapshotId);
+    const roots = await snapshotRoots(clientId, snapshotId, repositoryId);
     return { path: target, entries, roots };
   }
 
-  async function snapshotRoots(clientId, snapshotId) {
-    const { dir, password } = ctx(clientId);
+  async function snapshotRoots(clientId, snapshotId, repositoryId = null) {
+    const { dir, password } = ctx(clientId, repositoryId);
     const snaps = await listSnapshots(cfg, dir, password);
     const snap = snaps.find((s) => s.id === snapshotId || s.short_id === snapshotId);
     return snap ? (snap.paths || []) : [];
   }
 
-  async function search(clientId, snapshotId, q) {
-    const { dir, password } = ctx(clientId);
+  async function search(clientId, snapshotId, q, repositoryId = null) {
+    const { dir, password } = ctx(clientId, repositoryId);
     const pattern = String(q || '').trim();
     if (!pattern) return [];
     const r = await import('./restic.mjs').then((m) => m.runRestic(cfg, { repo: dir, password, args: ['find', '--json', `*${pattern}*`], timeoutMs: 60000 }));
@@ -81,8 +83,8 @@ export function createSnapshots({ cfg, store, storage, jobs }) {
     return out;
   }
 
-  async function download(clientId, snapshotId, filePath) {
-    const { dir, password } = ctx(clientId);
+  async function download(clientId, snapshotId, filePath, repositoryId = null) {
+    const { dir, password } = ctx(clientId, repositoryId);
     const target = normalizePath(filePath);
     if (target === '/' || target === '') throw new ApiError(400, 'validation', '请选择要下载的文件或目录');
     const nodes = await listSnapshotFiles(cfg, dir, password, snapshotId, target);
@@ -99,15 +101,15 @@ export function createSnapshots({ cfg, store, storage, jobs }) {
     };
   }
 
-  async function pin(clientId, snapshotId, pinned) {
-    const { dir, password } = ctx(clientId);
+  async function pin(clientId, snapshotId, pinned, repositoryId = null) {
+    const { dir, password } = ctx(clientId, repositoryId);
     if (pinned) await resticTag(cfg, dir, password, snapshotId, { add: ['pinned'] });
     else await resticTag(cfg, dir, password, snapshotId, { remove: ['pinned'] });
     return { ok: true, pinned: !!pinned };
   }
 
-  async function remove(clientId, snapshotId) {
-    const { dir, password } = ctx(clientId);
+  async function remove(clientId, snapshotId, repositoryId = null) {
+    const { dir, password } = ctx(clientId, repositoryId);
     await resticForget(cfg, dir, password, [snapshotId], { prune: false });
     return { ok: true };
   }

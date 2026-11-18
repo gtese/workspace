@@ -31,9 +31,10 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const meta = useMetaStore()
-const { clients } = storeToRefs(meta)
+const { clients, repositories } = storeToRefs(meta)
 
 const selectedClientId = ref(typeof route.query.client === 'string' ? route.query.client : '')
+const selectedRepoId = ref(typeof route.query.repo === 'string' ? route.query.repo : '')
 const snapshots = ref([])
 const loading = ref(false)
 const error = ref('')
@@ -73,7 +74,7 @@ async function loadSnapshots() {
   loading.value = true
   error.value = ''
   try {
-    const data = await api.snapshots.list(selectedClientId.value)
+    const data = await api.snapshots.list(selectedClientId.value, selectedRepoId.value)
     snapshots.value = listOf(data, 'snapshots')
       .map(normalizeSnapshot)
       .sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime())
@@ -88,14 +89,23 @@ async function loadSnapshots() {
   }
 }
 
+function defaultRepoForClient(id) {
+  const client = clients.value.find((c) => c.id === id)
+  return client?.repository_id || ''
+}
+
 watch(
   selectedClientId,
   (id) => {
     selectedSnapshotId.value = ''
     restoreState.value = null
     if (id) {
-      if (route.query.client !== id) {
-        router.replace({ name: 'snapshots', query: { ...route.query, client: id } })
+      const want = defaultRepoForClient(id)
+      if (want && (!selectedRepoId.value || !repositories.value.some((r) => r.id === selectedRepoId.value))) {
+        selectedRepoId.value = want
+      }
+      if (route.query.client !== id || (selectedRepoId.value && route.query.repo !== selectedRepoId.value)) {
+        router.replace({ name: 'snapshots', query: { ...route.query, client: id, repo: selectedRepoId.value || undefined } })
       }
       loadSnapshots()
     } else {
@@ -105,8 +115,17 @@ watch(
   { immediate: true },
 )
 
+watch(selectedRepoId, (repoId) => {
+  selectedSnapshotId.value = ''
+  restoreState.value = null
+  if (selectedClientId.value) {
+    router.replace({ name: 'snapshots', query: { ...route.query, client: selectedClientId.value, repo: repoId || undefined } })
+    loadSnapshots()
+  }
+})
+
 onMounted(async () => {
-  await meta.loadClients()
+  await Promise.all([meta.loadClients(), meta.loadRepositories()])
   if (!selectedClientId.value && clients.value.length) {
     selectedClientId.value = clients.value[0].id
   } else if (selectedClientId.value && clients.value.length && !clients.value.some((c) => c.id === selectedClientId.value)) {
@@ -128,7 +147,7 @@ function selectSnapshot(snapshot) {
 async function togglePin(snapshot) {
   busyId.value = snapshot.id
   try {
-    await api.snapshots.pin(selectedClientId.value, snapshot.id, !snapshot.pinned)
+    await api.snapshots.pin(selectedClientId.value, snapshot.id, !snapshot.pinned, selectedRepoId.value)
     toast.success(snapshot.pinned ? '已取消钉住' : '快照已钉住，保留策略不会删除')
     await loadSnapshots()
   } finally {
@@ -147,7 +166,7 @@ async function removeSnapshot(snapshot) {
   if (!ok) return
   busyId.value = snapshot.id
   try {
-    await api.snapshots.remove(selectedClientId.value, snapshot.id)
+    await api.snapshots.remove(selectedClientId.value, snapshot.id, selectedRepoId.value)
     toast.success('快照已删除')
     if (selectedSnapshotId.value === snapshot.id) selectedSnapshotId.value = ''
     await loadSnapshots()
@@ -192,6 +211,11 @@ function tagLabel(tag) {
             <option v-for="client in clients" :key="client.id" :value="client.id">
               {{ client.hostname }}（{{ client.status === 'disabled' ? '停用' : '在线' }}）
             </option>
+          </select>
+          <label class="bc-label mt-3">备份池 / 存储库</label>
+          <select v-model="selectedRepoId" class="bc-input">
+            <option value="">请选择存储库</option>
+            <option v-for="repo in repositories" :key="repo.id" :value="repo.id">{{ repo.name }}</option>
           </select>
           <p class="mt-2 text-[11px] text-slate-400">
             {{ snapshots.length }} 个快照 · 按时间倒序
@@ -309,6 +333,7 @@ function tagLabel(tag) {
 
           <SnapshotBrowser
             :client-id="selectedClientId"
+            :repository-id="selectedRepoId"
             :snapshot-id="selectedSnapshot.id"
             class="min-h-0 flex-1"
             @restore="openRestore"
@@ -325,6 +350,7 @@ function tagLabel(tag) {
     <RestoreWizard
       v-if="restoreState"
       :client-id="selectedClientId"
+      :repository-id="selectedRepoId"
       :snapshot-id="selectedSnapshotId"
       :includes="restoreState.includes"
       :snapshot-label="selectedSnapshot ? `${selectedSnapshot.shortId} · ${formatDateTime(selectedSnapshot.time)}` : ''"

@@ -189,7 +189,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
 
   router.add('GET', '/api/clients/:id/snapshots', async (ctx) => {
     requireUser(ctx);
-    sendJson(ctx.res, 200, await snapshots.list(ctx.params.id));
+    sendJson(ctx.res, 200, await snapshots.list(ctx.params.id, ctx.query.get('repository_id')));
   });
 
   /* ---------- enroll ---------- */
@@ -293,7 +293,9 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
     if (body.repository_id !== undefined) out.repository_id = String(body.repository_id);
     if (body.paths !== undefined) {
       if (!Array.isArray(body.paths) || !body.paths.length) throw new ApiError(400, 'validation', '至少选择一个备份路径');
-      out.paths_json = JSON.stringify(body.paths.map(String));
+      const list = body.paths.map(String);
+      jobs.safetyExcludes(list);
+      out.paths_json = JSON.stringify(list);
     }
     if (body.excludes !== undefined) out.excludes_json = JSON.stringify((body.excludes || []).map(String));
     if (body.cron !== undefined) {
@@ -438,20 +440,20 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   /* ---------- snapshots ---------- */
   router.add('GET', '/api/snapshots/:clientId/:snapshotId/ls', async (ctx) => {
     requireUser(ctx);
-    const out = await snapshots.ls(ctx.params.clientId, ctx.params.snapshotId, ctx.query.get('path') || '/');
+    const out = await snapshots.ls(ctx.params.clientId, ctx.params.snapshotId, ctx.query.get('path') || '/', ctx.query.get('repository_id'));
     sendJson(ctx.res, 200, out);
   });
 
   router.add('GET', '/api/snapshots/:clientId/:snapshotId/search', async (ctx) => {
     requireUser(ctx);
-    const out = await snapshots.search(ctx.params.clientId, ctx.params.snapshotId, ctx.query.get('q') || '');
+    const out = await snapshots.search(ctx.params.clientId, ctx.params.snapshotId, ctx.query.get('q') || '', ctx.query.get('repository_id'));
     sendJson(ctx.res, 200, out);
   });
 
   router.add('GET', '/api/snapshots/:clientId/:snapshotId/download', async (ctx) => {
     requireUser(ctx);
     const target = ctx.query.get('path') || '/';
-    const { child, isDir, name, size } = await snapshots.download(ctx.params.clientId, ctx.params.snapshotId, target);
+    const { child, isDir, name, size } = await snapshots.download(ctx.params.clientId, ctx.params.snapshotId, target, ctx.query.get('repository_id'));
     const filename = String(name || 'download').replace(/[^\w.\-]+/g, '_');
     const headers = {
       'Content-Type': isDir ? 'application/zip' : 'application/octet-stream',
@@ -471,7 +473,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
     checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
     const body = await readJsonBody(ctx.req);
     const restore = jobs.createRestore({
-      clientId: ctx.params.clientId, snapshotId: ctx.params.snapshotId,
+      clientId: ctx.params.clientId, repositoryId: body.repository_id || null, snapshotId: ctx.params.snapshotId,
       includes: body.includes || [], target: body.target || '/', overwrite: body.overwrite || 'always',
       dryRun: !!body.dry_run, userId: ctx.user.id,
     });
@@ -482,14 +484,14 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   router.add('POST', '/api/snapshots/:clientId/:snapshotId/pin', async (ctx) => {
     checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
     const body = await readJsonBody(ctx.req);
-    const out = await snapshots.pin(ctx.params.clientId, ctx.params.snapshotId, !!body.pinned);
+    const out = await snapshots.pin(ctx.params.clientId, ctx.params.snapshotId, !!body.pinned, body.repository_id || ctx.query.get('repository_id'));
     log(ctx, 'snapshot.pin', `${ctx.params.clientId}/${ctx.params.snapshotId}`, body);
     sendJson(ctx.res, 200, out);
   });
 
   router.add('DELETE', '/api/snapshots/:clientId/:snapshotId', async (ctx) => {
     checkCsrf(ctx); requireRole(ctx, ['admin']);
-    const out = await snapshots.remove(ctx.params.clientId, ctx.params.snapshotId);
+    const out = await snapshots.remove(ctx.params.clientId, ctx.params.snapshotId, ctx.query.get('repository_id'));
     log(ctx, 'snapshot.delete', `${ctx.params.clientId}/${ctx.params.snapshotId}`);
     sendJson(ctx.res, 200, out);
   });

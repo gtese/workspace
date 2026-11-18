@@ -40,6 +40,11 @@ const resticExists = fs.existsSync(cfg.restic.binary);
 if (!resticExists) console.warn(`[warn] restic 不存在：${cfg.restic.binary}`);
 
 const store = openDb(cfg.db.path);
+// 迁移：旧版每个节点仅一个仓库密钥 -> 支持"节点可加入多个备份池"的 (client, repository) 维度
+try {
+  store.run(`INSERT OR IGNORE INTO client_repo_keys(client_id,repository_id,repo_password_enc,created_at)
+             SELECT client_id,repository_id,repo_password_enc,created_at FROM client_repos`);
+} catch (e) { console.error('[migrate] client_repo_keys', e.message); }
 const masterKey = loadOrCreateMasterKey(path.join(cfg.paths.data, 'master.key'));
 const caFiles = ensureCa(cfg.paths.data);
 const ca = { ...caFiles, signClientCsr: (_self, opts) => signClientCsr(caFiles, opts) };
@@ -123,7 +128,8 @@ if (bootstrap) {
     const [, repoId, clientId, restPath] = m;
     const client = authenticateAgent(req);
     if (!client || client.id !== clientId) { sendError(res, new ApiError(403, 'forbidden', '仓库访问被拒绝')); return true; }
-    if (client.repository_id !== repoId) { sendError(res, new ApiError(403, 'forbidden', '存储库不匹配')); return true; }
+    const allowed = store.get('SELECT 1 AS x FROM client_repo_keys WHERE client_id=? AND repository_id=?', client.id, repoId);
+    if (!allowed) { sendError(res, new ApiError(403, 'forbidden', '存储库未授权该节点')); return true; }
     try {
       await repoApi(req, res, { repoId, clientId, restPath: restPath || '/', query: url.searchParams });
     } catch (e) { sendError(res, e); }

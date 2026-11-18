@@ -52,6 +52,12 @@ CREATE TABLE IF NOT EXISTS client_certs (
   created_at TEXT NOT NULL, PRIMARY KEY (client_id, serial)
 );
 
+CREATE TABLE IF NOT EXISTS client_repo_keys (
+  client_id TEXT NOT NULL, repository_id TEXT NOT NULL,
+  repo_password_enc TEXT NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY (client_id, repository_id)
+);
+
 CREATE TABLE IF NOT EXISTS client_repos (
   client_id TEXT PRIMARY KEY, repository_id TEXT NOT NULL,
   repo_password_enc TEXT NOT NULL, created_at TEXT NOT NULL

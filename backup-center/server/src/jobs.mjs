@@ -178,16 +178,35 @@ export function createJobs({ cfg, store, storage, audit }) {
     return { url: `${cfg.server.agent_url}/repo/${repoId}/${clientId}/`, password: repoInfo.password };
   }
 
+  // 阻止把备份仓库本身作为备份源；若选中了仓库的父目录，自动排除仓库目录。
+  function safetyExcludes(paths) {
+    const repos = store.all('SELECT id,name,mountpoint FROM repositories');
+    const adds = new Set();
+    for (const raw of paths || []) {
+      const p = String(raw || '').replace(/\/+$/, '') || '/';
+      for (const r of repos) {
+        const mp = String(r.mountpoint || '').replace(/\/+$/, '');
+        if (!mp) continue;
+        if (p === mp || p.startsWith(mp + '/')) {
+          throw new ApiError(400, 'validation', `备份路径「${raw}」属于存储库「${r.name}」目录，不能作为备份源`);
+        }
+        if (mp.startsWith(p + '/')) adds.add(mp);
+      }
+    }
+    return [...adds];
+  }
+
   function createRun(plan, { trigger = 'manual', paths = null, excludes = null, userId = null } = {}) {
     const client = store.get('SELECT * FROM clients WHERE id=?', plan.client_id);
     if (!client) throw new ApiError(404, 'not_found', '节点不存在');
     if (client.status !== 'active') throw new ApiError(409, 'conflict', '节点已停用');
     const repoId = plan.repository_id || client.repository_id;
-    const repoInfo = storage.clientRepoPassword(client.id);
+    const repoInfo = storage.clientRepoPassword(client.id, repoId);
     if (!repoInfo) throw new ApiError(409, 'config', '节点尚未初始化仓库');
     const runId = id('run', 8);
     const usePaths = Array.isArray(paths) && paths.length ? paths : parseJson(plan.paths_json, []);
     const useExcludes = Array.isArray(excludes) ? excludes : parseJson(plan.excludes_json, []);
+    const mergedExcludes = [...new Set([...useExcludes, ...safetyExcludes(usePaths)])];
     store.run('INSERT INTO runs(id,plan_id,client_id,repository_id,trigger,status,created_at,paths_json,excludes_json) VALUES(?,?,?,?,?,?,?,?,?)',
       runId, plan.id || null, client.id, repoId, trigger, 'queued', nowIso(), JSON.stringify(usePaths), JSON.stringify(useExcludes));
     const repo = { url: `${cfg.server.agent_url}/repo/${repoId}/${client.id}/`, password: repoInfo.password };
@@ -197,7 +216,7 @@ export function createJobs({ cfg, store, storage, audit }) {
       repo,
       host: client.id,
       paths: usePaths,
-      excludes: useExcludes,
+      excludes: mergedExcludes,
       tags: [`plan:${plan.id || 'manual'}`],
       compression: plan.compression || 'auto',
       limit_upload_kib: Number(plan.limit_upload_kib || 0),
@@ -210,19 +229,20 @@ export function createJobs({ cfg, store, storage, audit }) {
     return getRun(runId);
   }
 
-  function createRestore({ clientId, snapshotId, includes, target, overwrite = 'always', dryRun = false, userId = null }) {
+  function createRestore({ clientId, repositoryId = null, snapshotId, includes, target, overwrite = 'always', dryRun = false, userId = null }) {
     const client = store.get('SELECT * FROM clients WHERE id=?', clientId);
     if (!client) throw new ApiError(404, 'not_found', '节点不存在');
     if (client.status !== 'active') throw new ApiError(409, 'conflict', '节点已停用');
-    const repoInfo = storage.clientRepoPassword(client.id);
+    const repoId = repositoryId || client.repository_id;
+    const repoInfo = storage.clientRepoPassword(client.id, repoId);
     if (!repoInfo) throw new ApiError(409, 'config', '节点尚未初始化仓库');
     const restoreId = id('rst', 8);
     store.run('INSERT INTO restores(id,client_id,repository_id,snapshot_id,includes_json,target,overwrite,dry_run,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-      restoreId, client.id, client.repository_id, snapshotId, JSON.stringify(includes || []), target || '/', overwrite,
+      restoreId, client.id, repoId, snapshotId, JSON.stringify(includes || []), target || '/', overwrite,
       dryRun ? 1 : 0, 'queued', userId || '', nowIso());
     const payload = {
       restore_id: restoreId,
-      repo: { url: `${cfg.server.agent_url}/repo/${client.repository_id}/${client.id}/`, password: repoInfo.password },
+      repo: { url: `${cfg.server.agent_url}/repo/${repoId}/${client.id}/`, password: repoInfo.password },
       snapshot: snapshotId,
       includes: includes || [],
       target: target || '/',
@@ -304,6 +324,6 @@ export function createJobs({ cfg, store, storage, audit }) {
   return {
     enqueueTask, waitTask, reportProgress, reportResult, cancelRun, cancelRestore,
     createRun, createRestore, getRun, listRuns, getRestore, listRestores, subscribe, watchdog, setOnRunSuccess,
-    waitTaskResult, repoPayload,
+    waitTaskResult, repoPayload, safetyExcludes,
   };
 }

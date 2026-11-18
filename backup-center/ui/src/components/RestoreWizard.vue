@@ -9,6 +9,7 @@ import { splitLines } from '../lib/format.js'
 
 const props = defineProps({
   clientId: { type: String, required: true },
+  repositoryId: { type: String, default: '' },
   snapshotId: { type: String, required: true },
   includes: { type: Array, default: () => [] },
   snapshotLabel: { type: String, default: '' },
@@ -48,6 +49,7 @@ async function submit() {
   submitting.value = true
   try {
     const result = await api.snapshots.restore(props.clientId, props.snapshotId, {
+      repository_id: props.repositoryId || undefined,
       includes: includes.value,
       target: inPlace.value ? '/' : target.value.trim(),
       overwrite: overwrite.value,

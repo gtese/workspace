@@ -56,21 +56,31 @@ export const api = {
   },
 
   snapshots: {
-    list: (clientId, options) => http.get(`/api/clients/${enc(clientId)}/snapshots`, options || {}),
-    ls: (clientId, snapshotId, path) =>
-      http.get(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/ls`, {
-        query: { path: path || '/' },
+    list: (clientId, repositoryId, options) =>
+      http.get(`/api/clients/${enc(clientId)}/snapshots`, {
+        query: repositoryId ? { repository_id: repositoryId } : undefined,
+        ...(options || {}),
       }),
-    search: (clientId, snapshotId, q) =>
-      http.get(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/search`, { query: { q } }),
+    ls: (clientId, snapshotId, path, repositoryId) =>
+      http.get(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/ls`, {
+        query: { path: path || '/', ...(repositoryId ? { repository_id: repositoryId } : {}) },
+      }),
+    search: (clientId, snapshotId, q, repositoryId) =>
+      http.get(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/search`, {
+        query: { q, ...(repositoryId ? { repository_id: repositoryId } : {}) },
+      }),
     restore: (clientId, snapshotId, body) =>
       http.post(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/restore`, body),
-    pin: (clientId, snapshotId, pinned) =>
-      http.post(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/pin`, { pinned }),
-    remove: (clientId, snapshotId) =>
-      http.del(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}`),
-    downloadUrl: (clientId, snapshotId, path) =>
-      `/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/download?path=${enc(path || '/')}`,
+    pin: (clientId, snapshotId, pinned, repositoryId) =>
+      http.post(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/pin`, {
+        pinned, ...(repositoryId ? { repository_id: repositoryId } : {}),
+      }),
+    remove: (clientId, snapshotId, repositoryId) =>
+      http.del(`/api/snapshots/${enc(clientId)}/${enc(snapshotId)}`, {
+        query: repositoryId ? { repository_id: repositoryId } : undefined,
+      }),
+    downloadUrl: (clientId, snapshotId, path, repositoryId) =>
+      `/api/snapshots/${enc(clientId)}/${enc(snapshotId)}/download?path=${enc(path || '/')}${repositoryId ? `&repository_id=${enc(repositoryId)}` : ''}`,
   },
 
   restores: {

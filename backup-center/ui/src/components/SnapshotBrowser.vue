@@ -24,6 +24,7 @@ import { formatBytes, formatDateTime } from '../lib/format.js'
 
 const props = defineProps({
   clientId: { type: String, required: true },
+  repositoryId: { type: String, default: '' },
   snapshotId: { type: String, required: true },
 })
 
@@ -90,7 +91,7 @@ async function loadPath(path) {
   loading.value = true
   error.value = ''
   try {
-    const res = await api.snapshots.ls(props.clientId, props.snapshotId, path)
+    const res = await api.snapshots.ls(props.clientId, props.snapshotId, path, props.repositoryId)
     data.value = res || { entries: [] }
     currentPath.value = res?.path || path || '/'
   } catch (err) {
@@ -127,7 +128,7 @@ function removeSelected(path) {
 }
 
 function downloadUrl(path) {
-  return api.snapshots.downloadUrl(props.clientId, props.snapshotId, path)
+  return api.snapshots.downloadUrl(props.clientId, props.snapshotId, path, props.repositoryId)
 }
 
 function openSearchResult(item) {
@@ -159,7 +160,7 @@ async function doSearch() {
   searchError.value = ''
   searchResults.value = []
   try {
-    const res = await api.snapshots.search(props.clientId, props.snapshotId, q)
+    const res = await api.snapshots.search(props.clientId, props.snapshotId, q, props.repositoryId)
     searchResults.value = listOf(res, 'results', 'entries', 'matches', 'nodes')
   } catch (err) {
     searchError.value = err?.message || '搜索失败'

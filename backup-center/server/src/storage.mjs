@@ -156,11 +156,11 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
   function ensureClientRepo(clientId, repoId) {
     const repo = get(repoId, { reveal: true });
     if (!repo) throw new ApiError(404, 'not_found', '存储库不存在');
-    let row = store.get('SELECT * FROM client_repos WHERE client_id=?', clientId);
+    let row = store.get('SELECT * FROM client_repo_keys WHERE client_id=? AND repository_id=?', clientId, repoId);
     let password;
     if (!row) {
       password = randomToken(32);
-      store.run('INSERT INTO client_repos(client_id,repository_id,repo_password_enc,created_at) VALUES(?,?,?,?)',
+      store.run('INSERT OR REPLACE INTO client_repo_keys(client_id,repository_id,repo_password_enc,created_at) VALUES(?,?,?,?)',
         clientId, repoId, encryptText(masterKey, password), nowIso());
     } else {
       password = decryptText(masterKey, row.repo_password_enc);
@@ -172,7 +172,7 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
       const r = resticInitSync(repo, dir, password);
       if (r.code !== 0) throw new ApiError(500, 'repo_init_failed', `初始化仓库失败：${(r.stderr || '').slice(-400)}`);
     }
-    return { dir, password };
+    return { dir, password, repositoryId: repoId, mountpoint: repo.mountpoint };
   }
 
   function resticInitSync(repo, dir, password) {
@@ -187,20 +187,21 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
     }
   }
 
-  function clientRepoPassword(clientId) {
-    const row = store.get('SELECT * FROM client_repos WHERE client_id=?', clientId);
-    if (!row) return null;
-    return { password: decryptText(masterKey, row.repo_password_enc), repositoryId: row.repository_id };
+  function clientRepoPassword(clientId, repositoryId = null) {
+    const client = store.get('SELECT * FROM clients WHERE id=?', clientId);
+    if (!client) throw new ApiError(404, 'not_found', '节点不存在');
+    const repoId = repositoryId || client.repository_id;
+    if (!repoId) throw new ApiError(409, 'config', '节点尚未分配存储库');
+    const out = ensureClientRepo(clientId, repoId);
+    return { password: out.password, repositoryId: repoId };
   }
 
-  function clientRepository(clientId) {
+  function clientRepository(clientId, repositoryId = null) {
     const client = store.get('SELECT * FROM clients WHERE id=?', clientId);
     if (!client) return null;
-    return get(client.repository_id, { reveal: true });
-  }
-
-  function repoPasswordForClient(clientId) {
-    return clientRepoPassword(clientId);
+    const repoId = repositoryId || client.repository_id;
+    if (!repoId) return null;
+    return get(repoId, { reveal: true });
   }
 
   async function usage(repoId) {
@@ -247,6 +248,6 @@ export function createStorage({ cfg, store, masterKey, mountd }) {
 
   return {
     list, get, create, update, remove, clientRepoDir, ensureClientRepo, clientRepoPassword,
-    clientRepository, repoPasswordForClient, usage, validateRepo, ensureMounted,
+    clientRepository, usage, validateRepo, ensureMounted,
   };
 }
