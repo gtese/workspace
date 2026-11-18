@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply text-slate-800;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+}
+
+@layer components {
+  .bc-card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+  .bc-input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400;
+  }
+  .bc-label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+  .bc-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+  .bc-table thead th {
+    @apply whitespace-nowrap border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .bc-table tbody td {
+    @apply border-b border-slate-100 px-4 py-3 align-middle text-slate-700;
+  }
+  .bc-table tbody tr:hover {
+    @apply bg-slate-50/70;
+  }
+  .bc-link {
+    @apply text-brand-600 underline-offset-2 hover:text-brand-700 hover:underline;
+  }
+}
+
+/* SSE 日志滚动区 */
+.log-view {
+  font-family: theme('fontFamily.mono');
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}

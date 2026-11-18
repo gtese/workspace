@@ -1,0 +1,16 @@
+[Unit]
+Description=backup-center privileged mount helper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/backup-center/bin/backup-mountd --socket /run/backup-center/mountd.sock --storage-root /mnt/backup-center --backup-user backup
+RuntimeDirectory=backup-center
+RuntimeDirectoryMode=0755
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

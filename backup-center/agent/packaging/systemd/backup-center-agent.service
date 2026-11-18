@@ -1,0 +1,19 @@
+[Unit]
+Description=Backup Center Agent
+Documentation=https://backup.tri.local
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/backup-center-agent/bin/backup-agent run --config /etc/backup-center-agent/config.json
+Restart=always
+RestartSec=10
+User=root
+Group=root
+LimitNOFILE=65536
+# 代理只发起出站连接，不监听任何端口
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

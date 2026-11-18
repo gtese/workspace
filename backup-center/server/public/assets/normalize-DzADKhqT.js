@@ -1,0 +1,1 @@
+function e(r,...o){if(Array.isArray(r))return r;for(const n of o)if(Array.isArray(r==null?void 0:r[n]))return r[n];return Array.isArray(r==null?void 0:r.items)?r.items:[]}function f(r){if(r&&typeof r=="object"&&!Array.isArray(r)){const o=[r.total,r.count,r.total_count];for(const n of o)if(typeof n=="number")return n}return null}export{e as l,f as t};

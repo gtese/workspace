@@ -1,0 +1,32 @@
+[Unit]
+Description=backup-center management server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=backup
+Group=backup
+WorkingDirectory=/opt/backup-center
+ExecStart=/opt/backup-center/bin/node /opt/backup-center/server/src/main.mjs --config /etc/backup-center/config.json
+Restart=always
+RestartSec=3
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/var/lib/backup-center /var/log/backup-center /data2/backup /mnt/backup-center /etc/backup-center
+LimitNOFILE=65536
+MemoryMax=2G
+CPUQuota=200%
+IOWeight=100
+
+[Install]
+WantedBy=multi-user.target

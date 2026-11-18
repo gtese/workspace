@@ -8,6 +8,7 @@
 - Web 集中管理：节点审批接入、目录/文件选择、备份计划、快照版本、文件级恢复、审计、告警
 - 代理模式：Linux（systemd）/ macOS（launchd），只出站，mTLS 双向认证
 - 引擎：restic 0.18.0（首次全备 + 永久增量去重、zstd 压缩、AES-256 加密、快照保留）
+- 数据面：Node 内置 restic REST 协议（mTLS + append-only + 每个节点独立仓库）
 - 存储位置：本地目录 / NFS / SMB(CIFS) / FTP(S)
 - 身份：Keycloak SSO + 本地应急管理员，RBAC（admin/operator/viewer/auditor）
 
@@ -40,14 +41,15 @@ cd agent && go test ./...
 
 ## 部署
 
-见 [docs/部署手册.md](docs/部署手册.md)。
+见 [docs/部署手册.md](docs/部署手册.md)、[运维手册](docs/运维手册.md)、[用户手册](docs/用户手册.md)、[灾难恢复](docs/灾难恢复.md)、[验收报告](docs/验收报告.md)。
+
+生产地址：`https://eda.tri.local`（`backup.tri.local` DNS 待添加）。
 
 ## 版本
 
 | 组件 | 版本 |
 |---|---|
 | restic | 0.18.0 |
-| rest-server | 0.14.0 |
 | rclone（仅 FTP 后端） | 1.76.0 |
 | Node | 24.18.1（本机复制，不用 dnf） |
 | Go | 1.27+（仅构建期） |

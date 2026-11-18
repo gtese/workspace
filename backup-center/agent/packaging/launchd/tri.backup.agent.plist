@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>tri.backup.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/backup-center-agent/bin/backup-agent</string>
+        <string>run</string>
+        <string>--config</string>
+        <string>/Library/Application Support/backup-center-agent/config.json</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/backup-center-agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/backup-center-agent.log</string>
+</dict>
+</plist>

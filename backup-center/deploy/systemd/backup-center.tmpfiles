@@ -1,0 +1,3 @@
+d /var/lib/backup-center 0700 backup backup -
+d /var/log/backup-center 0700 backup backup -
+d /run/backup-center 0755 root root -

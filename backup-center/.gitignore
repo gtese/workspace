@@ -10,3 +10,4 @@ server/dev/
 *.pem
 *.key
 *.crt
+deploy/dist/
