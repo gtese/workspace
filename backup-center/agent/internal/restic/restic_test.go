@@ -83,7 +83,8 @@ func TestRestoreArgs(t *testing.T) {
 		"--target", "/tmp/restore",
 		"--include", "/home/docs", "--include", "/etc/hosts",
 		"--overwrite", "if-changed",
-		"--dry-run", "--verify", "--json",
+		"--exclude-xattr", "security.selinux",
+		"--dry-run", "--json",
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("参数不符:\n got=%v\nwant=%v", args, want)
@@ -92,7 +93,7 @@ func TestRestoreArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want = []string{"restore", "s", "--target", "/", "--overwrite", "always", "--verify", "--json"}
+	want = []string{"restore", "s", "--target", "/", "--overwrite", "always", "--exclude-xattr", "security.selinux", "--verify", "--json"}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("默认参数不符: got=%v want=%v", args, want)
 	}

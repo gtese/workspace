@@ -121,10 +121,15 @@ func RestoreArgs(p RestoreParams) ([]string, error) {
 		}
 	}
 	args = append(args, "--overwrite", overwrite)
+	// 目标机 SELinux 可能拒绝恢复 security.selinux 扩展属性，导致 restic 退出码 1；
+	// 文件内容/权限/时间仍会恢复，SELinux 由系统按路径重新打标。
+	args = append(args, "--exclude-xattr", "security.selinux")
 	if p.DryRun {
-		args = append(args, "--dry-run")
+		// restic 中 --dry-run 与 --verify 互斥
+		args = append(args, "--dry-run", "--json")
+	} else {
+		args = append(args, "--verify", "--json")
 	}
-	args = append(args, "--verify", "--json")
 	return args, nil
 }
 
