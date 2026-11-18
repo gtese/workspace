@@ -1,0 +1,12 @@
+# 构建产物与二进制（不入库）
+deploy/bin/
+agent/bin/
+ui/node_modules/
+ui/dist/
+node_modules/
+server/dev/
+*.log
+.DS_Store
+*.pem
+*.key
+*.crt
