@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 8c4394cfff83f2eb5d568afaa7d5d896_135dacf8de4011f1bc42525400638852
+    ReservedCode1: MeTxo5NSM6HEVaZ6B/HdXiQe6syJBZCUlZsZ2b4McH1Bi/CpZSN44i2anChK4OxsXTz9P/uxuxsJJZ4aFo5qwbzP9IYE9HdkiUvzCMX4UBvlXEOLXCnNU5vSngFY5Fe7QGPEB61W6PQtVS86+n2beYqoOue61LAuj1pTZJjMAhkM0+ujcVWcEDaJtLs=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 8c4394cfff83f2eb5d568afaa7d5d896_135dacf8de4011f1bc42525400638852
+    ReservedCode2: MeTxo5NSM6HEVaZ6B/HdXiQe6syJBZCUlZsZ2b4McH1Bi/CpZSN44i2anChK4OxsXTz9P/uxuxsJJZ4aFo5qwbzP9IYE9HdkiUvzCMX4UBvlXEOLXCnNU5vSngFY5Fe7QGPEB61W6PQtVS86+n2beYqoOue61LAuj1pTZJjMAhkM0+ujcVWcEDaJtLs=
+---
+
 # SYNC ｜ 同步记录
 
 ## 本次同步
@@ -58,3 +69,4 @@
 - 最后运行：`2026-10-28 21:30` → `fetched=578 (rss=354, mp=224) | excluded=17 | new=238`，`classified {'c1':48,'c2':6,'c3':2,'c4':9} | dropped=173 | mp_fallback=12`，`pushed=42`
 - 运行环境：Python 3.9.25；feedparser 6.0.12 / requests 2.32.5 / lxml 6.1.3 / PyYAML 6.0.3
 - 同机容器：`wewe-rss`、`trendradar`、`trendradar-webui`、`trendradar-mcp`（`we-mp-rss` 已不在）
+*（内容由AI生成，仅供参考）*

@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 8c4394cfff83f2eb5d568afaa7d5d896_12b62745de4011f1997d52540024e231
+    ReservedCode1: QVLRW7nUfmoBhZCUTYJt7hM/AHe7zjaY4oM9UfeM1UHY/9txMgo+2q4XWuIX7xbvX3KxYS51Ms7veTeRgOQJisVd4l4hB8erVNj2vLZ7vKW9+jx3khSqk4bVNVAqNVci4Btc4QZ7PY0pZMmgKnt0gGpQZd7dcuoo7eShT46LBjPjmXCy8AdoY+jP9G0=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 8c4394cfff83f2eb5d568afaa7d5d896_12b62745de4011f1997d52540024e231
+    ReservedCode2: QVLRW7nUfmoBhZCUTYJt7hM/AHe7zjaY4oM9UfeM1UHY/9txMgo+2q4XWuIX7xbvX3KxYS51Ms7veTeRgOQJisVd4l4hB8erVNj2vLZ7vKW9+jx3khSqk4bVNVAqNVci4Btc4QZ7PY0pZMmgKnt0gGpQZd7dcuoo7eShT46LBjPjmXCy8AdoY+jP9G0=
+---
+
 # newsbot ｜ 新闻抓取 → 四类分类 → 飞书分群推送
 
 内网 AI 新闻聚合推送系统：定时抓取 RSS + 微信公众号文章 → 四类关键词分类 → 按类目推送到对应飞书群（卡片形式，RSS / 公众号双栏）。
@@ -141,3 +152,4 @@ tail -50 /opt/newsbot/logs/mp_sync.log
 | 微信读书 Cookie（`wx.lic`） | 未同步、未记录 | 部署机 `/opt/we-mp-rss/data/` |
 
 `ops/probe_rss.py` 中的 `hook/00000000-0000-0000-0000-000000000000` 是探针用的假地址，非真实凭据。
+*（内容由AI生成，仅供参考）*
