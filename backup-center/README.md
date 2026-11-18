@@ -1,7 +1,7 @@
 # backup-center — 集中式文件备份平台
 
 > 部署主机：`172.16.50.150`（`eda.tri.local`）
-> 访问地址：`https://backup.tri.local`（DNS 待添加；临时可用 `https://eda.tri.local`）
+> 访问地址：`https://backup.tri.local`（DNS 待添加；临时可用 `https://backup.tri.local`）
 
 ## 能力
 
@@ -43,7 +43,7 @@ cd agent && go test ./...
 
 见 [docs/部署手册.md](docs/部署手册.md)、[运维手册](docs/运维手册.md)、[用户手册](docs/用户手册.md)、[灾难恢复](docs/灾难恢复.md)、[验收报告](docs/验收报告.md)。
 
-生产地址：`https://eda.tri.local`（`backup.tri.local` DNS 待添加）。
+生产地址：`https://backup.tri.local`（`backup.tri.local` DNS 待添加）。
 
 ## 版本
 
