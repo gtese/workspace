@@ -60,7 +60,29 @@ export function createClients({ cfg, store, ca, storage, audit }) {
     const expiresAt = new Date(Date.now() + Math.max(5, Number(ttlMinutes) || 120) * 60 * 1000).toISOString();
     store.run('INSERT INTO enroll_requests(id,token_hash,hostname,status,repository_id,created_by,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',
       requestId, hashToken(token), String(hostnameHint || ''), 'pending', repositoryId, userId || '', nowIso(), expiresAt);
-    const command = `curl -kfsSL ${cfg.server.public_url}/agent/install.sh -o /tmp/backup-center-install.sh && sudo bash /tmp/backup-center-install.sh --server ${cfg.server.agent_url} --token ${token}`;
+    // 命令内置企业根 CA：先装 CA，再让 curl 以正常 TLS 校验下载安装脚本，避免首次 curl -k 的 MITM 风险。
+    const caB64 = Buffer.from(ca.caPem, 'utf8').toString('base64');
+    const command = `sudo bash -c '
+set -e
+CA_B64="__CA_B64__"
+if [ "$(uname -s)" = "Darwin" ]; then
+  printf "%s" "$CA_B64" | openssl base64 -d -A > /tmp/tri-local-enterprise-root-ca.pem
+  security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/tri-local-enterprise-root-ca.pem
+elif command -v update-ca-trust >/dev/null 2>&1; then
+  printf "%s" "$CA_B64" | openssl base64 -d -A > /etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt
+  update-ca-trust extract
+elif command -v update-ca-certificates >/dev/null 2>&1; then
+  printf "%s" "$CA_B64" | openssl base64 -d -A > /usr/local/share/ca-certificates/tri-local-enterprise-root-ca.crt
+  update-ca-certificates
+else
+  echo "未找到系统 CA 信任工具，请联系管理员" >&2; exit 1
+fi
+curl -fsSL __PUBLIC__/agent/install.sh -o /tmp/backup-center-install.sh
+bash /tmp/backup-center-install.sh --server __AGENT__ --token __TOKEN__
+'`.replace('__CA_B64__', caB64)
+      .replace('__PUBLIC__', cfg.server.public_url)
+      .replace('__AGENT__', cfg.server.agent_url)
+      .replace('__TOKEN__', token);
     return { id: requestId, token, expires_at: expiresAt, command, agent_version: '0.1.0' };
   }
 
