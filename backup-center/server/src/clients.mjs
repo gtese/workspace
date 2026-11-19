@@ -60,7 +60,7 @@ export function createClients({ cfg, store, ca, storage, audit }) {
     const expiresAt = new Date(Date.now() + Math.max(5, Number(ttlMinutes) || 120) * 60 * 1000).toISOString();
     store.run('INSERT INTO enroll_requests(id,token_hash,hostname,status,repository_id,created_by,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',
       requestId, hashToken(token), String(hostnameHint || ''), 'pending', repositoryId, userId || '', nowIso(), expiresAt);
-    const command = `curl -fsSL ${cfg.server.public_url}/agent/install.sh -o /tmp/backup-center-install.sh && sudo bash /tmp/backup-center-install.sh --server ${cfg.server.agent_url} --token ${token}`;
+    const command = `curl -kfsSL ${cfg.server.public_url}/agent/install.sh -o /tmp/backup-center-install.sh && sudo bash /tmp/backup-center-install.sh --server ${cfg.server.agent_url} --token ${token}`;
     return { id: requestId, token, expires_at: expiresAt, command, agent_version: '0.1.0' };
   }
 

@@ -99,6 +99,46 @@ case "$(uname -m)" in
     arm64|aarch64) ARCH=arm64 ;;
     *) die "不支持的架构: $(uname -m)" ;;
 esac
+
+# 由 --server 推导 Web 根地址（8443/9444 -> 443/9443）
+web_base() {
+    local wb="${SERVER%/}"
+    wb="${wb/:8443/:443}"
+    wb="${wb/:9444/:9443}"
+    printf '%s' "$wb"
+}
+
+# 目标机未信任企业根 CA 时，自动下载并安装（后续下载/注册均走正常 TLS 校验）
+ensure_ca() {
+    [[ "$INSECURE" == "1" ]] && { log "已指定 --insecure，跳过 CA 安装"; return 0; }
+    [[ -n "$SERVER" ]] || return 0
+    local web; web="$(web_base)"
+    if curl -fsS --max-time 8 "${web}/healthz" >/dev/null 2>&1; then
+        log "企业根 CA 已受信任"
+        return 0
+    fi
+    log "目标机未信任企业根 CA，尝试自动安装（仅首次）"
+    local tmp; tmp="$(mktemp)"
+    if ! curl -kfsSL --max-time 20 "${web}/agent/ca.crt" -o "$tmp"; then
+        rm -f "$tmp"; die "下载企业根 CA 失败：${web}/agent/ca.crt"
+    fi
+    if [[ "$OS" == "linux" ]]; then
+        if command -v update-ca-trust >/dev/null 2>&1; then
+            install -m 0644 "$tmp" /etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt
+            update-ca-trust extract
+        elif command -v update-ca-certificates >/dev/null 2>&1; then
+            install -m 0644 "$tmp" /usr/local/share/ca-certificates/tri-local-enterprise-root-ca.crt
+            update-ca-certificates
+        else
+            rm -f "$tmp"; die "未找到 CA 信任工具（update-ca-trust / update-ca-certificates）"
+        fi
+    elif [[ "$OS" == "darwin" ]]; then
+        security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$tmp" || { rm -f "$tmp"; die "macOS 安装 CA 失败"; }
+    fi
+    rm -f "$tmp"
+    curl -fsS --max-time 8 "${web}/healthz" >/dev/null 2>&1 || die "CA 安装后仍无法验证 ${web}/healthz"
+    log "企业根 CA 安装完成"
+}
 if [[ "$OS" == "darwin" ]]; then
     CONFIG_PATH="/Library/Application Support/backup-center-agent/config.json"
     LOG_PATH="/Library/Logs/backup-center-agent.log"
@@ -232,6 +272,7 @@ start_agent() {
     fi
 }
 
+ensure_ca
 install_restic
 prepare_agent_binary
 install_agent
