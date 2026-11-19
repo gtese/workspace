@@ -119,23 +119,26 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
     const plan = run.plan_id ? store.get('SELECT * FROM plans WHERE id=?', run.plan_id) : null;
     const retention = parseJson(plan && plan.retention_json, cfg.defaults.retention);
     if (retention && retention.prune_after_backup === false) return;
-    const last = store.get("SELECT started_at FROM repo_checks WHERE client_id=? AND kind='prune' AND status='ok' ORDER BY started_at DESC LIMIT 1", run.client_id);
+    const repoId = run.repository_id || null;
+    const last = repoId
+      ? store.get("SELECT started_at FROM repo_checks WHERE client_id=? AND repository_id=? AND kind='prune' AND status='ok' ORDER BY started_at DESC LIMIT 1", run.client_id, repoId)
+      : store.get("SELECT started_at FROM repo_checks WHERE client_id=? AND kind='prune' AND status='ok' ORDER BY started_at DESC LIMIT 1", run.client_id);
     if (last && Date.now() - new Date(last.started_at).getTime() < 6 * 24 * 3600 * 1000) return;
-    const key = `prune:${run.client_id}`;
+    const key = `prune:${run.client_id}:${repoId || 'default'}`;
     if (pruneInFlight.has(key)) return;
     pruneInFlight.add(key);
     setTimeout(() => {
-      pruneClient(run.client_id, retention)
+      pruneClient(run.client_id, retention, repoId)
         .catch((e) => console.error('[prune]', e.message))
         .finally(() => pruneInFlight.delete(key));
     }, 5000).unref();
   }
 
-  async function pruneClient(clientId, retention = cfg.defaults.retention) {
-    const { dir, password, client } = snapshots.ctx(clientId);
+  async function pruneClient(clientId, retention = cfg.defaults.retention, repositoryId = null) {
+    const { dir, password, client, repositoryId: repoId } = snapshots.ctx(clientId, repositoryId);
     const checkId = id('chk', 8);
     store.run('INSERT INTO repo_checks(id,repository_id,client_id,kind,status,started_at) VALUES(?,?,?,?,?,?)',
-      checkId, client.repository_id, clientId, 'prune', 'running', nowIso());
+      checkId, repoId, clientId, 'prune', 'running', nowIso());
     try {
       const r = await resticForget(cfg, dir, password, [], { keep: retention, prune: true });
       store.run("UPDATE repo_checks SET status='ok', finished_at=? WHERE id=?", nowIso(), checkId);
@@ -147,12 +150,12 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
     }
   }
 
-  async function checkClient(clientId, { readData = false } = {}) {
-    const { dir, password, client } = snapshots.ctx(clientId);
+  async function checkClient(clientId, { readData = false, repositoryId = null } = {}) {
+    const { dir, password, client, repositoryId: repoId } = snapshots.ctx(clientId, repositoryId);
     const checkId = id('chk', 8);
     const kind = readData ? 'read-data' : 'check';
     store.run('INSERT INTO repo_checks(id,repository_id,client_id,kind,status,started_at) VALUES(?,?,?,?,?,?)',
-      checkId, client.repository_id, clientId, kind, 'running', nowIso());
+      checkId, repoId, clientId, kind, 'running', nowIso());
     try {
       const r = await resticCheck(cfg, dir, password, readData ? { readDataSubset: '1%' } : {});
       if (r.code !== 0) throw new Error((r.stderr || r.stdout || '').slice(-1000));
@@ -165,8 +168,11 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
     }
   }
 
-  function lastCheckAt(clientId, kinds) {
-    const rows = store.all(`SELECT kind, started_at FROM repo_checks WHERE client_id=? AND status='ok' AND kind IN (${kinds.map(() => '?').join(',')}) ORDER BY started_at DESC LIMIT 1`, clientId, ...kinds);
+  function lastCheckAt(clientId, kinds, repositoryId = null) {
+    const args = [clientId];
+    let extra = '';
+    if (repositoryId) { extra = ' AND repository_id=?'; args.push(repositoryId); }
+    const rows = store.all(`SELECT kind, started_at FROM repo_checks WHERE client_id=? AND status='ok' AND kind IN (${kinds.map(() => '?').join(',')})${extra} ORDER BY started_at DESC LIMIT 1`, ...args, ...kinds);
     return rows.length ? new Date(rows[0].started_at).getTime() : 0;
   }
 
@@ -174,14 +180,15 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
     if (checkBusy) return;
     checkBusy = true;
     try {
-      const clients = store.all("SELECT * FROM clients WHERE status='active'");
+      // 按 (节点, 备份池) 维度巡检，支持一个节点加入多个池
+      const pairs = store.all('SELECT client_id, repository_id FROM client_repo_keys');
       const week = 7 * 24 * 3600 * 1000;
       const month = 30 * 24 * 3600 * 1000;
-      for (const c of clients) {
-        const lastCheck = lastCheckAt(c.id, ['check']);
-        if (Date.now() - lastCheck > week) { await checkClient(c.id, { readData: false }).catch(() => {}); await sleep(1000); }
-        const lastRead = lastCheckAt(c.id, ['read-data']);
-        if (Date.now() - lastRead > month) { await checkClient(c.id, { readData: true }).catch(() => {}); await sleep(1000); }
+      for (const p of pairs) {
+        const lastCheck = lastCheckAt(p.client_id, ['check'], p.repository_id);
+        if (Date.now() - lastCheck > week) { await checkClient(p.client_id, { readData: false, repositoryId: p.repository_id }).catch(() => {}); await sleep(1000); }
+        const lastRead = lastCheckAt(p.client_id, ['read-data'], p.repository_id);
+        if (Date.now() - lastRead > month) { await checkClient(p.client_id, { readData: true, repositoryId: p.repository_id }).catch(() => {}); await sleep(1000); }
       }
     } finally { checkBusy = false; }
   }

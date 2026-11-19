@@ -175,14 +175,15 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   router.add('POST', '/api/clients/:id/check', async (ctx) => {
     checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
     const body = await readJsonBody(ctx.req).catch(() => ({}));
-    const result = await scheduler.checkClient(ctx.params.id, { readData: !!(body && body.readData) });
+    const result = await scheduler.checkClient(ctx.params.id, { readData: !!(body && body.readData), repositoryId: (body && body.repository_id) || ctx.query.get('repository_id') });
     log(ctx, 'client.check', ctx.params.id, body);
     sendJson(ctx.res, 200, result);
   });
 
   router.add('POST', '/api/clients/:id/prune', async (ctx) => {
     checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
-    const result = await scheduler.pruneClient(ctx.params.id);
+    const body = await readJsonBody(ctx.req).catch(() => ({}));
+    const result = await scheduler.pruneClient(ctx.params.id, undefined, (body && body.repository_id) || ctx.query.get('repository_id'));
     log(ctx, 'client.prune', ctx.params.id);
     sendJson(ctx.res, 200, result);
   });

@@ -351,7 +351,7 @@ async function save() {
             type="checkbox"
             class="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
           />
-          备份完成后自动执行 prune（钉住的快照不会被删除）
+          备份完成后自动清理旧快照（同一池最多约 6 天执行一次 prune；钉住的快照不会被删除）
         </label>
         <p v-if="errors.retention" class="mt-1 text-xs text-red-600">{{ errors.retention }}</p>
       </section>
