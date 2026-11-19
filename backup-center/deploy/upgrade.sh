@@ -19,6 +19,9 @@ cp -a "$DIST/agent" /opt/backup-center/dist/agent
 cp -a "$DIST/restic" /opt/backup-center/dist/restic
 install -m 0755 "$DIST/install.sh" /opt/backup-center/dist/install.sh
 chmod -R a+rX /opt/backup-center
+if [[ -f /etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt ]]; then
+  install -m 0644 /etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt /opt/backup-center/dist/ca.crt
+fi
 systemctl start backup-center.service
 sleep 1
 curl -fsSk https://127.0.0.1:443/healthz || { echo "健康检查失败，回滚参考 $backup_dir" >&2; exit 1; }

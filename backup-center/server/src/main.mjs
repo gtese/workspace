@@ -140,6 +140,14 @@ if (bootstrap) {
   const agentApi = createAgentApi({ cfg, store, clients, jobs, audit, authenticate: authenticateAgent });
 
   function serveDist(req, res, pathname) {
+    if (pathname === '/agent/ca.crt') {
+      const file = path.join(cfg.agent_dist_dir, 'ca.crt');
+      if (!fs.existsSync(file)) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('企业根 CA 未部署'); return true; }
+      const st = fs.statSync(file);
+      res.writeHead(200, { 'Content-Type': 'application/x-x509-ca-cert', 'Content-Length': st.size, 'Cache-Control': 'public, max-age=86400' });
+      fs.createReadStream(file).pipe(res);
+      return true;
+    }
     if (pathname === '/agent/install.sh') {
       const file = path.join(cfg.agent_dist_dir, 'install.sh');
       if (!fs.existsSync(file)) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('install.sh 未部署'); return true; }

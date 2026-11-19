@@ -76,6 +76,10 @@ rm -rf /opt/backup-center/dist/agent /opt/backup-center/dist/restic
 cp -a "$DIST/agent" /opt/backup-center/dist/agent
 cp -a "$DIST/restic" /opt/backup-center/dist/restic
 chmod -R a+rX /opt/backup-center/dist
+# 供未信任企业根 CA 的客户端下载（/agent/ca.crt）
+if [[ -f /etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt ]]; then
+  install -m 0644 /etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt /opt/backup-center/dist/ca.crt
+fi
 
 # 6. TLS 证书
 if [[ -n "$CERT" && -n "$KEY" ]]; then
