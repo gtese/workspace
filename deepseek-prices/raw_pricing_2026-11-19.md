@@ -1,0 +1,83 @@
+# 模型 & 价格
+
+下表所列模型价格以“百万 tokens”为单位。Token 是模型用来表示自然语言文本的的最小单位，可以是一个词、一个数字或一个标点符号等。我们将根据模型输入和输出的总 token 数进行计量计费。
+
+***
+
+## 模型细节
+
+| 模型                      | 模型                                                                                   | 模型                                                                                   | deepseek-flash(1)                                                                          | deepseek-v4-pro                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| BASE URL (OpenAI 格式)    | BASE URL (OpenAI 格式)                                                                 | BASE URL (OpenAI 格式)                                                                 | <https://api.deepseek.com>                                                                 | <https://api.deepseek.com>                                                                 |
+| BASE URL (Anthropic 格式) | BASE URL (Anthropic 格式)                                                              | BASE URL (Anthropic 格式)                                                              | <https://api.deepseek.com/anthropic>                                                       | <https://api.deepseek.com/anthropic>                                                       |
+| 模型版本                    | 模型版本                                                                                 | 模型版本                                                                                 | DeepSeek-V4.1-Flash-1017                                                                   | DeepSeek-V4-Pro-0813                                                                       |
+| 思考模式                    | 思考模式                                                                                 | 思考模式                                                                                 | 支持非思考与思考模式（默认） / 切换方式详见[思考模式](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode.md) | 支持非思考与思考模式（默认） / 切换方式详见[思考模式](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode.md) |
+| 上下文长度                   | 上下文长度                                                                                | 上下文长度                                                                                | 1M                                                                                         | 1M                                                                                         |
+| 输出长度                    | 输出长度                                                                                 | 输出长度                                                                                 | 最大 384K                                                                                    | 最大 384K                                                                                    |
+| 功能                      | [Json Output](https://api-docs.deepseek.com/zh-cn/guides/json_mode.md)               | [Json Output](https://api-docs.deepseek.com/zh-cn/guides/json_mode.md)               | 支持                                                                                         | 支持                                                                                         |
+| 功能                      | [Tool Calls](https://api-docs.deepseek.com/zh-cn/guides/tool_calls.md)               | [Tool Calls](https://api-docs.deepseek.com/zh-cn/guides/tool_calls.md)               | 支持                                                                                         | 支持                                                                                         |
+| 功能                      | [Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api.md)         | [Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api.md)         | 支持                                                                                         | 支持                                                                                         |
+| 功能                      | [Anthropic API](https://api-docs.deepseek.com/zh-cn/guides/anthropic_api.md)         | [Anthropic API](https://api-docs.deepseek.com/zh-cn/guides/anthropic_api.md)         | 支持                                                                                         | 支持                                                                                         |
+| 功能                      | [对话前缀续写（Beta）](https://api-docs.deepseek.com/zh-cn/guides/chat_prefix_completion.md) | [对话前缀续写（Beta）](https://api-docs.deepseek.com/zh-cn/guides/chat_prefix_completion.md) | 支持                                                                                         | 支持                                                                                         |
+| 功能                      | [FIM 补全（Beta）](https://api-docs.deepseek.com/zh-cn/guides/fim_completion.md)         | [FIM 补全（Beta）](https://api-docs.deepseek.com/zh-cn/guides/fim_completion.md)         | 仅非思考模式支持                                                                                   | 仅非思考模式支持                                                                                   |
+| 功能                      | [图像理解](https://api-docs.deepseek.com/zh-cn/guides/vision.md)                         | [图像理解](https://api-docs.deepseek.com/zh-cn/guides/vision.md)                         | 支持                                                                                         | 不支持                                                                                        |
+| 价格(2)                   | 百万tokens输入 / （缓存命中）                                                                  | 空闲时段                                                                                 | 0.02元                                                                                      | 0.15元                                                                                      |
+| 价格(2)                   | 百万tokens输入 / （缓存命中）                                                                  | 高峰时段                                                                                 | 0.04元                                                                                      | 0.30元                                                                                      |
+| 价格(2)                   | 百万tokens输入 / （缓存未命中）                                                                 | 空闲时段                                                                                 | 1元                                                                                         | 4.5元                                                                                       |
+| 价格(2)                   | 百万tokens输入 / （缓存未命中）                                                                 | 高峰时段                                                                                 | 2元                                                                                         | 9.0元                                                                                       |
+| 价格(2)                   | 百万tokens输出                                                                           | 空闲时段                                                                                 | 4元                                                                                         | 13.5元                                                                                      |
+| 价格(2)                   | 百万tokens输出                                                                           | 高峰时段                                                                                 | 8元                                                                                         | 27.0元                                                                                      |
+| 并发限制(3)                 | 并发限制(3)                                                                              | 并发限制(3)                                                                              | 2500                                                                                       | 500                                                                                        |
+
+(1) 模型名请使用 `deepseek-flash`。旧模型名 `deepseek-v4-flash`、`deepseek-v4-flash-vision-exp` 仍可调用，但对应模型已下线，请求将由 DeepSeek-V4.1-Flash-1017 模型提供服务，并按 Flash 价格计费。
+
+(2) 空闲时段价格为高峰时段价格的一半。北京时间周一至周五（不含中国法定节假日）9:00 - 12:00、14:00 - 18:00 为高峰时段；其余时段，包括周末及中国法定节假日全天均为空闲时段。
+
+(3) 更多并发限制细节，请参考[限速与隔离](https://api-docs.deepseek.com/zh-cn/quick_start/rate_limit.md)。
+
+***
+
+<a id="网页搜索与抓取价格"></a>
+
+<a id="web-tools-pricing"></a>
+
+## Search 与 Fetch API 价格
+
+[Search 与 Fetch API](https://api-docs.deepseek.com/zh-cn/guides/search.md) 按次计费。
+
+| 项目             | 计费单位          | 价格 |
+| -------------- | ------------- | -- |
+| Search API（文字） | 每 1,000 次成功请求 | 5元 |
+| Fetch API      | 每 1,000 次成功请求 | 5元 |
+
+计费规则见 [网页搜索与抓取](https://api-docs.deepseek.com/zh-cn/guides/search.md)。
+
+自北京时间 2026 年 11 月 18 日 12:00 起，调用模型时触发的服务端搜索、网页抓取，其工具调用本身不再计费；工具返回的结果会拼接到模型上下文中参与推理，按模型 Token 用量计费。使用以下接口时会触发服务端搜索：[联网工具](https://api-docs.deepseek.com/zh-cn/guides/web_tools.md)、[Anthropic API 的 `web_search` 工具](https://api-docs.deepseek.com/zh-cn/guides/anthropic_api.md#server-tool-usage)、[Responses API 的 `web_search` 工具](https://api-docs.deepseek.com/zh-cn/guides/responses_api.md#tools)。
+
+***
+
+<a id="ocr-pricing"></a>
+
+## 文件解析与 OCR 价格
+
+| 项目                                                                                                                                  | 计费单位      | 价格   |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------- | ---- |
+| [文件解析](https://api-docs.deepseek.com/zh-cn/guides/document_parsing.md)、[OCR API](https://api-docs.deepseek.com/zh-cn/guides/ocr.md) | 每 1,000 页 | 1.5元 |
+
+<a id="speech-pricing"></a>
+
+## 语音价格
+
+| API                                                            | 计费单位        | 刊例价   | 限时折扣价（5 折） |
+| -------------------------------------------------------------- | ----------- | ----- | ---------- |
+| [语音合成（TTS）](https://api-docs.deepseek.com/zh-cn/guides/tts.md) | 每 10,000 字符 | 3元    | 1.5元       |
+| [语音识别（ASR）](https://api-docs.deepseek.com/zh-cn/guides/asr.md) | 每小时音频       | 0.78元 | 0.39元      |
+
+***
+
+## 扣费规则
+
+模型调用费用 = token 消耗量 × 模型单价；Search API 与 Fetch API 按上表价格按次计费。对应的费用将直接从充值余额或赠送余额中进行扣减。
+当充值余额与赠送余额同时存在时，优先扣减赠送余额。
+
+产品价格可能发生变动，DeepSeek 保留修改价格的权利。请您依据实际用量按需充值，定期查看此页面以获知最新价格信息。

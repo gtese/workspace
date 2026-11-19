@@ -1,0 +1,3 @@
+﻿模型,BASE URL (OpenAI 格式),BASE URL (Anthropic 格式),模型版本,思考模式,上下文长度,输出长度,Json Output,Tool Calls,Responses API,Anthropic API,对话前缀续写（Beta）,FIM 补全（Beta）,图像理解,并发限制
+deepseek-flash,https://api.deepseek.com,https://api.deepseek.com/anthropic,DeepSeek-V4.1-Flash-1017,支持非思考与思考模式（默认） / 切换方式详见思考模式,1M,最大 384K,支持,支持,支持,支持,支持,仅非思考模式支持,支持,2500
+deepseek-v4-pro,https://api.deepseek.com,https://api.deepseek.com/anthropic,DeepSeek-V4-Pro-0813,支持非思考与思考模式（默认） / 切换方式详见思考模式,1M,最大 384K,支持,支持,支持,支持,支持,仅非思考模式支持,不支持,500
