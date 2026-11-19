@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULTS = {
-  tls: { enabled: true, cert: '', key: '', ca: '' },
+  tls: {
+    enabled: true, cert: '', key: '', ca: '',
+    enterprise_ca: '/etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt',
+  },
   web: { host: '0.0.0.0', port: 443 },
   agent: { host: '0.0.0.0', port: 8443 },
   paths: {
@@ -73,6 +76,7 @@ export function loadConfig(configPath) {
   if (cfg.tls.cert) cfg.tls.cert = resolve(cfg.tls.cert);
   if (cfg.tls.key) cfg.tls.key = resolve(cfg.tls.key);
   if (cfg.tls.ca) cfg.tls.ca = resolve(cfg.tls.ca);
+  if (cfg.tls.enterprise_ca) cfg.tls.enterprise_ca = resolve(cfg.tls.enterprise_ca);
   if (cfg.oidc.ca_file) cfg.oidc.ca_file = resolve(cfg.oidc.ca_file);
   if (!cfg.server.agent_url) {
     const u = new URL(cfg.server.public_url);

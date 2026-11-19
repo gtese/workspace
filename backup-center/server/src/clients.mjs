@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { ApiError, id, nowIso, randomToken, parseJson } from './util.mjs';
 import { hashToken } from './crypt.mjs';
 
@@ -54,14 +56,28 @@ export function createClients({ cfg, store, ca, storage, audit }) {
     return { ok: true, note: '节点已从列表移除；历史快照仍保留在对应存储库' };
   }
 
+  function enterpriseCaPem() {
+    const candidates = [
+      cfg.tls && cfg.tls.enterprise_ca,
+      path.join(cfg.agent_dist_dir || '', 'ca.crt'),
+      '/etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt',
+    ].filter(Boolean);
+    for (const f of candidates) {
+      try { if (fs.existsSync(f)) return fs.readFileSync(f, 'utf8'); } catch { /* ignore */ }
+    }
+    throw new ApiError(500, 'config', '未找到企业根 CA 文件（/agent/ca.crt 或 tri-local-enterprise-root-ca.crt）');
+  }
+
   function createEnroll({ userId, hostnameHint = '', ttlMinutes = 120, repositoryId = null }) {
     const token = randomToken(32);
     const requestId = id('e', 8);
     const expiresAt = new Date(Date.now() + Math.max(5, Number(ttlMinutes) || 120) * 60 * 1000).toISOString();
     store.run('INSERT INTO enroll_requests(id,token_hash,hostname,status,repository_id,created_by,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',
       requestId, hashToken(token), String(hostnameHint || ''), 'pending', repositoryId, userId || '', nowIso(), expiresAt);
-    // 命令内置企业根 CA：先装 CA，再让 curl 以正常 TLS 校验下载安装脚本，避免首次 curl -k 的 MITM 风险。
-    const caB64 = Buffer.from(ca.caPem, 'utf8').toString('base64');
+    // 命令内置**企业根 CA**（签发 *.tri.local 的那张），不是平台代理 CA。
+    // 否则浏览器/curl 仍然无法验证服务端证书。
+    const caPem = enterpriseCaPem();
+    const caB64 = Buffer.from(caPem, 'utf8').toString('base64');
     const command = `sudo bash -c '
 set -e
 CA_B64="__CA_B64__"
