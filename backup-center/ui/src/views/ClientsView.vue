@@ -120,7 +120,7 @@ async function removeClient(client) {
   const ok = await confirm({
     title: '删除节点',
     message: `确认删除节点「${client.hostname}」？`,
-    detail: '节点将被软删除，历史快照仍会保留，但该节点无法继续备份。',
+    detail: '删除后该节点会从列表移除，相关备份计划自动停用；历史快照仍保留在对应存储库中（仍可由管理员在存储库中恢复/清理）。',
     confirmText: '删除',
     danger: true,
   })

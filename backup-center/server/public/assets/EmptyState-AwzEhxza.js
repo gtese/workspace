@@ -1,6 +1,0 @@
-import{c as i,q as t,a as s,b as n,i as o,a1 as r,e as d,t as c,j as l,al as m}from"./index-CAmyr-qo.js";/**
- * @license lucide-vue-next v0.468.0 - ISC
- *
- * This source code is licensed under the ISC license.
- * See the LICENSE file in the root directory of this source tree.
- */const u=i("InboxIcon",[["polyline",{points:"22 12 16 12 14 15 10 15 8 12 2 12",key:"o97t9d"}],["path",{d:"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z",key:"oot6mr"}]]),y={class:"flex flex-col items-center justify-center px-6 py-14 text-center"},f={class:"mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400"},p={class:"text-sm font-medium text-slate-700"},x={key:0,class:"mt-1 max-w-md text-sm text-slate-500"},h={key:1,class:"mt-4"},b={__name:"EmptyState",props:{title:{type:String,default:"暂无数据"},description:{type:String,default:""},icon:{type:[Object,Function],default:null}},setup(e){return(a,k)=>(t(),s("div",y,[n("span",f,[e.icon?(t(),o(r(e.icon),{key:0,class:"h-6 w-6"})):(t(),o(d(u),{key:1,class:"h-6 w-6"}))]),n("p",p,c(e.title),1),e.description?(t(),s("p",x,c(e.description),1)):l("",!0),a.$slots.default?(t(),s("div",h,[m(a.$slots,"default")])):l("",!0)]))}};export{b as _};

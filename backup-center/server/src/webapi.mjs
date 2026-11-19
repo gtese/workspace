@@ -117,7 +117,11 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   /* ---------- clients ---------- */
   router.add('GET', '/api/clients', async (ctx) => {
     requireUser(ctx);
-    sendJson(ctx.res, 200, clients.list({ status: ctx.query.get('status'), q: ctx.query.get('q') }));
+    sendJson(ctx.res, 200, clients.list({
+      status: ctx.query.get('status'),
+      q: ctx.query.get('q'),
+      includeDeleted: ['1', 'true'].includes(String(ctx.query.get('include_deleted') || '')),
+    }));
   });
 
   router.add('GET', '/api/clients/:id', async (ctx) => {

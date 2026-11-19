@@ -3,9 +3,11 @@ import { ApiError, id, nowIso, randomToken, parseJson } from './util.mjs';
 import { hashToken } from './crypt.mjs';
 
 export function createClients({ cfg, store, ca, storage, audit }) {
-  function list({ status, q, limit = 200, offset = 0 } = {}) {
+  function list({ status, q, limit = 200, offset = 0, includeDeleted = false } = {}) {
     const where = [];
     const args = [];
+    // 软删除的节点默认不再出现在列表/统计中（历史快照仍保留在存储库）
+    if (!includeDeleted) where.push("(disabled_reason IS NULL OR disabled_reason <> 'deleted')");
     if (status) { where.push('status=?'); args.push(status); }
     if (q) { where.push('(hostname LIKE ? OR id LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
     const sql = `SELECT * FROM clients ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
@@ -48,7 +50,8 @@ export function createClients({ cfg, store, ca, storage, audit }) {
     const c = store.get('SELECT * FROM clients WHERE id=?', clientId);
     if (!c) throw new ApiError(404, 'not_found', '节点不存在');
     store.run("UPDATE clients SET status='disabled', disabled_reason='deleted', cert_serial=NULL WHERE id=?", clientId);
-    return { ok: true };
+    store.run('UPDATE plans SET enabled=0, next_run_at=NULL WHERE client_id=?', clientId);
+    return { ok: true, note: '节点已从列表移除；历史快照仍保留在对应存储库' };
   }
 
   function createEnroll({ userId, hostnameHint = '', ttlMinutes = 120, repositoryId = null }) {
