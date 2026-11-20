@@ -16,7 +16,7 @@ def test_tc3_request_shape() -> None:
         "ap-guangzhou",
     )
     payload = json.loads(body)
-    assert payload["Action"] == "CreateRecTask"
+    assert "Action" not in payload  # Action 只放请求头
     assert payload["EngineModelType"] == "16k_zh_en_meeting"
 
     assert headers["X-TC-Action"] == "CreateRecTask"

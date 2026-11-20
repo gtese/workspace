@@ -40,9 +40,7 @@ def build_request(
     action: str, params: dict, secret_id: str, secret_key: str, region: str
 ) -> tuple[dict[str, str], bytes]:
     """返回 (请求头, 请求体)；签名基于字节级 body，避免 JSON 序列化差异。"""
-    body = json.dumps(
-        {"Action": action, **params}, separators=(",", ":"), ensure_ascii=False
-    ).encode()
+    body = json.dumps(params, separators=(",", ":"), ensure_ascii=False).encode()
     ts = int(time.time())
     date = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
     canonical_request = "\n".join(
