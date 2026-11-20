@@ -2,7 +2,7 @@
 
 > 部署主机：`172.16.50.150`（`eda.tri.local`）
 > 访问地址：**https://backup.tri.local**（旧域名 `https://eda.tri.local` 兼容）
-> 代码仓库：https://git.tri.local/it/backup.git
+> 代码仓库：https://git.tri.local/it/backup.git（保护分支 `main`；同步：`scripts/sync-gitlab.sh`）
 
 ## 能力
 
