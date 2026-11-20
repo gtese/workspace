@@ -26,6 +26,8 @@
   .dot { width:12px; height:12px; border-radius:50%; background:var(--danger); animation:pulse 1.2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
   .timer { font-variant-numeric:tabular-nums; font-size:30px; font-weight:700; letter-spacing:1px; }
+  .level { height:6px; background:#0d0f14; border-radius:99px; overflow:hidden; margin:10px 0 2px; }
+  .level > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#22c55e,#eab308,#ef4444); transition:width .08s linear; }
   .meta { color:var(--muted); font-size:12px; }
   .log { font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--muted); white-space:pre-wrap; max-height:180px; overflow:auto; }
   .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid var(--line); color:var(--muted); margin-right:6px; }
@@ -66,6 +68,7 @@
 
   <div class="card">
     <div class="rec"><span id="dot" class="dot" style="display:none"></span><span id="timer" class="timer">00:00</span></div>
+    <div class="level"><i id="levelBar"></i></div>
     <div class="meta" id="hint">手机放桌面中央，录音时请勿锁屏；每 2 分钟自动落一段（最长丢 2 分钟）。</div>
     <div class="row">
       <button id="btnStart">开始录音</button>
@@ -74,6 +77,7 @@
     <div class="row"><button id="btnUpload" class="ghost">上传本地音频（.wav 兜底）</button></div>
     <input id="fileInput" type="file" accept="audio/*,.wav" hidden>
     <div class="log" id="status" style="margin-top:12px"></div>
+    <div class="row" id="retryBox" style="display:none"><button id="btnRetryUpload" class="danger">重试上传本段</button></div>
   </div>
 
   <div class="card">
@@ -164,6 +168,10 @@ class WavRecorder {
     this.ctx = ctx;
     this.srcRate = ctx.sampleRate;
     this.source = ctx.createMediaStreamSource(this.stream);
+    this.analyser = ctx.createAnalyser();
+    this.analyser.fftSize = 512;
+    this.source.connect(this.analyser);
+    this.levelBuf = new Uint8Array(this.analyser.fftSize);
     this.proc = ctx.createScriptProcessor(4096, 1, 1);
     this.gain = ctx.createGain();
     this.gain.gain.value = 0; // 静音，仅保持音频图运行
@@ -180,10 +188,20 @@ class WavRecorder {
     this.state = 'recording';
     log('录音中，采样率 ' + this.srcRate + ' → 16k');
   }
+  level() {
+    if (!this.analyser) return 0;
+    this.analyser.getByteTimeDomainData(this.levelBuf);
+    let sum = 0;
+    for (let i = 0; i < this.levelBuf.length; i++) {
+      const v = (this.levelBuf[i] - 128) / 128;
+      sum += v * v;
+    }
+    return Math.min(1, Math.sqrt(sum / this.levelBuf.length) * 4);
+  }
   async stop() {
     this.state = 'stopped';
     try {
-      this.proc.disconnect(); this.source.disconnect(); this.gain.disconnect();
+      this.proc.disconnect(); this.source.disconnect(); this.analyser.disconnect(); this.gain.disconnect();
       this.stream.getTracks().forEach(t => t.stop());
       await this.ctx.close();
     } catch (e) { /* ignore */ }
@@ -205,6 +223,7 @@ function fmt(ms) {
 function tick() {
   if (!S.running) return;
   $('#timer').textContent = fmt(S.base + (Date.now() - S.segStart));
+  if (S.rec) $('#levelBar').style.width = Math.round(S.rec.level() * 100) + '%';
 }
 
 async function api(path, opts = {}) {
@@ -242,7 +261,21 @@ async function uploadSegment(idx, blob) {
   throw lastErr;
 }
 
+let wakeLock = null;
+async function acquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (e) { /* 不支持或被拒绝时静默 */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S.running && !wakeLock) acquireWakeLock();
+});
+
 async function beginSegment() {
+  acquireWakeLock();
   S.rec = new WavRecorder();
   await S.rec.start();
   S.segStart = Date.now();
@@ -256,6 +289,7 @@ async function beginSegment() {
 
 async function endSegment(autoNext) {
   S.running = false;
+  if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
   clearTimeout(S.autoTimer);
   clearInterval(S.timer);
   const blob = await S.rec.stop();
@@ -263,7 +297,13 @@ async function endSegment(autoNext) {
   $('#dot').style.display = 'none';
   const idx = S.segIdx++;
   try { await uploadSegment(idx, blob); }
-  catch (e) { log('分段上传最终失败：' + e.message + '，请重新录音或稍后重试。'); S.running = false; return; }
+  catch (e) {
+    S.pending = { idx, blob };
+    S.pendingAutoNext = autoNext;
+    $('#retryBox').style.display = 'flex';
+    log('本段上传失败（' + e.message + '）。音频还在内存里，点「重试上传本段」即可，不用重录。');
+    return;
+  }
   if (autoNext) { log('自动进入下一段…'); await beginSegment(); }
 }
 
@@ -318,13 +358,38 @@ async function poll() {
 /* ---------- 事件 ---------- */
 $('#btnStart').onclick = async () => {
   try { await startSession(); }
-  catch (e) { log('启动失败：' + e.message); $('#btnStart').disabled = false; }
+  catch (e) {
+    const name = e && e.name || '';
+    const hint = name === 'NotAllowedError' ? '麦克风权限被拒绝：请在浏览器/飞书设置里允许麦克风后刷新页面。'
+      : name === 'NotFoundError' ? '没有找到麦克风设备。'
+      : name === 'NotReadableError' ? '麦克风被其他应用占用，关掉录音类应用后重试。'
+      : e.message;
+    log('启动失败：' + hint);
+    $('#btnStart').disabled = false;
+  }
 };
 
 $('#btnStop').onclick = async () => {
   $('#btnStop').disabled = true;
   if (S.running) await endSegment(false);
   await finishSession();
+};
+
+$('#btnRetryUpload').onclick = async () => {
+  if (!S.pending) return;
+  const { idx, blob } = S.pending;
+  $('#btnRetryUpload').disabled = true;
+  try {
+    await uploadSegment(idx, blob);
+    S.pending = null;
+    $('#retryBox').style.display = 'none';
+    if (S.pendingAutoNext) { await beginSegment(); }
+    else { await finishSession(); }
+  } catch (e) {
+    log('仍然失败：' + e.message);
+  } finally {
+    $('#btnRetryUpload').disabled = false;
+  }
 };
 
 $('#btnUpload').onclick = () => $('#fileInput').click();
