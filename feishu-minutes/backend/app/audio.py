@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import wave
 from pathlib import Path
 
@@ -57,3 +59,38 @@ def merge(paths: list[Path], out: Path) -> dict:
 
     duration = total_frames / float(first["sample_rate"] or 1)
     return {**first, "frames": total_frames, "duration": duration, "segments": len(paths)}
+
+
+def ffmpeg_path() -> str | None:
+    """优先系统 ffmpeg，其次 imageio-ffmpeg 自带的静态二进制。"""
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def convert_to_wav(
+    src: Path, dst: Path, sample_rate: int = 16000, channels: int = 1
+) -> dict:
+    """把 m4a/mp3/webm 等解码为 16k 单声道 16bit WAV。"""
+    exe = ffmpeg_path()
+    if not exe:
+        raise WavError("服务器未安装 ffmpeg，无法解码该音频格式")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        [
+            exe, "-y", "-loglevel", "error", "-i", str(src),
+            "-ar", str(sample_rate), "-ac", str(channels),
+            "-c:a", "pcm_s16le", str(dst),
+        ],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        detail = proc.stderr.decode("utf-8", "ignore")[-300:]
+        raise WavError(f"音频解码失败: {detail}")
+    return inspect(dst)

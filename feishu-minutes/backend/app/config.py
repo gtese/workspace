@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     tencent_secret_key: str = ""
     tencent_region: str = "ap-guangzhou"
     tencent_engine_model: str = "16k_zh_en_meeting"
+    asr_price_per_hour: float = 0.8
 
     # LLM
     llm_provider: str = "mock"  # mock | deepseek

@@ -19,7 +19,7 @@ from .deps import current_open_id
 
 router = APIRouter(prefix="/api/v1", tags=["recordings"])
 
-MAX_SEGMENT_BYTES = 80 * 1024 * 1024
+MAX_SEGMENT_BYTES = 120 * 1024 * 1024
 
 
 def _owned(db: Session, recording_id: str, open_id: str) -> Recording:
@@ -80,6 +80,20 @@ def list_recordings(
     return [_to_out(r) for r in rows]
 
 
+@router.get("/stats")
+def stats(open_id: str = Depends(current_open_id), db: Session = Depends(get_db)) -> dict:
+    rows = db.query(Recording).filter(Recording.owner_open_id == open_id).all()
+    minutes = sum(r.duration_sec for r in rows) / 60
+    price = get_settings().asr_price_per_hour
+    return {
+        "recordings": len(rows),
+        "minutes": round(minutes, 1),
+        "done": sum(1 for r in rows if r.status == "done"),
+        "failed": sum(1 for r in rows if r.status == "failed"),
+        "estimated_cost_yuan": round(minutes / 60 * price, 2),
+    }
+
+
 @router.get("/recordings/{recording_id}", response_model=RecordingOut)
 def get_recording(
     recording_id: str,
@@ -107,16 +121,23 @@ async def upload_segment(
     if len(data) > MAX_SEGMENT_BYTES:
         raise HTTPException(status_code=413, detail="分段超过 80MB")
 
-    path, digest = storage.save_segment(rec.id, idx, data)
+    raw, digest = storage.save_segment_raw(rec.id, idx, data)
+    wav_path = storage.segment_path(rec.id, idx)
     try:
-        info = audio.inspect(path)
+        if audio.is_wav(raw):
+            raw.replace(wav_path)
+            info = audio.inspect(wav_path)
+        else:
+            info = audio.convert_to_wav(raw, wav_path)
+            raw.unlink(missing_ok=True)
     except audio.WavError as exc:
-        path.unlink(missing_ok=True)
+        raw.unlink(missing_ok=True)
+        wav_path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     existing = next((s for s in rec.segments if s.idx == idx), None)
     if existing:
-        existing.path = str(path)
+        existing.path = str(wav_path)
         existing.size = len(data)
         existing.sha256 = digest
         existing.duration_sec = info["duration"]
@@ -125,7 +146,7 @@ async def upload_segment(
             Segment(
                 recording_id=rec.id,
                 idx=idx,
-                path=str(path),
+                path=str(wav_path),
                 size=len(data),
                 sha256=digest,
                 duration_sec=info["duration"],

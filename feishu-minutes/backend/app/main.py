@@ -57,6 +57,11 @@ def index() -> FileResponse:
     return FileResponse(WEB_DIR / "recorder.html")
 
 
+@app.get("/mine", include_in_schema=False)
+def mine_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "mine.html")
+
+
 @app.get("/d/{recording_id}", include_in_schema=False)
 def detail_page(recording_id: str) -> FileResponse:  # noqa: ARG001
     return FileResponse(WEB_DIR / "detail.html")

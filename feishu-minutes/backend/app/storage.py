@@ -29,8 +29,13 @@ def merged_path(recording_id: str) -> Path:
     return recording_dir(recording_id) / "merged.wav"
 
 
-def save_segment(recording_id: str, idx: int, data: bytes) -> tuple[Path, str]:
-    path = segment_path(recording_id, idx)
+def segment_raw_path(recording_id: str, idx: int) -> Path:
+    return recording_dir(recording_id) / f"seg_{idx:03d}.raw"
+
+
+def save_segment_raw(recording_id: str, idx: int, data: bytes) -> tuple[Path, str]:
+    """先按原始格式落盘（可能是 m4a/mp3/webm），再由 API 层转成 WAV。"""
+    path = segment_raw_path(recording_id, idx)
     path.write_bytes(data)
     return path, hashlib.sha256(data).hexdigest()
 

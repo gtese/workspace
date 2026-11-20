@@ -49,6 +49,7 @@ async function load() {
     <h1>${esc(rec.title)}</h1>
     <div class="meta">${rec.scene} · 时长 ${rec.duration_sec} 秒 · ${rec.segment_count} 段 · 状态 ${rec.status}</div>
     ${rec.audio_url ? `<audio controls preload="none" src="${rec.audio_url}"></audio>` : ''}
+    ${rec.status === 'failed' ? `<div class="card"><h2>处理失败</h2><div style="color:#f87171">${esc(rec.error)}</div><p><button id="btnRetry" style="padding:10px 16px;border:0;border-radius:10px;background:#3b82f6;color:#fff">重新生成</button></p></div>` : ''}
     <div class="card"><h2>摘要</h2><div>${esc(s.summary || '（无）')}</div></div>
     ${(s.key_points || []).length ? `<div class="card"><h2>要点</h2><ul>${s.key_points.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
     ${(s.decisions || []).length ? `<div class="card"><h2>结论 / 决策</h2><ul>${s.decisions.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
@@ -57,6 +58,12 @@ async function load() {
     <div class="card"><h2>转写全文</h2>${lines || '<div class="empty">暂无转写</div>'}</div>
   `;
 }
+document.addEventListener('click', async (ev) => {
+  if (ev.target && ev.target.id === 'btnRetry') {
+    await fetch('/api/v1/recordings/' + id + '/rerun', { method: 'POST', headers: authHeaders });
+    location.reload();
+  }
+});
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 load();
 </script>

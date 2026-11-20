@@ -37,7 +37,10 @@
 </head>
 <body>
 <main>
-  <h1>纪要录音 · POC</h1>
+  <div style="display:flex;justify-content:space-between;align-items:baseline">
+    <h1>纪要录音 · POC</h1>
+    <a href="/mine" style="color:#93c5fd;font-size:13px;text-decoration:none">我的纪要 →</a>
+  </div>
   <div class="sub">录音 → 分段上传 → 转写 → 纪要。当前为 mock ASR/LLM 链路，用于验证录音通路。</div>
   <div class="meta" id="who" style="margin:-10px 0 14px">未登录（POC 用 open_id 模拟）</div>
 
@@ -293,6 +296,14 @@ async function poll() {
   }
   if (rec.status === 'failed') {
     log('处理失败：' + rec.error);
+    $('#result').style.display = 'block';
+    $('#result').innerHTML = '<h1>处理失败</h1><p class="meta">' + rec.error + '</p>' +
+      '<div class="row"><button id="btnRetry">重新生成</button></div>';
+    document.getElementById('btnRetry').onclick = async () => {
+      $('#result').innerHTML = '<div class="meta">已重新排队…</div>';
+      await api('/recordings/' + S.rid + '/rerun', { method: 'POST' });
+      poll();
+    };
     $('#btnStart').disabled = false;
     return;
   }

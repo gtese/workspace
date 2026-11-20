@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的纪要</title>
+<style>
+  :root { --bg:#0f1115; --card:#171a21; --line:#262b36; --text:#e8ecf3; --muted:#8b94a7; --accent:#3b82f6; --ok:#22c55e; --bad:#ef4444; --warn:#f59e0b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:19px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:12px; margin-bottom:16px; }
+  .stats { display:flex; gap:10px; margin-bottom:16px; }
+  .stat { flex:1; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .stat b { display:block; font-size:20px; }
+  .stat span { color:var(--muted); font-size:11px; }
+  .item { display:block; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:10px; color:inherit; text-decoration:none; }
+  .item:active { border-color:var(--accent); }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .title { font-weight:600; }
+  .meta { color:var(--muted); font-size:12px; }
+  .pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+  .pill.done { color:var(--ok); border-color:#1f5133; }
+  .pill.failed { color:var(--bad); border-color:#5a2222; }
+  .pill.busy { color:var(--warn); border-color:#5c4a1a; }
+  .top { display:flex; justify-content:space-between; align-items:baseline; }
+  .top a { color:#93c5fd; font-size:13px; text-decoration:none; }
+  .empty { color:var(--muted); text-align:center; padding:40px 0; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><h1>我的纪要</h1><a href="/">去录音 →</a></div>
+  <div class="sub" id="who"></div>
+  <div class="stats" id="stats"></div>
+  <div id="list"><div class="empty">加载中…</div></div>
+</main>
+<script>
+const uid = localStorage.getItem('fm_uid') || 'demo';
+const token = localStorage.getItem('fm_token') || '';
+const headers = { 'X-Employee-Open-Id': uid, ...(token ? { Authorization: 'Bearer ' + token } : {}) };
+const LABEL = {
+  created: ['草稿', ''], recording: ['录音中', 'busy'], queued: ['排队中', 'busy'],
+  transcribing: ['转写中', 'busy'], transcribed: ['转写完成', 'busy'], summarizing: ['生成纪要', 'busy'],
+  done: ['已完成', 'done'], failed: ['失败', 'failed'],
+};
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+async function load() {
+  const [me, stats, list] = await Promise.all([
+    fetch('/api/v1/me', { headers }).then(r => r.json()).catch(() => ({})),
+    fetch('/api/v1/stats', { headers }).then(r => r.json()).catch(() => ({})),
+    fetch('/api/v1/recordings', { headers }).then(r => r.json()).catch(() => []),
+  ]);
+  document.getElementById('who').textContent = me.name ? '当前用户：' + esc(me.name) : '模拟身份：' + uid;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><b>${stats.recordings ?? 0}</b><span>录音数</span></div>
+    <div class="stat"><b>${stats.minutes ?? 0}</b><span>总分钟</span></div>
+    <div class="stat"><b>¥${stats.estimated_cost_yuan ?? 0}</b><span>预估转写成本</span></div>`;
+  if (!list.length) {
+    document.getElementById('list').innerHTML = '<div class="empty">还没有录音，去录一段吧</div>';
+    return;
+  }
+  document.getElementById('list').innerHTML = list.map(r => {
+    const [label, cls] = LABEL[r.status] || [r.status, ''];
+    const d = new Date(r.created_at);
+    const when = isNaN(d) ? r.created_at : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const dur = r.duration_sec ? Math.round(r.duration_sec / 60 * 10) / 10 + ' 分钟' : '—';
+    return `<a class="item" href="/d/${r.id}">
+      <div class="row"><span class="title">${esc(r.title)}</span><span class="pill ${cls}">${label}</span></div>
+      <div class="meta">${when} · ${dur} · ${r.segment_count} 段</div>
+      ${r.error ? `<div class="meta" style="color:#f87171">${esc(r.error).slice(0, 80)}</div>` : ''}
+    </a>`;
+  }).join('');
+}
+load();
+</script>
+</body>
+</html>
