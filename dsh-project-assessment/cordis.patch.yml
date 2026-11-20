@@ -1,0 +1,9 @@
+# Bundle layer: one plugin row that adds the on-demand project assessment
+# capability (`/评估` trigger + `project-assessment` skill).
+#
+# The assessment spec ships with the package (`skill/project-assessment.md`);
+# the plugin resolves it relative to its own module, so no absolute path is
+# configured here. Override `skillFile` to point at a user-edited copy.
+- insert:
+    - id: project-assessment
+      name: '@linyiyao/dsh-project-assessment'
