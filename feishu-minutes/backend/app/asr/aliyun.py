@@ -59,7 +59,8 @@ class AliyunASR(ASRProvider):
                     json=payload,
                     timeout=300,
                 )
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
                 data = resp.json()
                 text = (
                     (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""

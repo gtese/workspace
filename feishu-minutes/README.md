@@ -51,6 +51,7 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 | [开发与部署](docs/06-开发与部署.md) | 本地运行、测试、切真实服务、Docker 部署 |
 | [上线验收清单](docs/07-上线验收清单.md) | 应用/服务端/真机/质量/运维/安全 逐项勾选 |
 | [员工使用说明](docs/08-员工使用说明.md) | 一页版：怎么用、录音贴士、隐私、FAQ |
+| [部署记录](docs/09-部署记录.md) | 服务器布局、systemd、SELinux、HTTPS 待决策 |
 
 ## 结构
 
@@ -78,6 +79,7 @@ cd backend
 
 - 需求：3 轮问答已对齐
 - 选型：已定稿（v0.2）
+- 生产：已部署到 172.16.50.122:5266（systemd），真实阿里云 ASR+LLM 链路验证通过
 - POC：后端全链路已跑通（mock）；浏览器真实录音 E2E 已通过（Chromium 假麦克风）
 - 队列：DB worker 串行处理，重启不丢任务；音频 90 天自动清理
 - 分发：飞书卡片（mock 落盘）、网站回调（HMAC 签名）、邮件 SMTP（mock 落盘）三条通道已实现

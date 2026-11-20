@@ -13,6 +13,9 @@ from app.llm import summarize as llm_mod  # noqa: E402
 
 
 class _Resp:
+    status_code = 200
+    text = ""
+
     def __init__(self, content: str) -> None:
         self._content = content
 
