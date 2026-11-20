@@ -81,13 +81,17 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
     db.commit()
 
     merged = storage.merged_path(rec.id)
+    t_merge = time.time()
     info = audio.merge([Path(s.path) for s in segments], merged)
+    log.info("合并 %s: %.1f 秒音频 / %d 段，耗时 %.2fs", rec.id, info["duration"], len(segments), time.time() - t_merge)
     rec.duration_sec = int(round(info["duration"]))
     db.commit()
 
     # 腾讯需要公网 URL；mock 忽略
     public_url = signed_url(storage.rel_media_path(merged), ttl=6 * 3600)
+    t_asr = time.time()
     transcript = get_asr_provider().transcribe(merged, info["duration"], public_url)
+    log.info("转写 %s: %d 段文本，耗时 %.2fs", rec.id, len(transcript.segments), time.time() - t_asr)
     rec.transcript_json = json.dumps(transcript.to_dict(), ensure_ascii=False)
     rec.status = STATUS_TRANSCRIBED
     db.commit()

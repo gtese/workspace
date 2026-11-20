@@ -48,6 +48,7 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 | [POC 计划](docs/05-POC计划.md) | 先验证什么、怎么验证、需要什么素材 |
 | [开发与部署](docs/06-开发与部署.md) | 本地运行、测试、切真实服务、Docker 部署 |
 | [上线验收清单](docs/07-上线验收清单.md) | 应用/服务端/真机/质量/运维/安全 逐项勾选 |
+| [员工使用说明](docs/08-员工使用说明.md) | 一页版：怎么用、录音贴士、隐私、FAQ |
 
 ## 结构
 
