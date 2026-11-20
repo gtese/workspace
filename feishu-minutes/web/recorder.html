@@ -34,7 +34,7 @@
   <div class="card" id="recCard">
     <div class="rec"><span id="dot" class="dot" style="display:none"></span><span id="timer" class="timer">00:00</span></div>
     <div class="level"><i id="levelBar"></i></div>
-    <div class="meta" id="hint">手机放桌面中央，录音时请勿锁屏；每 2 分钟自动落一段（最长丢 2 分钟）。</div>
+    <div class="meta" id="hint">手机放桌面中央，录音时请勿锁屏；每 5 分钟自动保存一段（最长丢 5 分钟）。</div>
     <div class="row">
       <button id="btnStart">开始录音</button>
       <button id="btnStop" class="danger" disabled>结束并生成纪要</button>
@@ -100,7 +100,7 @@
 
 <script>
 const API = '/api/v1';
-const SEG_MS = 2 * 60 * 1000;
+const SEG_MS = 5 * 60 * 1000;
 
 const $ = (s) => document.querySelector(s);
 const uid = () => (($('#uid') && $('#uid').value.trim()) || localStorage.getItem('fm_uid') || 'demo');
@@ -387,7 +387,7 @@ async function pump() {
     }
   } finally {
     state.pumping = false;
-    if (!state.pending.length) $('#hint').textContent = '手机放桌面中央，录音时请勿锁屏；每 2 分钟自动保存一段。';
+    if (!state.pending.length) $('#hint').textContent = '手机放桌面中央，录音时请勿锁屏；每 5 分钟自动保存一段（最长丢 5 分钟）。';
   }
   if (state.finishing && !state.pending.length) await doFinish();
 }

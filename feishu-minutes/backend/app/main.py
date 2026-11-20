@@ -54,27 +54,34 @@ def health() -> HealthOut:
     )
 
 
+NO_STORE = {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"}
+
+
+def _page(name: str) -> FileResponse:
+    return FileResponse(WEB_DIR / name, headers=NO_STORE)
+
+
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
-    return FileResponse(WEB_DIR / "recorder.html")
+    return _page("recorder.html")
 
 
 @app.get("/preview/card/{recording_id}", include_in_schema=False)
 def card_preview(recording_id: str) -> FileResponse:  # noqa: ARG001
-    return FileResponse(WEB_DIR / "card_preview.html")
+    return _page("card_preview.html")
 
 
 @app.get("/mine", include_in_schema=False)
 def mine_page() -> RedirectResponse:
     # 录音记录已合并到首页
-    return RedirectResponse(url="/#records", status_code=307)
+    return RedirectResponse(url="/#records", status_code=307, headers=NO_STORE)
 
 
 @app.get("/s/{recording_id}", include_in_schema=False)
 def shared_page(recording_id: str) -> FileResponse:  # noqa: ARG001
-    return FileResponse(WEB_DIR / "detail.html")
+    return _page("detail.html")
 
 
 @app.get("/d/{recording_id}", include_in_schema=False)
 def detail_page(recording_id: str) -> FileResponse:  # noqa: ARG001
-    return FileResponse(WEB_DIR / "detail.html")
+    return _page("detail.html")
