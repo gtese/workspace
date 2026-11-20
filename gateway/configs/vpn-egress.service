@@ -1,0 +1,12 @@
+[Unit]
+Description=VPN egress NAT + MSS clamp (10.66.66.0/24 via tun+)
+After=network-online.target openvpn-server@ovpn-office.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vpn-egress.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
