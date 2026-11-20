@@ -13,6 +13,12 @@ log = logging.getLogger(__name__)
 
 SCENE_LABELS = {"meeting": "内部会议", "client": "客户沟通", "memo": "语音速记"}
 
+SCENE_HINTS = {
+    "meeting": "重点关注：议题进展、做出的决策、待办与负责人、风险与阻塞。",
+    "client": "重点关注：客户诉求与痛点、客户异议、我方承诺与下一步、关键决策人、下次沟通时间。",
+    "memo": "这是个人语音速记，重点关注：待办事项、想法与结论、时间点；摘要可以更短。",
+}
+
 SYSTEM_PROMPT = (
     "你是严谨的中文会议纪要助手。根据转写文本生成结构化纪要，"
     "只输出一个 JSON 对象，不要输出任何解释或 Markdown 代码块。"
@@ -24,8 +30,9 @@ SYSTEM_PROMPT = (
 
 def _user_prompt(title: str, scene: str, transcript: str) -> str:
     label = SCENE_LABELS.get(scene, "会议")
+    hint = SCENE_HINTS.get(scene, SCENE_HINTS["meeting"])
     return (
-        f"会议标题：{title}\n场景类型：{label}\n\n"
+        f"会议标题：{title}\n场景类型：{label}\n{hint}\n\n"
         f"转写文本（含时间戳与说话人）：\n{transcript[:60000]}\n\n"
         "请生成纪要 JSON。"
     )

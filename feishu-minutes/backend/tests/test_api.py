@@ -90,3 +90,11 @@ def test_health(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["asr_provider"] == "mock"
+
+
+def test_next_segment_index(client: TestClient, tmp_path: Path) -> None:
+    r = client.post("/api/v1/recordings", json={"title": "续录", "scene": "meeting"}, headers=HEADERS)
+    rid = r.json()["id"]
+    _upload(client, rid, 0, make_wav(tmp_path / "a.wav", 1.0))
+    r = _upload(client, rid, 1, make_wav(tmp_path / "b.wav", 1.0))
+    assert r.json()["next_segment_index"] == 2

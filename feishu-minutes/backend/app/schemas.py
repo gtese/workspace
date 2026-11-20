@@ -18,6 +18,7 @@ class RecordingOut(BaseModel):
     duration_sec: int
     created_at: str
     segment_count: int = 0
+    next_segment_index: int = 0
     error: str = ""
     # 详情接口才带出
     transcript: list[dict[str, Any]] | None = None

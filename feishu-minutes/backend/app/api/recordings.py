@@ -38,6 +38,7 @@ def _to_out(rec: Recording, include_detail: bool = False) -> RecordingOut:
         duration_sec=rec.duration_sec,
         created_at=rec.created_at.isoformat(),
         segment_count=len(rec.segments),
+        next_segment_index=max((s.idx for s in rec.segments), default=-1) + 1,
         error=rec.error,
     )
     if include_detail:

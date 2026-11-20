@@ -19,7 +19,7 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 - 本地音频上传兜底：wav/m4a/mp3/webm，服务端 ffmpeg 转 16k 单声道 WAV
 - 详情页：`/d/{id}`（摘要/要点/待办/全文/音频播放）
 - API 文档：`/docs`（FastAPI 自动生成）
-- 测试：`cd backend && ../.venv/bin/python -m pytest -q`（34 个用例）
+- 测试：`cd backend && ../.venv/bin/python -m pytest -q`（41 个用例）
 - 浏览器 E2E：`cd backend && FM_E2E_BASE=http://127.0.0.1:8777 ../.venv/bin/python tests/e2e/test_recorder_browser.py`
 
 ## 文档
@@ -31,6 +31,7 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 | [技术决策记录](docs/04-技术决策记录.md) | 7 条 ADR，含官方文档证据链接 |
 | [POC 计划](docs/05-POC计划.md) | 先验证什么、怎么验证、需要什么素材 |
 | [开发与部署](docs/06-开发与部署.md) | 本地运行、测试、切真实服务、Docker 部署 |
+| [上线验收清单](docs/07-上线验收清单.md) | 应用/服务端/真机/质量/运维/安全 逐项勾选 |
 
 ## 结构
 
@@ -46,6 +47,14 @@ deploy/                Caddy 配置
 docker-compose.yml     api + postgres + caddy
 ```
 
+## 命令行工具
+
+```bash
+cd backend
+# 直接对本地音频跑转写，输出文本 + 耗时/成本（mock 或 tencent）
+../.venv/bin/python -m app.asr.cli /path/to/meeting.m4a --provider tencent --json out.json
+```
+
 ## 当前状态
 
 - 需求：3 轮问答已对齐
@@ -54,4 +63,5 @@ docker-compose.yml     api + postgres + caddy
 - 队列：DB worker 串行处理，重启不丢任务；音频 90 天自动清理
 - 分发：飞书卡片（mock 落盘）、网站回调（HMAC 签名）、邮件 SMTP（mock 落盘）三条通道已实现
 - 兜底：手机系统录音 App 录的 m4a 可直接上传（已用真实 m4a 验证）
+- 断点续录：刷新/中断后页面提示「继续录音」，已上传段落不丢（E2E 验证）
 - 下一步：飞书应用 + 腾讯云 ASR 凭据到位后真机联调

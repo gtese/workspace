@@ -43,6 +43,7 @@
   </div>
   <div class="sub">录音 → 分段上传 → 转写 → 纪要。当前为 mock ASR/LLM 链路，用于验证录音通路。</div>
   <div class="meta" id="who" style="margin:-10px 0 14px">未登录（POC 用 open_id 模拟）</div>
+  <div class="card" id="resume" style="display:none"></div>
 
   <div class="card">
     <label>会议标题</label>
@@ -58,7 +59,7 @@
       </div>
       <div>
         <label>员工 open_id（POC）</label>
-        <input id="uid" placeholder="demo" value="demo">
+        <input id="uid" placeholder="demo" value="">
       </div>
     </div>
   </div>
@@ -91,6 +92,8 @@ const MAX_SEG_MS = 2 * 60 * 1000;
 
 const $ = s => document.querySelector(s);
 const uid = () => ($('#uid').value.trim() || 'demo');
+const savedUid = localStorage.getItem('fm_uid') || '';
+if (savedUid && !$('#uid').value) $('#uid').value = savedUid;
 const log = (msg) => { const el = $('#status'); el.textContent += msg + '\n'; el.scrollTop = el.scrollHeight; };
 
 /* ---------- 诊断 ---------- */
@@ -269,6 +272,7 @@ async function startSession() {
   $('#status').textContent = '';
   const rec = await createRecording();
   S.rid = rec.id; S.segIdx = 0; S.base = 0;
+  localStorage.setItem('fm_rid', rec.id);
   log('已创建录音会话：' + rec.id);
   $('#btnStart').disabled = true; $('#btnStop').disabled = false;
   await beginSegment();
@@ -278,6 +282,7 @@ async function finishSession() {
   $('#btnStop').disabled = true;
   log('上传完成，开始转写与生成纪要…');
   await api('/recordings/' + S.rid + '/finish', { method: 'POST' });
+  localStorage.removeItem('fm_rid');
   poll();
 }
 
@@ -336,6 +341,49 @@ $('#fileInput').onchange = async (e) => {
   e.target.value = '';
 };
 
+/* ---------- 断点续录 ---------- */
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+async function checkResume() {
+  const rid = localStorage.getItem('fm_rid');
+  if (!rid) return;
+  try {
+    const rec = await api('/recordings/' + rid);
+    if (rec.status === 'recording' && rec.segment_count > 0) {
+      const box = $('#resume');
+      box.style.display = 'block';
+      box.innerHTML = '<div class="meta">上次有一段未完成的录音</div>' +
+        '<div style="font-weight:600;margin:4px 0 10px">' + escHtml(rec.title) + ' · 已上传 ' + rec.segment_count + ' 段</div>' +
+        '<div class="row"><button id="btnResume">继续录音</button>' +
+        '<button id="btnIgnore" class="ghost">忽略</button></div>';
+      document.getElementById('btnResume').onclick = () => {
+        box.style.display = 'none';
+        startResume(rec);
+      };
+      document.getElementById('btnIgnore').onclick = () => {
+        localStorage.removeItem('fm_rid');
+        box.style.display = 'none';
+      };
+    } else {
+      localStorage.removeItem('fm_rid');
+    }
+  } catch (e) {
+    localStorage.removeItem('fm_rid');
+  }
+}
+
+async function startResume(rec) {
+  S.rid = rec.id;
+  S.segIdx = rec.next_segment_index || rec.segment_count || 0;
+  S.base = 0;
+  $('#result').style.display = 'none';
+  $('#status').textContent = '';
+  $('#btnStart').disabled = true;
+  $('#btnStop').disabled = false;
+  log('继续录音：' + rec.id + '，从第 ' + (S.segIdx + 1) + ' 段开始');
+  await beginSegment();
+}
+
 /* ---------- 飞书免登（网页应用内） ---------- */
 async function ensureLogin() {
   try {
@@ -369,6 +417,7 @@ async function ensureLogin() {
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || '登录失败');
     S.token = data.token; S.openId = data.open_id;
+    $('#uid').value = data.open_id;
     localStorage.setItem('fm_uid', data.open_id);
     localStorage.setItem('fm_token', data.token);
     $('#who').textContent = '已登录：' + (data.name || data.open_id) + (data.mock ? '（mock）' : '');
@@ -377,7 +426,7 @@ async function ensureLogin() {
     $('#who').textContent = '登录失败，模拟身份：' + uid();
   }
 }
-window.addEventListener('load', ensureLogin);
+window.addEventListener('load', () => { ensureLogin(); checkResume(); });
 </script>
 </body>
 </html>
