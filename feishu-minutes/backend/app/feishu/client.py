@@ -14,7 +14,9 @@ log = logging.getLogger(__name__)
 BASE = "https://open.feishu.cn/open-apis"
 
 
-def build_minutes_card(title: str, scene_label: str, summary: dict, detail_url: str) -> dict:
+def build_minutes_card(
+    title: str, scene_label: str, summary: dict, detail_url: str, doc_url: str = ""
+) -> dict:
     def md(text: str) -> dict:
         return {"tag": "div", "text": {"tag": "lark_md", "content": text[:2500]}}
 
@@ -32,19 +34,25 @@ def build_minutes_card(title: str, scene_label: str, summary: dict, detail_url: 
             due = f"（{t.get('due')}）" if t.get("due") else ""
             lines.append(f"- {who}{t.get('item')}{due}")
         elements.append(md("**待办**\n" + "\n".join(lines)))
-    elements.append(
+    actions = [
         {
-            "tag": "action",
-            "actions": [
-                {
-                    "tag": "button",
-                    "text": {"tag": "plain_text", "content": "查看全文"},
-                    "type": "primary",
-                    "url": detail_url,
-                }
-            ],
+            "tag": "button",
+            "text": {"tag": "plain_text", "content": "查看全文"},
+            "type": "primary",
+            "url": detail_url,
         }
-    )
+    ]
+    if doc_url:
+        actions.insert(
+            0,
+            {
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "打开飞书文档"},
+                "type": "default",
+                "url": doc_url,
+            },
+        )
+    elements.append({"tag": "action", "actions": actions})
     return {
         "config": {"wide_screen_mode": True},
         "header": {
@@ -113,8 +121,9 @@ class FeishuClient:
             },
             timeout=15,
         )
-        resp.raise_for_status()
         data = resp.json()
         if data.get("code") != 0:
-            raise RuntimeError(f"飞书发消息失败: {data.get('code')} {data.get('msg')}")
+            raise RuntimeError(
+                f"飞书发消息失败: HTTP {resp.status_code} code={data.get('code')} msg={data.get('msg')}"
+            )
         return {"mode": "real", "message_id": data.get("data", {}).get("message_id")}

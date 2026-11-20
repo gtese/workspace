@@ -136,6 +136,18 @@ button.danger:disabled { background: #c9d6e8; color: #fff; opacity: 1; }
   border-radius: 12px; padding: 10px 12px; white-space: pre-wrap; max-height: 180px; overflow: auto;
 }
 details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.log:empty { display: none; }
+
+/* 录音记录列表 */
+.rec-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px dashed #e4eefb; }
+.rec-item:last-child { border-bottom: 0; }
+.rec-main { flex: 1; min-width: 0; }
+.rec-title { display: block; font-weight: 600; color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-title:hover { color: var(--primary); }
+.rec-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.rec-del { width: auto; flex: none; padding: 7px 12px; font-size: 12px; border-radius: 9px; }
+#recList .empty { padding: 18px 0; }
+.doc-link { display: block; margin-top: 10px; text-align: center; text-decoration: none; }
 
 /* 状态标签 */
 .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px;

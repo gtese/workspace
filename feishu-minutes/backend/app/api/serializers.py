@@ -43,6 +43,9 @@ def to_out(rec: Recording, include_detail: bool = False) -> RecordingOut:
                 for seg in data.transcript
             ]
         data.summary = json.loads(rec.summary_json) if rec.summary_json else None
+        docs = rec.documents or []
+        if docs:
+            data.doc_url = docs[-1].url
         audio_file = storage.merged_path(rec.id)
         if audio_file.exists():
             data.audio_url = signed_url(storage.rel_media_path(audio_file))

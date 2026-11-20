@@ -24,6 +24,7 @@ class RecordingOut(BaseModel):
     transcript: list[dict[str, Any]] | None = None
     summary: dict[str, Any] | None = None
     audio_url: str | None = None
+    doc_url: str | None = None
 
 
 class SegmentOut(BaseModel):

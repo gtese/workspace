@@ -47,6 +47,7 @@ class Settings(BaseSettings):
 
     # 飞书
     feishu_mode: str = "mock"  # mock | real
+    feishu_doc_enabled: bool = True  # 纪要同步为飞书云文档
     feishu_app_id: str = ""
     feishu_app_secret: str = ""
 

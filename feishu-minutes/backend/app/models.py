@@ -52,6 +52,9 @@ class Recording(Base):
     speaker_names: Mapped[list["SpeakerName"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"
     )
+    documents: Mapped[list["Document"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 class Segment(Base):
@@ -86,6 +89,20 @@ class DeliveryLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     recording: Mapped[Recording] = relationship(back_populates="deliveries")
+
+
+class Document(Base):
+    """每条录音对应的飞书云文档（同步成功后写入）。"""
+
+    __tablename__ = "documents"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: new_id("doc_"))
+    recording_id: Mapped[str] = mapped_column(
+        ForeignKey("recordings.id", ondelete="CASCADE"), index=True
+    )
+    doc_id: Mapped[str] = mapped_column(String(64), default="")
+    url: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class SpeakerName(Base):

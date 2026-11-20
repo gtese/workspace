@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import auth, media, recordings, shared
@@ -65,8 +65,9 @@ def card_preview(recording_id: str) -> FileResponse:  # noqa: ARG001
 
 
 @app.get("/mine", include_in_schema=False)
-def mine_page() -> FileResponse:
-    return FileResponse(WEB_DIR / "mine.html")
+def mine_page() -> RedirectResponse:
+    # 录音记录已合并到首页
+    return RedirectResponse(url="/#records", status_code=307)
 
 
 @app.get("/s/{recording_id}", include_in_schema=False)

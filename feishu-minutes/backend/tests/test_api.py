@@ -159,3 +159,24 @@ def test_openapi_schema(client: TestClient) -> None:
     paths = r.json()["paths"]
     for p in ["/api/v1/recordings", "/api/v1/recordings/{recording_id}", "/api/v1/auth/feishu-login", "/api/v1/shared/{recording_id}", "/api/v1/search", "/api/v1/stats"]:
         assert p in paths, p
+
+
+def test_delete_recording(client: TestClient, tmp_path: Path) -> None:
+    rid = client.post("/api/v1/recordings", json={"title": "待删除", "scene": "memo"}, headers=HEADERS).json()["id"]
+    _upload(client, rid, 0, make_wav(tmp_path / "d.wav", 1.0))
+    client.post(f"/api/v1/recordings/{rid}/finish", headers=HEADERS)
+
+    from app.storage import data_dir
+
+    rec_dir = data_dir() / "recordings" / rid
+    assert rec_dir.exists()
+    r = client.delete(f"/api/v1/recordings/{rid}", headers=HEADERS)
+    assert r.status_code == 204, r.text
+    assert client.get(f"/api/v1/recordings/{rid}", headers=HEADERS).status_code == 404
+    assert not rec_dir.exists()
+
+
+def test_delete_other_users_recording_forbidden(client: TestClient) -> None:
+    rid = client.post("/api/v1/recordings", json={"title": "别人的", "scene": "memo"}, headers=HEADERS).json()["id"]
+    r = client.delete(f"/api/v1/recordings/{rid}", headers={"X-Employee-Open-Id": "other"})
+    assert r.status_code == 404

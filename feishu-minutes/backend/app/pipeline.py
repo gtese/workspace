@@ -17,6 +17,7 @@ from .config import get_settings
 from .db import SessionLocal
 from .email_send import EmailSender, build_minutes_email
 from .feishu import FeishuClient, build_minutes_card
+from .feishu.docs import FeishuDocClient
 from .llm.summarize import SCENE_LABELS, summarize
 from .models import (
     STATUS_DONE,
@@ -26,6 +27,7 @@ from .models import (
     STATUS_TRANSCRIBED,
     STATUS_TRANSCRIBING,
     DeliveryLog,
+    Document,
     Employee,
     Recording,
     SpeakerName,
@@ -140,9 +142,30 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
 def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  # noqa: ANN001
     detail_url = share_url(rec.id)
 
-    # 1) 飞书卡片
+    # 1) 同步为飞书云文档（失败不阻塞卡片）
+    doc_url = ""
+    if settings.feishu_mode == "real" and settings.feishu_doc_enabled:
+        try:
+            info = FeishuDocClient().create_minutes_doc(
+                rec.title, summary, detail_url, rec.owner_open_id
+            )
+            doc_url = info["url"]
+            db.add(Document(recording_id=rec.id, doc_id=info["document_id"], url=doc_url))
+            db.commit()
+            log.info("已同步飞书文档: %s", doc_url)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("同步飞书文档失败")
+            db.add(
+                DeliveryLog(
+                    recording_id=rec.id, channel="feishu_doc", target=rec.owner_open_id,
+                    status="failed", detail=str(exc)[:500],
+                )
+            )
+            db.commit()
+
+    # 2) 飞书卡片
     card = build_minutes_card(
-        rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, detail_url
+        rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, detail_url, doc_url
     )
     try:
         result = FeishuClient().send_card(rec.owner_open_id, card)
@@ -165,7 +188,7 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
         )
     db.commit()
 
-    # 2) 公司网站回调
+    # 3) 公司网站回调
     if settings.website_callback_url and settings.website_callback_secret:
         payload = json.dumps(
             {
@@ -208,7 +231,7 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
         )
         db.commit()
 
-    # 3) 邮件（发给录音本人；未配置 SMTP 时 mock 落盘）
+    # 4) 邮件（发给录音本人；未配置 SMTP 时 mock 落盘）
     emp = db.get(Employee, rec.owner_open_id)
     if emp is not None and emp.email:
         subject, html = build_minutes_email(rec.title, summary, detail_url)

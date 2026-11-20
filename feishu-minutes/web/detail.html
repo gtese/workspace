@@ -23,7 +23,7 @@
         <h1>纪要详情 <span class="badge">AI</span></h1>
         <div class="sub">摘要 · 待办 · 转写全文</div>
       </div>
-      <a class="nav" href="/mine">我的纪要 →</a>
+      <a class="nav" href="/#records">录音记录 →</a>
     </div>
   </div>
   <div id="app" class="empty">加载中…</div>
@@ -58,6 +58,7 @@ async function load() {
   document.getElementById('app').innerHTML = `
     <h1>${esc(rec.title)}</h1>
     <div class="meta">${sceneLabel(rec.scene)} · ${Math.max(1, Math.round(rec.duration_sec / 60))} 分钟 · ${rec.segment_count} 段 · ${statusLabel(rec.status)}</div>
+    ${rec.doc_url ? `<a class="btn doc-link" href="${rec.doc_url}" target="_blank" rel="noopener">打开飞书文档</a>` : ''}
     ${rec.audio_url ? `<audio controls preload="none" src="${rec.audio_url}"></audio>` : ''}
     ${(!isShared && rec.status === 'failed') ? `<div class="card"><h2>处理失败</h2><div style="color:#f87171">${esc(rec.error)}</div><p><button id="btnRetry" style="padding:10px 16px;border:0;border-radius:10px;background:#3b82f6;color:#fff">重新生成</button></p></div>` : ''}
     ${!isShared ? `<div class="card"><button id="btnShare" class="ghost">复制分享链接</button><span class="meta" style="margin-left:10px">链接 30 天有效，可发到飞书群</span></div>` : ''}

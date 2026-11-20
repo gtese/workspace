@@ -25,11 +25,23 @@
         <h1>Trace Voice <span class="badge">AI</span></h1>
         <div class="sub">录音自动转写 · AI 生成会议纪要</div>
       </div>
-      <a class="nav" href="/mine">我的纪要 →</a>
+      <a class="nav" href="#records">录音记录 →</a>
     </div>
     <div class="meta" id="who" style="margin-top:10px">正在识别身份…</div>
   </div>
   <div class="card" id="resume" style="display:none"></div>
+
+  <div class="card" id="recCard">
+    <div class="rec"><span id="dot" class="dot" style="display:none"></span><span id="timer" class="timer">00:00</span></div>
+    <div class="level"><i id="levelBar"></i></div>
+    <div class="meta" id="hint">手机放桌面中央，录音时请勿锁屏；每 2 分钟自动落一段（最长丢 2 分钟）。</div>
+    <div class="row">
+      <button id="btnStart">开始录音</button>
+      <button id="btnStop" class="danger" disabled>结束并生成纪要</button>
+    </div>
+    <div class="log" id="status" style="margin-top:12px"></div>
+    <div class="row" id="retryBox" style="display:none"><button id="btnRetryUpload" class="danger">重试上传本段</button></div>
+  </div>
 
   <div class="card">
     <label>会议标题</label>
@@ -54,18 +66,18 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="rec"><span id="dot" class="dot" style="display:none"></span><span id="timer" class="timer">00:00</span></div>
-    <div class="level"><i id="levelBar"></i></div>
-    <div class="meta" id="hint">手机放桌面中央，录音时请勿锁屏；每 2 分钟自动落一段（最长丢 2 分钟）。</div>
-    <div class="row">
-      <button id="btnStart">开始录音</button>
-      <button id="btnStop" class="danger" disabled>结束并生成纪要</button>
+  <div class="card" id="records">
+    <div class="top"><h2 style="margin:0">录音记录</h2><span class="meta" id="recCount"></span></div>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <select id="recRange" style="max-width:150px">
+        <option value="all">全部时间</option>
+        <option value="today">今天</option>
+        <option value="7">近 7 天</option>
+        <option value="30">近 30 天</option>
+      </select>
+      <input id="recSearch" placeholder="按标题搜索">
     </div>
-    <div class="row"><button id="btnUpload" class="ghost">上传本地音频（m4a / wav 兜底）</button></div>
-    <input id="fileInput" type="file" accept="audio/*,.wav" hidden>
-    <div class="log" id="status" style="margin-top:12px"></div>
-    <div class="row" id="retryBox" style="display:none"><button id="btnRetryUpload" class="danger">重试上传本段</button></div>
+    <div id="recList" style="margin-top:12px"></div>
   </div>
 
   <div class="card" id="result" style="display:none"></div>
@@ -332,6 +344,7 @@ async function poll() {
       '<p>' + (s.summary || '') + '</p>' +
       '<p><a href="/d/' + rec.id + '">查看完整纪要 / 播放录音</a></p>';
     $('#btnStart').disabled = false;
+    loadRecords();
     return;
   }
   if (rec.status === 'failed') {
@@ -387,19 +400,57 @@ $('#btnRetryUpload').onclick = async () => {
   }
 };
 
-$('#btnUpload').onclick = () => $('#fileInput').click();
-$('#fileInput').onchange = async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  try {
-    const rec = await createRecording();
-    S.rid = rec.id; S.segIdx = 0;
-    log('已创建会话：' + rec.id + '，上传文件 ' + f.name);
-    await uploadSegment(0, f);
-    await finishSession();
-  } catch (err) { log('上传失败：' + err.message); }
-  e.target.value = '';
-};
+
+/* ---------- 录音记录 ---------- */
+let RECS = [];
+
+async function loadRecords() {
+  try { RECS = await api('/recordings'); } catch (e) { RECS = []; }
+  renderRecords();
+}
+
+function hoursAgo(iso) { return (Date.now() - new Date(iso).getTime()) / 3600000; }
+
+function renderRecords() {
+  const range = $('#recRange').value;
+  const q = $('#recSearch').value.trim().toLowerCase();
+  const list = RECS.filter(r => {
+    if (q && !(r.title || '').toLowerCase().includes(q)) return false;
+    if (range === 'all') return true;
+    if (range === 'today') return new Date(r.created_at).toDateString() === new Date().toDateString();
+    return hoursAgo(r.created_at) <= Number(range) * 24;
+  });
+  $('#recCount').textContent = list.length ? list.length + ' 条' : '';
+  if (!list.length) {
+    $('#recList').innerHTML = '<div class="empty">暂无录音记录</div>';
+    return;
+  }
+  $('#recList').innerHTML = list.map(r => {
+    const d = new Date(r.created_at);
+    const when = isNaN(d) ? r.created_at : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const dur = r.duration_sec ? Math.round(r.duration_sec / 60 * 10) / 10 + ' 分钟' : '';
+    const label = { done: '已完成', failed: '失败', recording: '录音中', queued: '排队中', transcribing: '转写中', summarizing: '生成纪要' }[r.status] || r.status;
+    return `<div class="rec-item">
+      <div class="rec-main">
+        <a class="rec-title" href="/d/${r.id}">${escHtml(r.title)}</a>
+        <div class="rec-meta">${when}${dur ? ' · ' + dur : ''} · ${label}</div>
+      </div>
+      <button class="ghost rec-del" data-id="${r.id}">移除</button>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('.rec-del').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('移除这条录音记录？音频与纪要将一并删除。')) return;
+      btn.disabled = true;
+      try { await api('/recordings/' + btn.dataset.id, { method: 'DELETE' }); }
+      catch (e) { alert('移除失败：' + e.message); btn.disabled = false; return; }
+      await loadRecords();
+    };
+  });
+}
+
+$('#recRange').addEventListener('change', renderRecords);
+$('#recSearch').addEventListener('input', renderRecords);
 
 /* ---------- 断点续录 ---------- */
 function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -500,6 +551,7 @@ async function ensureLogin() {
     if (!$('#uid').value) $('#uid').value = localStorage.getItem('fm_uid') || 'demo';
     $('#who').textContent = '开发模式 · 模拟身份 ' + uid();
     if (!titleTouched) $('#title').value = autoTitle();
+    loadRecords();
     hideGate();
     return;
   }
@@ -513,6 +565,7 @@ async function ensureLogin() {
     const data = await attemptFeishuLogin(cfg.app_id);
     $('#who').textContent = '已登录：' + (data.name || data.open_id);
     hideGate();
+    loadRecords();
   } catch (e) {
     console.warn('飞书登录失败', e);
     const msg = String((e && e.message) || e);

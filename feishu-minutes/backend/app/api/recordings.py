@@ -1,3 +1,5 @@
+import shutil
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -223,6 +225,21 @@ async def upload_segment(
     return to_out(rec)
 
 
+@router.delete("/recordings/{recording_id}", status_code=204)
+def delete_recording(
+    recording_id: str,
+    open_id: str = Depends(current_open_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """移除录音记录：删除音频、分段与纪要（分享链接随之失效）。"""
+    rec = _owned(db, recording_id, open_id)
+    if rec.status in ("queued", "transcribing", "summarizing"):
+        raise HTTPException(status_code=409, detail="正在处理中，请稍后再移除")
+    shutil.rmtree(storage.recording_dir(rec.id), ignore_errors=True)
+    db.delete(rec)
+    db.commit()
+
+
 @router.get("/recordings/{recording_id}/share")
 def get_share_link(
     recording_id: str,
@@ -249,8 +266,9 @@ def send_to_chat(
     if rec.status != "done":
         raise HTTPException(status_code=409, detail="纪要还没生成完成")
     summary = _json.loads(rec.summary_json) if rec.summary_json else {}
+    doc_url = rec.documents[-1].url if rec.documents else ""
     card = build_minutes_card(
-        rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, share_url(rec.id)
+        rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, share_url(rec.id), doc_url
     )
     target = body.receive_id or rec.owner_open_id
     try:
