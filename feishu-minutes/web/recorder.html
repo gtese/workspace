@@ -93,19 +93,41 @@
       </span>
       <h2 id="gateTitle">请在飞书内打开</h2>
       <p id="gateMsg">本应用需要登录飞书账号后使用。</p>
-      <button id="btnRelogin">重试登录</button>
+      <button id="btnRelogin">登录飞书</button>
     </div>
   </div>
 </main>
 
 <script>
 const API = '/api/v1';
-const MAX_SEG_MS = 2 * 60 * 1000;
+const SEG_MS = 2 * 60 * 1000;
 
-const $ = s => document.querySelector(s);
-const uid = () => ($('#uid').value.trim() || 'demo');
+const $ = (s) => document.querySelector(s);
+const uid = () => (($('#uid') && $('#uid').value.trim()) || localStorage.getItem('fm_uid') || 'demo');
 const savedUid = localStorage.getItem('fm_uid') || '';
-if (savedUid && !$('#uid').value) $('#uid').value = savedUid;
+if (savedUid && $('#uid') && !$('#uid').value) $('#uid').value = savedUid;
+
+const state = {
+  rid: null, idx: 0, rec: null, running: false, startedAt: 0,
+  tick: null, rotate: null, token: '', openId: '', userName: '',
+  mode: 'mock', pending: [], pumping: false, finishing: false, reloginTriedAt: 0,
+};
+state.token = localStorage.getItem('fm_token') || '';
+
+/* ---------- 基础 ---------- */
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function log(msg) {
+  const el = $('#status');
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function fmt(ms) {
+  const s = Math.floor(ms / 1000), m = Math.floor(s / 60);
+  return String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
 
 /* ---------- 默认标题：日期-时间-人员 ---------- */
 let titleTouched = false;
@@ -114,16 +136,121 @@ function autoTitle() {
   const d = new Date();
   const date = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   const time = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
-  const people = ($('#people').value || '').trim() || (S.userName || '').trim();
+  const people = ($('#people').value || '').trim() || (state.userName || '').trim();
   return date + '-' + time + (people ? '-' + people : '');
 }
 $('#title').addEventListener('input', () => { titleTouched = true; });
 $('#people').addEventListener('input', () => { if (!titleTouched) $('#title').value = autoTitle(); });
-const log = (msg) => { const el = $('#status'); el.textContent += msg + '\n'; el.scrollTop = el.scrollHeight; };
 
-/* ---------- WAV 编码 ---------- */
+/* ---------- 登录 ---------- */
+function showGate(title, msg) {
+  $('#gate').style.display = 'grid';
+  $('#gateTitle').textContent = title;
+  $('#gateMsg').textContent = msg;
+  document.body.classList.add('locked');
+}
+function hideGate() {
+  $('#gate').style.display = 'none';
+  document.body.classList.remove('locked');
+}
+async function fetchConfig() {
+  try { return await fetch(API + '/feishu/app-id').then((r) => r.json()); }
+  catch (e) { return { app_id: '', mode: 'mock' }; }
+}
+async function attemptFeishuLogin(appId) {
+  if (!window.h5sdk || !window.tt) throw new Error('NOT_IN_FEISHU');
+  const code = await new Promise((resolve, reject) => {
+    window.h5sdk.error((err) => console.warn('h5sdk error', err));
+    window.h5sdk.ready(() => {
+      const ok = (res) => resolve(res.code);
+      const fail = (err) => reject(new Error('AUTH_FAIL:' + JSON.stringify(err)));
+      if (window.tt.requestAccess) window.tt.requestAccess({ appID: appId, scopeList: [], success: ok, fail });
+      else if (window.tt.requestAuthCode) window.tt.requestAuthCode({ appId: appId, success: ok, fail });
+      else reject(new Error('NO_AUTH_API'));
+    });
+  });
+  const r = await fetch(API + '/auth/feishu-login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || 'LOGIN_FAILED');
+  return data;
+}
+function applyLogin(data) {
+  state.token = data.token;
+  state.openId = data.open_id;
+  state.userName = data.name || '';
+  if ($('#uid')) $('#uid').value = data.open_id;
+  localStorage.setItem('fm_uid', data.open_id);
+  localStorage.setItem('fm_token', data.token);
+  $('#who').textContent = '已登录：' + (data.name || data.open_id);
+  if (!titleTouched) $('#title').value = autoTitle();
+  hideGate();
+}
+async function ensureLogin() {
+  const cfg = await fetchConfig();
+  state.mode = cfg.mode || 'mock';
+  if (state.mode !== 'real') {
+    $('#uidRow').style.display = '';
+    if (!$('#uid').value) $('#uid').value = localStorage.getItem('fm_uid') || 'demo';
+    $('#who').textContent = '开发模式 · 模拟身份 ' + uid();
+    hideGate();
+    loadRecords();
+    return true;
+  }
+  $('#uidRow').style.display = 'none';
+  if (!cfg.app_id) { showGate('应用未配置', '服务器尚未配置飞书 App ID，请联系管理员。'); return false; }
+  if (!window.h5sdk || !window.tt) {
+    showGate('请在飞书客户端中打开', '本应用需要飞书登录，请从飞书工作台进入「Trace Voice」。');
+    return false;
+  }
+  try {
+    applyLogin(await attemptFeishuLogin(cfg.app_id));
+    loadRecords();
+    return true;
+  } catch (e) {
+    console.warn('飞书登录失败', e);
+    showGate('需要登录飞书', '点击下方按钮登录；登录后录音会自动继续上传。');
+    return false;
+  }
+}
+async function quickRelogin() {
+  const now = Date.now();
+  if (state.mode !== 'real') return false;
+  if (now - state.reloginTriedAt < 5000) return false;
+  state.reloginTriedAt = now;
+  try {
+    const cfg = await fetchConfig();
+    if (!cfg.app_id) return false;
+    applyLogin(await attemptFeishuLogin(cfg.app_id));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* ---------- API ---------- */
+async function rawApi(path, opts = {}) {
+  const auth = state.token ? { Authorization: 'Bearer ' + state.token } : {};
+  return fetch(API + path, {
+    ...opts,
+    headers: { 'X-Employee-Open-Id': uid(), ...auth, ...(opts.headers || {}) },
+  });
+}
+async function api(path, opts = {}, retried = false) {
+  const r = await rawApi(path, opts);
+  if (r.status === 401) {
+    if (!retried && (await quickRelogin())) return api(path, opts, true);
+    showGate('需要登录飞书', '登录状态已失效，点下方按钮重新登录；录音会继续，恢复后自动上传。');
+    throw new Error('未登录');
+  }
+  if (r.status === 204) return null;
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+/* ---------- 录音（一次授权，分段转存） ---------- */
 function floatToInt16(f) { const s = Math.max(-1, Math.min(1, f)); return s < 0 ? s * 0x8000 : s * 0x7fff; }
-
 function downsampleTo16k(input, srcRate) {
   if (srcRate === 16000) {
     const out = new Int16Array(input.length);
@@ -134,15 +261,13 @@ function downsampleTo16k(input, srcRate) {
   const n = Math.floor(input.length / ratio);
   const out = new Int16Array(n);
   for (let i = 0; i < n; i++) {
-    const start = Math.floor(i * ratio);
-    const end = Math.min(input.length, Math.floor((i + 1) * ratio));
+    const start = Math.floor(i * ratio), end = Math.min(input.length, Math.floor((i + 1) * ratio));
     let sum = 0;
     for (let j = start; j < end; j++) sum += input[j];
     out[i] = floatToInt16(end > start ? sum / (end - start) : 0);
   }
   return out;
 }
-
 function encodeWav16k(samples) {
   const rate = 16000, bytes = 2, channels = 1;
   const buf = new ArrayBuffer(44 + samples.length * bytes);
@@ -162,7 +287,7 @@ class WavRecorder {
   constructor() { this.chunks = []; this.samples = 0; this.state = 'idle'; }
   async start() {
     this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     const AC = window.AudioContext || window.webkitAudioContext;
     let ctx;
@@ -176,11 +301,10 @@ class WavRecorder {
     this.levelBuf = new Uint8Array(this.analyser.fftSize);
     this.proc = ctx.createScriptProcessor(4096, 1, 1);
     this.gain = ctx.createGain();
-    this.gain.gain.value = 0; // 静音，仅保持音频图运行
+    this.gain.gain.value = 0;
     this.proc.onaudioprocess = (e) => {
       if (this.state !== 'recording') return;
-      const data = e.inputBuffer.getChannelData(0);
-      const pcm = downsampleTo16k(data, this.srcRate);
+      const pcm = downsampleTo16k(e.inputBuffer.getChannelData(0), this.srcRate);
       this.chunks.push(pcm);
       this.samples += pcm.length;
     };
@@ -188,85 +312,105 @@ class WavRecorder {
     this.proc.connect(this.gain);
     this.gain.connect(ctx.destination);
     this.state = 'recording';
-    log('录音中，采样率 ' + this.srcRate + ' → 16k');
+    log('录音中（麦克风只申请一次，后续分段不再重复弹窗）');
   }
   level() {
     if (!this.analyser) return 0;
     this.analyser.getByteTimeDomainData(this.levelBuf);
     let sum = 0;
-    for (let i = 0; i < this.levelBuf.length; i++) {
-      const v = (this.levelBuf[i] - 128) / 128;
-      sum += v * v;
-    }
+    for (let i = 0; i < this.levelBuf.length; i++) { const v = (this.levelBuf[i] - 128) / 128; sum += v * v; }
     return Math.min(1, Math.sqrt(sum / this.levelBuf.length) * 4);
+  }
+  flush() {
+    if (!this.samples) return null;
+    const out = new Int16Array(this.samples);
+    let o = 0;
+    for (const c of this.chunks) { out.set(c, o); o += c.length; }
+    this.chunks = []; this.samples = 0;
+    return encodeWav16k(out);
   }
   async stop() {
     this.state = 'stopped';
     try {
       this.proc.disconnect(); this.source.disconnect(); this.analyser.disconnect(); this.gain.disconnect();
-      this.stream.getTracks().forEach(t => t.stop());
+      this.stream.getTracks().forEach((t) => t.stop());
       await this.ctx.close();
     } catch (e) { /* ignore */ }
-    const out = new Int16Array(this.samples);
-    let o = 0;
-    for (const c of this.chunks) { out.set(c, o); o += c.length; }
-    this.chunks = [];
-    return encodeWav16k(out);
   }
 }
 
-/* ---------- 会话状态 ---------- */
-const S = { rid: null, segIdx: 0, rec: null, segStart: 0, base: 0, timer: null, running: false, token: '', openId: '', userName: '', mode: 'mock' };
-
-function fmt(ms) {
-  const s = Math.floor(ms / 1000), m = Math.floor(s / 60);
-  return String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+/* ---------- 上传队列（弱网优先录音） ---------- */
+function queueHint() {
+  if (!state.pending.length) return;
+  $('#hint').textContent = '有 ' + state.pending.length + ' 段待上传，录音继续；网络恢复后自动补齐。';
 }
-function tick() {
-  if (!S.running) return;
-  $('#timer').textContent = fmt(S.base + (Date.now() - S.segStart));
-  if (S.rec) $('#levelBar').style.width = Math.round(S.rec.level() * 100) + '%';
-}
-
-async function api(path, opts = {}) {
-  const auth = S.token ? { Authorization: 'Bearer ' + S.token } : {};
-  const r = await fetch(API + path, {
-    ...opts,
-    headers: { 'X-Employee-Open-Id': uid(), ...auth, ...(opts.headers || {}) }
+async function waitOnline() {
+  if (navigator.onLine) return;
+  log('网络已断开，继续录音，恢复后自动上传…');
+  await new Promise((resolve) => {
+    const h = () => { window.removeEventListener('online', h); resolve(); };
+    window.addEventListener('online', h);
   });
-  if (r.status === 401) {
-    showGate('需要登录飞书', '请从飞书工作台打开本应用后再使用。');
-    throw new Error('未登录');
+  log('网络已恢复，继续上传…');
+}
+function enqueue(idx, blob) {
+  if (!blob || blob.size < 1000) return;
+  state.pending.push({ idx, blob, attempts: 0 });
+  queueHint();
+  pump();
+}
+async function pump() {
+  if (state.pumping || !state.rid) return;
+  state.pumping = true;
+  try {
+    while (state.pending.length) {
+      const item = state.pending[0];
+      try {
+        const fd = new FormData();
+        fd.append('file', item.blob, 'seg_' + item.idx + '.wav');
+        const r = await rawApi('/recordings/' + state.rid + '/segments?idx=' + item.idx, { method: 'POST', body: fd });
+        if (r.status === 401) {
+          if (await quickRelogin()) continue;
+          showGate('需要登录飞书', '登录状态已失效，点下方按钮重新登录；录音会继续，恢复后自动上传。');
+          break;
+        }
+        if (!r.ok) throw new Error(await r.text());
+        state.pending.shift();
+        log('第 ' + (item.idx + 1) + ' 段已上传');
+        queueHint();
+      } catch (e) {
+        item.attempts += 1;
+        log('第 ' + (item.idx + 1) + ' 段上传失败（第 ' + item.attempts + ' 次），录音继续，稍后自动重试');
+        await waitOnline();
+        await sleep(Math.min(15000, 2000 * item.attempts));
+      }
+    }
+  } finally {
+    state.pumping = false;
+    if (!state.pending.length) $('#hint').textContent = '手机放桌面中央，录音时请勿锁屏；每 2 分钟自动保存一段。';
   }
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  if (state.finishing && !state.pending.length) await doFinish();
 }
 
+/* ---------- 会话 ---------- */
 async function createRecording() {
   return api('/recordings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: $('#title').value.trim() || '未命名会议', scene: $('#scene').value })
+    body: JSON.stringify({ title: $('#title').value.trim() || autoTitle(), scene: $('#scene').value }),
   });
 }
-
-async function uploadSegment(idx, blob) {
-  let lastErr;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const fd = new FormData();
-      fd.append('file', blob, 'seg_' + idx + '.wav');
-      const r = await fetch(API + '/recordings/' + S.rid + '/segments?idx=' + idx, {
-        method: 'POST', body: fd, headers: { 'X-Employee-Open-Id': uid() }
-      });
-      if (!r.ok) throw new Error(await r.text());
-      log('第 ' + (idx + 1) + ' 段已上传（' + (blob.size / 1048576).toFixed(1) + ' MB）');
-      return await r.json();
-    } catch (e) { lastErr = e; log('第 ' + (idx + 1) + ' 段上传失败（第 ' + attempt + ' 次）：' + e.message); await new Promise(r => setTimeout(r, 1500 * attempt)); }
-  }
-  throw lastErr;
+function tick() {
+  if (!state.running) return;
+  $('#timer').textContent = fmt(Date.now() - state.startedAt);
+  if (state.rec) $('#levelBar').style.width = Math.round(state.rec.level() * 100) + '%';
 }
-
+function rotateSegment() {
+  if (!state.running || !state.rec) return;
+  const blob = state.rec.flush();
+  enqueue(state.idx++, blob);
+  state.rotate = setTimeout(rotateSegment, SEG_MS);
+}
 let wakeLock = null;
 async function acquireWakeLock() {
   try {
@@ -274,187 +418,91 @@ async function acquireWakeLock() {
       wakeLock = await navigator.wakeLock.request('screen');
       wakeLock.addEventListener('release', () => { wakeLock = null; });
     }
-  } catch (e) { /* 不支持或被拒绝时静默 */ }
+  } catch (e) { /* 忽略 */ }
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && S.running && !wakeLock) acquireWakeLock();
+  if (document.visibilityState === 'visible' && state.running && !wakeLock) acquireWakeLock();
 });
-
-async function beginSegment() {
-  acquireWakeLock();
-  S.rec = new WavRecorder();
-  await S.rec.start();
-  S.segStart = Date.now();
-  S.running = true;
-  $('#dot').style.display = 'inline-block';
-  $('#timer').style.display = '';
-  S.timer = setInterval(tick, 500);
-  clearTimeout(S.autoTimer);
-  S.autoTimer = setTimeout(() => endSegment(true), MAX_SEG_MS);
-}
-
-async function endSegment(autoNext) {
-  S.running = false;
-  if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
-  clearTimeout(S.autoTimer);
-  clearInterval(S.timer);
-  const blob = await S.rec.stop();
-  S.base += Date.now() - S.segStart;
-  $('#dot').style.display = 'none';
-  const idx = S.segIdx++;
-  try { await uploadSegment(idx, blob); }
-  catch (e) {
-    S.pending = { idx, blob };
-    S.pendingAutoNext = autoNext;
-    $('#retryBox').style.display = 'flex';
-    log('本段上传失败（' + e.message + '）。音频还在内存里，点「重试上传本段」即可，不用重录。');
-    return;
-  }
-  if (autoNext) { log('自动进入下一段…'); await beginSegment(); }
-}
 
 async function startSession() {
   $('#result').style.display = 'none';
   $('#status').textContent = '';
   if (!titleTouched || !$('#title').value.trim()) $('#title').value = autoTitle();
   const rec = await createRecording();
-  S.rid = rec.id; S.segIdx = 0; S.base = 0;
+  state.rid = rec.id; state.idx = 0; state.pending = []; state.finishing = false;
   localStorage.setItem('fm_rid', rec.id);
   log('已创建录音会话：' + rec.id);
-  $('#btnStart').disabled = true; $('#btnStop').disabled = false;
-  await beginSegment();
+  $('#btnStart').disabled = true;
+  $('#btnStop').disabled = false;
+  state.rec = new WavRecorder();
+  await state.rec.start();
+  acquireWakeLock();
+  state.running = true;
+  state.startedAt = Date.now();
+  $('#dot').style.display = 'inline-block';
+  state.tick = setInterval(tick, 500);
+  state.rotate = setTimeout(rotateSegment, SEG_MS);
 }
 
-async function finishSession() {
+async function stopSession() {
+  state.running = false;
+  clearTimeout(state.rotate);
+  clearInterval(state.tick);
+  if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
+  $('#dot').style.display = 'none';
   $('#btnStop').disabled = true;
-  log('上传完成，开始转写与生成纪要…');
-  await api('/recordings/' + S.rid + '/finish', { method: 'POST' });
-  localStorage.removeItem('fm_rid');
-  poll();
+  const blob = state.rec.flush();
+  enqueue(state.idx++, blob);
+  await state.rec.stop();
+  log('录音结束，处理中…');
+  state.finishing = true;
+  if (!state.pending.length) await doFinish();
+  else log('等待 ' + state.pending.length + ' 段上传完成后自动生成纪要…');
+}
+
+async function doFinish() {
+  state.finishing = false;
+  try {
+    await api('/recordings/' + state.rid + '/finish', { method: 'POST' });
+    localStorage.removeItem('fm_rid');
+    poll();
+  } catch (e) {
+    log('提交失败：' + e.message);
+    state.finishing = true;
+  }
 }
 
 async function poll() {
-  const rec = await api('/recordings/' + S.rid);
+  const rec = await api('/recordings/' + state.rid);
   log('状态：' + rec.status);
   if (rec.status === 'done') {
     $('#result').style.display = 'block';
     const s = rec.summary || {};
-    $('#result').innerHTML = '<h1>' + rec.title + '</h1>' +
+    const docBtn = rec.doc_url ? '<p><a href="' + rec.doc_url + '" target="_blank">打开飞书文档</a></p>' : '';
+    $('#result').innerHTML = '<h1>' + escHtml(rec.title) + '</h1>' +
       '<div class="meta">时长 ' + rec.duration_sec + ' 秒 · ' + rec.segment_count + ' 段</div>' +
-      '<p>' + (s.summary || '') + '</p>' +
+      '<p>' + escHtml(s.summary || '') + '</p>' + docBtn +
       '<p><a href="/d/' + rec.id + '">查看完整纪要 / 播放录音</a></p>';
     $('#btnStart').disabled = false;
     loadRecords();
     return;
   }
   if (rec.status === 'failed') {
-    log('处理失败：' + rec.error);
     $('#result').style.display = 'block';
-    $('#result').innerHTML = '<h1>处理失败</h1><p class="meta">' + rec.error + '</p>' +
+    $('#result').innerHTML = '<h1>处理失败</h1><p class="meta">' + escHtml(rec.error) + '</p>' +
       '<div class="row"><button id="btnRetry">重新生成</button></div>';
     document.getElementById('btnRetry').onclick = async () => {
       $('#result').innerHTML = '<div class="meta">已重新排队…</div>';
-      await api('/recordings/' + S.rid + '/rerun', { method: 'POST' });
+      await api('/recordings/' + state.rid + '/rerun', { method: 'POST' });
       poll();
     };
     $('#btnStart').disabled = false;
     return;
   }
-  setTimeout(poll, 2000);
+  setTimeout(poll, 2500);
 }
-
-/* ---------- 事件 ---------- */
-$('#btnStart').onclick = async () => {
-  try { await startSession(); }
-  catch (e) {
-    const name = e && e.name || '';
-    const hint = name === 'NotAllowedError' ? '麦克风权限被拒绝：请在浏览器/飞书设置里允许麦克风后刷新页面。'
-      : name === 'NotFoundError' ? '没有找到麦克风设备。'
-      : name === 'NotReadableError' ? '麦克风被其他应用占用，关掉录音类应用后重试。'
-      : e.message;
-    log('启动失败：' + hint);
-    $('#btnStart').disabled = false;
-  }
-};
-
-$('#btnStop').onclick = async () => {
-  $('#btnStop').disabled = true;
-  if (S.running) await endSegment(false);
-  await finishSession();
-};
-
-$('#btnRetryUpload').onclick = async () => {
-  if (!S.pending) return;
-  const { idx, blob } = S.pending;
-  $('#btnRetryUpload').disabled = true;
-  try {
-    await uploadSegment(idx, blob);
-    S.pending = null;
-    $('#retryBox').style.display = 'none';
-    if (S.pendingAutoNext) { await beginSegment(); }
-    else { await finishSession(); }
-  } catch (e) {
-    log('仍然失败：' + e.message);
-  } finally {
-    $('#btnRetryUpload').disabled = false;
-  }
-};
-
-
-/* ---------- 录音记录 ---------- */
-let RECS = [];
-
-async function loadRecords() {
-  try { RECS = await api('/recordings'); } catch (e) { RECS = []; }
-  renderRecords();
-}
-
-function hoursAgo(iso) { return (Date.now() - new Date(iso).getTime()) / 3600000; }
-
-function renderRecords() {
-  const range = $('#recRange').value;
-  const q = $('#recSearch').value.trim().toLowerCase();
-  const list = RECS.filter(r => {
-    if (q && !(r.title || '').toLowerCase().includes(q)) return false;
-    if (range === 'all') return true;
-    if (range === 'today') return new Date(r.created_at).toDateString() === new Date().toDateString();
-    return hoursAgo(r.created_at) <= Number(range) * 24;
-  });
-  $('#recCount').textContent = list.length ? list.length + ' 条' : '';
-  if (!list.length) {
-    $('#recList').innerHTML = '<div class="empty">暂无录音记录</div>';
-    return;
-  }
-  $('#recList').innerHTML = list.map(r => {
-    const d = new Date(r.created_at);
-    const when = isNaN(d) ? r.created_at : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const dur = r.duration_sec ? Math.round(r.duration_sec / 60 * 10) / 10 + ' 分钟' : '';
-    const label = { done: '已完成', failed: '失败', recording: '录音中', queued: '排队中', transcribing: '转写中', summarizing: '生成纪要' }[r.status] || r.status;
-    return `<div class="rec-item">
-      <div class="rec-main">
-        <a class="rec-title" href="/d/${r.id}">${escHtml(r.title)}</a>
-        <div class="rec-meta">${when}${dur ? ' · ' + dur : ''} · ${label}</div>
-      </div>
-      <button class="ghost rec-del" data-id="${r.id}">移除</button>
-    </div>`;
-  }).join('');
-  document.querySelectorAll('.rec-del').forEach(btn => {
-    btn.onclick = async () => {
-      if (!confirm('移除这条录音记录？音频与纪要将一并删除。')) return;
-      btn.disabled = true;
-      try { await api('/recordings/' + btn.dataset.id, { method: 'DELETE' }); }
-      catch (e) { alert('移除失败：' + e.message); btn.disabled = false; return; }
-      await loadRecords();
-    };
-  });
-}
-
-$('#recRange').addEventListener('change', renderRecords);
-$('#recSearch').addEventListener('input', renderRecords);
 
 /* ---------- 断点续录 ---------- */
-function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-
 async function checkResume() {
   const rid = localStorage.getItem('fm_rid');
   if (!rid) return;
@@ -465,121 +513,96 @@ async function checkResume() {
       box.style.display = 'block';
       box.innerHTML = '<div class="meta">上次有一段未完成的录音</div>' +
         '<div style="font-weight:600;margin:4px 0 10px">' + escHtml(rec.title) + ' · 已上传 ' + rec.segment_count + ' 段</div>' +
-        '<div class="row"><button id="btnResume">继续录音</button>' +
-        '<button id="btnIgnore" class="ghost">忽略</button></div>';
-      document.getElementById('btnResume').onclick = () => {
-        box.style.display = 'none';
-        startResume(rec);
-      };
-      document.getElementById('btnIgnore').onclick = () => {
-        localStorage.removeItem('fm_rid');
-        box.style.display = 'none';
-      };
+        '<div class="row"><button id="btnResume">继续录音</button><button id="btnIgnore" class="ghost">忽略</button></div>';
+      document.getElementById('btnResume').onclick = () => { box.style.display = 'none'; startResume(rec); };
+      document.getElementById('btnIgnore').onclick = () => { localStorage.removeItem('fm_rid'); box.style.display = 'none'; };
     } else {
       localStorage.removeItem('fm_rid');
     }
-  } catch (e) {
-    localStorage.removeItem('fm_rid');
-  }
+  } catch (e) { localStorage.removeItem('fm_rid'); }
 }
-
 async function startResume(rec) {
-  S.rid = rec.id;
-  S.segIdx = rec.next_segment_index || rec.segment_count || 0;
-  S.base = 0;
+  state.rid = rec.id;
+  state.idx = rec.next_segment_index || rec.segment_count || 0;
+  state.pending = [];
   $('#result').style.display = 'none';
   $('#status').textContent = '';
   $('#btnStart').disabled = true;
   $('#btnStop').disabled = false;
-  log('继续录音：' + rec.id + '，从第 ' + (S.segIdx + 1) + ' 段开始');
-  await beginSegment();
+  log('继续录音：' + rec.id + '，从第 ' + (state.idx + 1) + ' 段开始');
+  state.rec = new WavRecorder();
+  await state.rec.start();
+  acquireWakeLock();
+  state.running = true;
+  state.startedAt = Date.now();
+  $('#dot').style.display = 'inline-block';
+  state.tick = setInterval(tick, 500);
+  state.rotate = setTimeout(rotateSegment, SEG_MS);
 }
 
-/* ---------- 飞书免登（网页应用内） ---------- */
-const LOGIN_SCRIPT_FLAG = 'fm_login_done';
-
-function showGate(title, msg) {
-  $('#gate').style.display = 'grid';
-  $('#gateTitle').textContent = title;
-  $('#gateMsg').textContent = msg;
-  document.body.classList.add('locked');
+/* ---------- 录音记录 ---------- */
+let RECS = [];
+async function loadRecords() {
+  try { RECS = await api('/recordings'); } catch (e) { RECS = []; }
+  renderRecords();
 }
-function hideGate() {
-  $('#gate').style.display = 'none';
-  document.body.classList.remove('locked');
-}
-
-async function fetchConfig() {
-  try { return await fetch(API + '/feishu/app-id').then(r => r.json()); }
-  catch (e) { return { app_id: '', mode: 'mock' }; }
-}
-
-async function attemptFeishuLogin(appId) {
-  if (!window.h5sdk || !window.tt) throw new Error('NOT_IN_FEISHU');
-  const code = await new Promise((resolve, reject) => {
-    window.h5sdk.error(err => console.warn('h5sdk error', err));
-    window.h5sdk.ready(() => {
-      const ok = (res) => resolve(res.code);
-      const fail = (err) => reject(new Error('AUTH_FAIL:' + JSON.stringify(err)));
-      if (window.tt.requestAccess) {
-        window.tt.requestAccess({ appID: appId, scopeList: [], success: ok, fail });
-      } else if (window.tt.requestAuthCode) {
-        window.tt.requestAuthCode({ appId: appId, success: ok, fail });
-      } else {
-        reject(new Error('NO_AUTH_API'));
-      }
-    });
+function hoursAgo(iso) { return (Date.now() - new Date(iso).getTime()) / 3600000; }
+function renderRecords() {
+  const range = $('#recRange').value;
+  const q = $('#recSearch').value.trim().toLowerCase();
+  const list = RECS.filter((r) => {
+    if (q && !(r.title || '').toLowerCase().includes(q)) return false;
+    if (range === 'all') return true;
+    if (range === 'today') return new Date(r.created_at).toDateString() === new Date().toDateString();
+    return hoursAgo(r.created_at) <= Number(range) * 24;
   });
-  const r = await fetch(API + '/auth/feishu-login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
+  $('#recCount').textContent = list.length ? list.length + ' 条' : '';
+  if (!list.length) { $('#recList').innerHTML = '<div class="empty">暂无录音记录</div>'; return; }
+  $('#recList').innerHTML = list.map((r) => {
+    const d = new Date(r.created_at);
+    const when = isNaN(d) ? r.created_at : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const dur = r.duration_sec ? Math.round(r.duration_sec / 60 * 10) / 10 + ' 分钟' : '';
+    const label = { done: '已完成', failed: '失败', recording: '录音中', queued: '排队中', transcribing: '转写中', summarizing: '生成纪要' }[r.status] || r.status;
+    return '<div class="rec-item"><div class="rec-main">' +
+      '<a class="rec-title" href="/d/' + r.id + '">' + escHtml(r.title) + '</a>' +
+      '<div class="rec-meta">' + when + (dur ? ' · ' + dur : '') + ' · ' + label + '</div></div>' +
+      '<button class="ghost rec-del" data-id="' + r.id + '">移除</button></div>';
+  }).join('');
+  document.querySelectorAll('.rec-del').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm('移除这条录音记录？音频与纪要将一并删除。')) return;
+      btn.disabled = true;
+      try { await api('/recordings/' + btn.dataset.id, { method: 'DELETE' }); }
+      catch (e) { alert('移除失败：' + e.message); btn.disabled = false; return; }
+      await loadRecords();
+    };
   });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.detail || 'LOGIN_FAILED');
-  S.token = data.token; S.openId = data.open_id;
-  $('#uid').value = data.open_id;
-  localStorage.setItem('fm_uid', data.open_id);
-  localStorage.setItem('fm_token', data.token);
-  return data;
 }
+$('#recRange').addEventListener('change', renderRecords);
+$('#recSearch').addEventListener('input', renderRecords);
 
-async function ensureLogin() {
-  const cfg = await fetchConfig();
-  S.mode = cfg.mode || 'mock';
-  if (S.mode !== 'real') {
-    $('#uidRow').style.display = '';
-    if (!$('#uid').value) $('#uid').value = localStorage.getItem('fm_uid') || 'demo';
-    $('#who').textContent = '开发模式 · 模拟身份 ' + uid();
-    if (!titleTouched) $('#title').value = autoTitle();
-    loadRecords();
-    hideGate();
-    return;
+/* ---------- 事件与初始化 ---------- */
+$('#btnStart').onclick = async () => {
+  try { await startSession(); }
+  catch (e) {
+    const name = (e && e.name) || '';
+    const hint = name === 'NotAllowedError' ? '麦克风权限被拒绝：请在浏览器/飞书设置里允许麦克风后重试。'
+      : name === 'NotFoundError' ? '没有找到麦克风设备。'
+      : name === 'NotReadableError' ? '麦克风被其他应用占用，关闭录音类应用后重试。'
+      : e.message;
+    log('启动失败：' + hint);
+    $('#btnStart').disabled = false;
   }
-  $('#uidRow').style.display = 'none';
-  if (!cfg.app_id) { showGate('应用未配置', '服务器尚未配置飞书 App ID，请联系管理员。'); return; }
-  if (!window.h5sdk || !window.tt) {
-    showGate('请在飞书客户端中打开', '本应用需要飞书登录，请从飞书工作台进入「纪要录音」。');
-    return;
-  }
-  try {
-    const data = await attemptFeishuLogin(cfg.app_id);
-    $('#who').textContent = '已登录：' + (data.name || data.open_id);
-    hideGate();
-    loadRecords();
-  } catch (e) {
-    console.warn('飞书登录失败', e);
-    const msg = String((e && e.message) || e);
-    if (msg === 'NOT_IN_FEISHU') {
-      showGate('请在飞书客户端中打开', '本应用需要飞书登录，请从飞书工作台进入「纪要录音」。');
-    } else {
-      showGate('登录失败', '请重新在飞书内打开；若持续失败，请检查应用的重定向 URL 配置。');
-    }
-  }
-}
-
+};
+$('#btnStop').onclick = stopSession;
 $('#btnRelogin').onclick = () => ensureLogin();
+window.addEventListener('online', () => { if (state.pending.length) pump(); });
 
-window.addEventListener('load', () => { if (!$('#title').value) $('#title').value = autoTitle(); ensureLogin(); checkResume(); });
+window.addEventListener('load', () => {
+  if (!$('#title').value) $('#title').value = autoTitle();
+  ensureLogin().then(() => { checkResume(); loadRecords(); });
+});
+
 </script>
 </body>
 </html>
