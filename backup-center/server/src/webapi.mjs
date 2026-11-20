@@ -94,11 +94,19 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
       ctx.res.writeHead(302, { Location: `/login?oidc_error=${encodeURIComponent(oidcError)}&oidc_desc=${encodeURIComponent(desc)}` });
       return ctx.res.end();
     }
-    const { session, returnTo, user } = await auth.oidcCallback(ctx.query.get('code'), ctx.query.get('state'));
-    ctx.res.setHeader('Set-Cookie', cookieHeader(cookieName, session.sid, { secure: secureCookie, maxAge: 8 * 3600 }));
-    audit({ actor: user.username, action: 'auth.oidc_login', target: user.username, ip: clientIp(ctx.req) });
-    ctx.res.writeHead(302, { Location: returnTo || '/' });
-    ctx.res.end();
+    try {
+      const { session, returnTo, user } = await auth.oidcCallback(ctx.query.get('code'), ctx.query.get('state'));
+      ctx.res.setHeader('Set-Cookie', cookieHeader(cookieName, session.sid, { secure: secureCookie, maxAge: 8 * 3600 }));
+      audit({ actor: user.username, action: 'auth.oidc_login', target: user.username, ip: clientIp(ctx.req) });
+      ctx.res.writeHead(302, { Location: returnTo || '/' });
+      ctx.res.end();
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : 'oidc_error';
+      const desc = e instanceof ApiError ? e.message : '统一身份登录失败';
+      audit({ actor: 'anonymous', action: 'auth.oidc_denied', target: '', ip: clientIp(ctx.req), result: 'denied', detail: { code, desc } });
+      ctx.res.writeHead(302, { Location: `/login?oidc_error=${encodeURIComponent(code)}&oidc_desc=${encodeURIComponent(desc)}` });
+      ctx.res.end();
+    }
   });
 
   router.add('GET', '/auth/oidc/logout', async (ctx) => {
@@ -706,6 +714,12 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
         session: session || null, user: session ? session.user : null,
       };
       try {
+        // 仅管理员可访问管理/数据接口（Group_Roots 成员或本地应急 admin）
+        const publicApi = new Set(['/api/auth/login', '/api/auth/config', '/api/auth/logout']);
+        if (pathname.startsWith('/api/') && !publicApi.has(pathname)) {
+          if (!session) throw new ApiError(401, 'unauthorized', '请先登录');
+          if (session.user.role !== 'admin') throw new ApiError(403, 'forbidden', '仅管理员可访问');
+        }
         if (req.method !== 'GET' && req.method !== 'HEAD' && !pathname.startsWith('/api/auth/login') && !pathname.startsWith('/auth/oidc')) checkCsrf(ctx);
         await match.handler(ctx);
       } catch (e) {

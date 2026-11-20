@@ -45,6 +45,11 @@ try {
   store.run(`INSERT OR IGNORE INTO client_repo_keys(client_id,repository_id,repo_password_enc,created_at)
              SELECT client_id,repository_id,repo_password_enc,created_at FROM client_repos`);
 } catch (e) { console.error('[migrate] client_repo_keys', e.message); }
+// 安全迁移：只允许 admin 角色登录后，清理历史 viewer/operator 会话并停用 OIDC 非管理员账号
+try {
+  store.run("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin')");
+  store.run("UPDATE users SET enabled=0 WHERE source='oidc' AND role <> 'admin'");
+} catch (e) { console.error('[migrate] admin-only sessions', e.message); }
 const masterKey = loadOrCreateMasterKey(path.join(cfg.paths.data, 'master.key'));
 const caFiles = ensureCa(cfg.paths.data);
 const ca = { ...caFiles, signClientCsr: (_self, opts) => signClientCsr(caFiles, opts) };

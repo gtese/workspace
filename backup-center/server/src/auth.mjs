@@ -68,6 +68,9 @@ export function createAuth({ cfg, store }) {
       loginFails.set(key, rec);
       throw new ApiError(401, 'unauthorized', '用户名或密码错误');
     }
+    if (user.role !== 'admin') {
+      throw new ApiError(403, 'forbidden', '仅 Group_Roots 管理员可登录本系统');
+    }
     loginFails.delete(key);
     store.run('UPDATE users SET last_login_at=? WHERE id=?', nowIso(), user.id);
     return createSession(user.id, meta);
@@ -196,9 +199,11 @@ export function createAuth({ cfg, store }) {
     const adminMatchers = [cfg.oidc.admin_group, cfg.oidc.admin_role, 'Group_Roots', 'backup:admin']
       .filter(Boolean).map(norm);
     const hasAdmin = [...groups, ...roles].some((v) => adminMatchers.includes(norm(v)));
-    let role = 'viewer';
-    if (hasAdmin) role = 'admin';
-    else if (cfg.oidc.operator_group && [...groups, ...roles].some((v) => norm(v) === norm(cfg.oidc.operator_group))) role = 'operator';
+    const role = hasAdmin ? 'admin' : 'viewer';
+    if (role !== 'admin') {
+      // 只允许 Group_Roots / backup:admin 成员登录；其他 AD 账号直接拒绝，不创建用户、不发会话
+      throw new ApiError(403, 'forbidden', '仅 Group_Roots 成员可登录本系统');
+    }
     const username = String(claims.preferred_username || claims.email || claims.sub).slice(0, 128);
     let user = store.get('SELECT * FROM users WHERE username=?', username);
     if (!user) {
@@ -207,7 +212,7 @@ export function createAuth({ cfg, store }) {
         userId, username, String(claims.name || username), String(claims.email || ''), role, 'oidc', nowIso());
       user = store.get('SELECT * FROM users WHERE id=?', userId);
     } else {
-      store.run('UPDATE users SET display_name=?,email=?,role=?,last_login_at=? WHERE id=?',
+      store.run('UPDATE users SET display_name=?,email=?,role=?,enabled=1,last_login_at=? WHERE id=?',
         String(claims.name || user.display_name || username), String(claims.email || user.email || ''), role, nowIso(), user.id);
       user = store.get('SELECT * FROM users WHERE id=?', user.id);
     }

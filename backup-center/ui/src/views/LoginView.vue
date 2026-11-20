@@ -221,7 +221,7 @@ async function submit() {
             </a>
 
             <p class="mt-6 text-center text-xs leading-5 text-slate-400">
-              企业账号经 Keycloak 单点登录；Group_Roots 成员为管理员，其他成员只读。
+              仅 Group_Roots 成员可登录（管理员）；其他 AD 账号会被拒绝。
             </p>
           </template>
           <p v-else-if="oidcChecked" class="mt-6 text-center text-xs leading-5 text-slate-400">
