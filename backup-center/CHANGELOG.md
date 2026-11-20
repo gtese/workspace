@@ -1,0 +1,16 @@
+# 变更记录
+
+## 2026-11-20
+- 项目文档成型：`docs/项目文档.md`、README 更新、内网 GitLab 仓库 `it/backup` 发布。
+
+## 2026-11-19
+- 修复节点删除后仍显示：软删除记录默认从列表/统计过滤，计划自动停用。
+- 接入命令内置**企业根 CA**（base64），避免首次 `curl -k`；修正误用平台代理 CA 的问题。
+- 文档补充一次性 token、节点接入/删除、保留策略说明。
+- 多备份池 prune/check 按 (节点, 池) 维度执行。
+
+## 2026-11-18
+- Keycloak SSO 启用：`backup-center` client、groups/roles mapper、`backup:admin` 授予 `Group_Roots`；其他员工 viewer。
+- 多备份池：`client_repo_keys`、按池浏览/下载/恢复、路径安全校验。
+- 修复审批中心只加载 pending、恢复干跑与 SELinux xattr、REST 协议/证书链问题。
+- 生产验收：安装、备份、增量、恢复、校验、审计。

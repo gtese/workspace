@@ -1,7 +1,8 @@
 # backup-center — 集中式文件备份平台
 
 > 部署主机：`172.16.50.150`（`eda.tri.local`）
-> 访问地址：`https://backup.tri.local`（DNS 待添加；临时可用 `https://backup.tri.local`）
+> 访问地址：**https://backup.tri.local**（旧域名 `https://eda.tri.local` 兼容）
+> 代码仓库：https://git.tri.local/it/backup.git
 
 ## 能力
 
@@ -9,8 +10,8 @@
 - 代理模式：Linux（systemd）/ macOS（launchd），只出站，mTLS 双向认证
 - 引擎：restic 0.18.0（首次全备 + 永久增量去重、zstd 压缩、AES-256 加密、快照保留）
 - 数据面：Node 内置 restic REST 协议（mTLS + append-only + 每个节点独立仓库）
-- 存储位置：本地目录 / NFS / SMB(CIFS) / FTP(S)
-- 身份：Keycloak SSO + 本地应急管理员，RBAC（admin/operator/viewer/auditor）
+- 存储位置：本地目录 / NFS / SMB(CIFS) / FTP(S)；一个节点可加入多个备份池
+- 身份：Keycloak SSO（`Group_Roots`=管理员，其他员工只读）+ 本地应急管理员
 
 ## 目录
 
@@ -39,11 +40,29 @@ cd agent && go test ./...
 ../scripts/build-agent.sh
 ```
 
+## 项目文档
+
+| 文档 | 内容 |
+|---|---|
+| [项目文档](docs/项目文档.md) | 总览、架构、部署信息、权限、保留/恢复、验收摘要 |
+| [架构](docs/架构.md) | 组件、数据模型、API/Agent 契约 |
+| [部署手册](docs/部署手册.md) | 构建、安装、节点接入、SSO、升级 |
+| [运维手册](docs/运维手册.md) | 服务、巡检、故障排查、告警 |
+| [用户手册](docs/用户手册.md) | 登录、审批、计划、快照、恢复、保留策略 |
+| [灾难恢复](docs/灾难恢复.md) | 主密钥托管、仓库副本、重建与演练 |
+| [Keycloak 接入参数](docs/Keycloak接入参数.md) | client/claim/角色映射 |
+| [验收报告](docs/验收报告.md) | 测试用例与结果 |
+| [变更记录](CHANGELOG.md) | 版本与修复记录 |
+
 ## 部署
 
-见 [docs/部署手册.md](docs/部署手册.md)、[运维手册](docs/运维手册.md)、[用户手册](docs/用户手册.md)、[灾难恢复](docs/灾难恢复.md)、[验收报告](docs/验收报告.md)。
+生产地址：`https://backup.tri.local`，详细步骤见[部署手册](docs/部署手册.md)。
 
-生产地址：`https://backup.tri.local`（`backup.tri.local` DNS 待添加）。
+## 界面
+
+![登录](docs/images/login.png)
+
+![概览](docs/images/dashboard.png)
 
 ## 版本
 
