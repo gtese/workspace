@@ -1,3 +1,3 @@
-from . import media, recordings
+from . import auth, media, recordings
 
-__all__ = ["media", "recordings"]
+__all__ = ["auth", "media", "recordings"]

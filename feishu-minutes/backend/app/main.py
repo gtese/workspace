@@ -5,9 +5,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
-from .api import media, recordings
+from .api import auth, media, recordings
 from .config import REPO_ROOT, get_settings
 from .db import init_db
+from .pipeline import recover_stuck
 from .schemas import HealthOut
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -18,14 +19,17 @@ WEB_DIR = REPO_ROOT / "web"
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
     init_db()
+    stuck = recover_stuck()
     s = get_settings()
     logging.getLogger(__name__).info(
-        "启动 %s | asr=%s llm=%s feishu=%s", s.app_name, s.asr_provider, s.llm_provider, s.feishu_mode
+        "启动 %s | asr=%s llm=%s feishu=%s | 恢复中断任务 %d 个",
+        s.app_name, s.asr_provider, s.llm_provider, s.feishu_mode, stuck,
     )
     yield
 
 
 app = FastAPI(title="feishu-minutes", version="0.1.0", lifespan=lifespan)
+app.include_router(auth.router)
 app.include_router(recordings.router)
 app.include_router(media.router)
 

@@ -42,3 +42,14 @@ class HealthOut(BaseModel):
     asr_provider: str
     llm_provider: str
     feishu_mode: str
+
+
+class FeishuLoginIn(BaseModel):
+    code: str = Field(min_length=1)
+
+
+class FeishuLoginOut(BaseModel):
+    open_id: str
+    name: str = ""
+    token: str
+    mock: bool = False

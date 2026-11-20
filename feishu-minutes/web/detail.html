@@ -30,8 +30,10 @@
 <script>
 const id = location.pathname.split('/').pop();
 const uid = localStorage.getItem('fm_uid') || 'demo';
+const token = localStorage.getItem('fm_token') || '';
+const authHeaders = { 'X-Employee-Open-Id': uid, ...(token ? { Authorization: 'Bearer ' + token } : {}) };
 async function load() {
-  const r = await fetch('/api/v1/recordings/' + id, { headers: { 'X-Employee-Open-Id': uid } });
+  const r = await fetch('/api/v1/recordings/' + id, { headers: authHeaders });
   if (!r.ok) { document.getElementById('app').textContent = '读取失败：' + (await r.text()); return; }
   const rec = await r.json();
   const s = rec.summary || {};

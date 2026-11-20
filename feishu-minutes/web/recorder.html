@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>纪要录音 · POC</title>
+<script defer src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.26.js"></script>
 <style>
   :root { --bg:#0f1115; --card:#171a21; --line:#262b36; --text:#e8ecf3; --muted:#8b94a7; --accent:#3b82f6; --danger:#ef4444; --ok:#22c55e; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -37,6 +38,7 @@
 <main>
   <h1>纪要录音 · POC</h1>
   <div class="sub">录音 → 分段上传 → 转写 → 纪要。当前为 mock ASR/LLM 链路，用于验证录音通路。</div>
+  <div class="meta" id="who" style="margin:-10px 0 14px">未登录（POC 用 open_id 模拟）</div>
 
   <div class="card">
     <label>会议标题</label>
@@ -187,7 +189,7 @@ class WavRecorder {
 }
 
 /* ---------- 会话状态 ---------- */
-const S = { rid: null, segIdx: 0, rec: null, segStart: 0, base: 0, timer: null, running: false };
+const S = { rid: null, segIdx: 0, rec: null, segStart: 0, base: 0, timer: null, running: false, token: '', openId: '' };
 
 function fmt(ms) {
   const s = Math.floor(ms / 1000), m = Math.floor(s / 60);
@@ -199,9 +201,10 @@ function tick() {
 }
 
 async function api(path, opts = {}) {
+  const auth = S.token ? { Authorization: 'Bearer ' + S.token } : {};
   const r = await fetch(API + path, {
     ...opts,
-    headers: { 'X-Employee-Open-Id': uid(), ...(opts.headers || {}) }
+    headers: { 'X-Employee-Open-Id': uid(), ...auth, ...(opts.headers || {}) }
   });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
@@ -320,6 +323,49 @@ $('#fileInput').onchange = async (e) => {
   } catch (err) { log('上传失败：' + err.message); }
   e.target.value = '';
 };
+
+/* ---------- 飞书免登（网页应用内） ---------- */
+async function ensureLogin() {
+  try {
+    const cfg = await fetch(API + '/feishu/app-id').then(r => r.json());
+    if (!cfg.app_id) {
+      $('#who').textContent = '未配置飞书应用，模拟身份：' + uid();
+      return;
+    }
+    if (!window.h5sdk || !window.tt) {
+      $('#who').textContent = '非飞书环境，模拟身份：' + uid();
+      return;
+    }
+    const code = await new Promise((resolve, reject) => {
+      window.h5sdk.error(err => console.warn('h5sdk error', err));
+      window.h5sdk.ready(() => {
+        const ok = (res) => resolve(res.code);
+        const fail = (err) => reject(new Error(JSON.stringify(err)));
+        if (window.tt.requestAccess) {
+          window.tt.requestAccess({ appID: cfg.app_id, scopeList: [], success: ok, fail });
+        } else if (window.tt.requestAuthCode) {
+          window.tt.requestAuthCode({ appId: cfg.app_id, success: ok, fail });
+        } else {
+          reject(new Error('客户端不支持 requestAccess'));
+        }
+      });
+    });
+    const r = await fetch(API + '/auth/feishu-login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || '登录失败');
+    S.token = data.token; S.openId = data.open_id;
+    localStorage.setItem('fm_uid', data.open_id);
+    localStorage.setItem('fm_token', data.token);
+    $('#who').textContent = '已登录：' + (data.name || data.open_id) + (data.mock ? '（mock）' : '');
+  } catch (e) {
+    console.warn('飞书登录失败', e);
+    $('#who').textContent = '登录失败，模拟身份：' + uid();
+  }
+}
+window.addEventListener('load', ensureLogin);
 </script>
 </body>
 </html>

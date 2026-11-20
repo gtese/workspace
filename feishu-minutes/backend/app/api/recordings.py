@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from .. import audio, storage
@@ -14,15 +14,11 @@ from ..models import (
 from ..pipeline import process_recording, start_processing
 from ..schemas import FinishOut, RecordingCreate, RecordingOut
 from ..security import signed_url
+from .deps import current_open_id
 
 router = APIRouter(prefix="/api/v1", tags=["recordings"])
 
 MAX_SEGMENT_BYTES = 80 * 1024 * 1024
-
-
-def current_open_id(x_employee_open_id: str = Header(default="demo")) -> str:
-    """POC 阶段：信任网关注入的 open_id；M2 换成飞书 user_access_token 换取。"""
-    return x_employee_open_id
 
 
 def _owned(db: Session, recording_id: str, open_id: str) -> Recording:

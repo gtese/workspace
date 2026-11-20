@@ -6,6 +6,7 @@ import json
 import logging
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -29,6 +30,28 @@ from .models import (
 from .security import hmac_sha256_hex, signed_url
 
 log = logging.getLogger(__name__)
+
+
+def recover_stuck(minutes: int = 30) -> int:
+    """服务重启后，把卡在中间态超过 N 分钟的任务标记为失败，允许用户重跑。"""
+    db: Session = SessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutes)
+        rows = (
+            db.query(Recording)
+            .filter(
+                Recording.status.in_([STATUS_TRANSCRIBING, STATUS_SUMMARIZING]),
+                Recording.updated_at < cutoff,
+            )
+            .all()
+        )
+        for rec in rows:
+            rec.status = STATUS_FAILED
+            rec.error = "处理中途中断（服务重启或超时），请点「重新生成」"
+        db.commit()
+        return len(rows)
+    finally:
+        db.close()
 
 
 def start_processing(recording_id: str) -> None:
