@@ -151,3 +151,11 @@ def test_created_at_has_timezone(client: TestClient) -> None:
     dt = datetime.fromisoformat(body["created_at"])
     assert dt.tzinfo is not None, "created_at 必须带时区，否则前端显示会差 8 小时"
     assert dt.utcoffset().total_seconds() == 0
+
+
+def test_openapi_schema(client: TestClient) -> None:
+    r = client.get("/openapi.json")
+    assert r.status_code == 200
+    paths = r.json()["paths"]
+    for p in ["/api/v1/recordings", "/api/v1/recordings/{recording_id}", "/api/v1/auth/feishu-login", "/api/v1/shared/{recording_id}", "/api/v1/search", "/api/v1/stats"]:
+        assert p in paths, p
