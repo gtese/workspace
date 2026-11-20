@@ -188,3 +188,27 @@ def test_detail_exposes_feishu_delivery(client: TestClient, tmp_path: Path) -> N
     client.post(f"/api/v1/recordings/{rid}/finish", headers=HEADERS)
     body = client.get(f"/api/v1/recordings/{rid}", headers=HEADERS).json()
     assert body["feishu_status"] == "sent"
+
+
+def test_rate_limit_create(client: TestClient) -> None:
+    headers = {"X-Employee-Open-Id": "u_rate_limit"}
+    codes = [
+        client.post("/api/v1/recordings", json={"title": f"限流{i}", "scene": "memo"}, headers=headers).status_code
+        for i in range(8)
+    ]
+    assert codes.count(200) <= 6
+    assert 429 in codes
+
+
+def test_ops_health_requires_token(client: TestClient, monkeypatch) -> None:
+    from app import main as main_mod
+    from app.config import get_settings
+
+    settings = get_settings().model_copy(update={"ops_token": "ops-secret"})
+    monkeypatch.setattr(main_mod, "get_settings", lambda: settings)
+    assert client.get("/api/v1/ops/health").status_code == 404
+    r = client.get("/api/v1/ops/health", headers={"X-Ops-Token": "ops-secret"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["db_ok"] is True
+    assert "recordings" in body

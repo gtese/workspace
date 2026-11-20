@@ -91,3 +91,38 @@ def test_get_share_link_owner_only(client: TestClient, tmp_path: Path) -> None:
 
     r = client.get(f"/api/v1/recordings/{rid}/share", headers={"X-Employee-Open-Id": "other"})
     assert r.status_code == 404
+
+
+def test_share_revoke_and_audit(client: TestClient, tmp_path: Path) -> None:
+    from app.db import SessionLocal
+    from app.models import ShareAccess
+
+    rid = _done_recording(client, tmp_path)
+    q = parse_qs(urlparse(share_url(rid)).query)
+    url = f"/api/v1/shared/{rid}?exp={q['exp'][0]}&sig={q['sig'][0]}"
+    assert client.get(url).status_code == 200
+
+    r = client.post(f"/api/v1/recordings/{rid}/share/revoke", headers=HEADERS)
+    assert r.status_code == 200
+    assert r.json()["revoked"] is True
+    assert client.get(url).status_code == 403
+
+    r = client.delete(f"/api/v1/recordings/{rid}/share/revoke", headers=HEADERS)
+    assert r.status_code == 200
+    assert r.json()["revoked"] is False
+    assert client.get(url).status_code == 200
+
+    db = SessionLocal()
+    try:
+        assert db.query(ShareAccess).filter(ShareAccess.recording_id == rid).count() >= 2
+    finally:
+        db.close()
+
+
+def test_share_get_reports_revoked(client: TestClient, tmp_path: Path) -> None:
+    rid = _done_recording(client, tmp_path)
+    body = client.get(f"/api/v1/recordings/{rid}/share", headers=HEADERS).json()
+    assert body["revoked"] is False
+    client.post(f"/api/v1/recordings/{rid}/share/revoke", headers=HEADERS)
+    body = client.get(f"/api/v1/recordings/{rid}/share", headers=HEADERS).json()
+    assert body["revoked"] is True

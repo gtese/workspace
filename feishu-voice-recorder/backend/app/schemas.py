@@ -45,6 +45,8 @@ class HealthOut(BaseModel):
     asr_provider: str
     llm_provider: str
     feishu_mode: str
+    version: str = "1.0.0"
+    db_ok: bool = True
 
 
 class SpeakerRenameIn(BaseModel):

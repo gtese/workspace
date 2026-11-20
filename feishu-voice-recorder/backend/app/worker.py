@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 import threading
 
+from sqlalchemy import select, update
+
 from .config import get_settings
 from .db import SessionLocal
 from .models import STATUS_QUEUED, STATUS_TRANSCRIBING, Recording
@@ -35,20 +37,29 @@ class Worker:
             self._thread.join(timeout=5)
 
     def process_one(self) -> bool:
-        """认领一个 queued 任务并处理；没有任务返回 False。"""
+        """原子认领一个 queued 任务并处理；没有任务返回 False。
+
+        多 worker 并发时靠 ``UPDATE ... WHERE status='queued'`` 的 rowcount 保证只被认领一次。
+        """
         db = SessionLocal()
         try:
-            rec = (
-                db.query(Recording)
-                .filter(Recording.status == STATUS_QUEUED)
+            row = db.execute(
+                select(Recording.id)
+                .where(Recording.status == STATUS_QUEUED)
                 .order_by(Recording.created_at)
-                .first()
-            )
-            if rec is None:
+                .limit(1)
+            ).first()
+            if row is None:
                 return False
-            rec.status = STATUS_TRANSCRIBING  # 先认领，避免被重复取走
+            rid = row[0]
+            res = db.execute(
+                update(Recording)
+                .where(Recording.id == rid, Recording.status == STATUS_QUEUED)
+                .values(status=STATUS_TRANSCRIBING)
+            )
             db.commit()
-            rid = rec.id
+            if res.rowcount == 0:  # 被其他 worker 抢先
+                return False
         finally:
             db.close()
         process_recording(rid)
@@ -64,21 +75,23 @@ class Worker:
             self._stop.wait(self.poll_seconds)
 
 
-_worker: Worker | None = None
+_workers: list[Worker] = []
 
 
-def start_worker() -> Worker | None:
-    global _worker
+def start_worker() -> list[Worker]:
+    global _workers
     if not get_settings().worker_enabled:
-        return None
-    if _worker is None:
-        _worker = Worker()
-        _worker.start()
-    return _worker
+        return []
+    if not _workers:
+        for _ in range(max(1, get_settings().worker_count)):
+            w = Worker()
+            w.start()
+            _workers.append(w)
+    return _workers
 
 
 def stop_worker() -> None:
-    global _worker
-    if _worker:
-        _worker.stop()
-        _worker = None
+    global _workers
+    for w in _workers:
+        w.stop()
+    _workers = []

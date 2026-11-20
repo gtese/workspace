@@ -19,6 +19,7 @@ from ..models import (
     SpeakerName,
 )
 from ..pipeline import process_recording
+from ..ratelimit import enforce
 from ..schemas import (
     FinishOut,
     RecordingCreate,
@@ -49,6 +50,7 @@ def create_recording(
     open_id: str = Depends(current_open_id),
     db: Session = Depends(get_db),
 ) -> RecordingOut:
+    enforce(open_id, "create")
     rec = Recording(owner_open_id=open_id, title=body.title, scene=body.scene)
     db.add(rec)
     db.commit()
@@ -123,6 +125,7 @@ def rename_speakers(
     open_id: str = Depends(current_open_id),
     db: Session = Depends(get_db),
 ) -> RecordingOut:
+    enforce(open_id, "rename")
     rec = _owned(db, recording_id, open_id)
     for speaker, name in body.mapping.items():
         speaker = speaker.strip()[:20]
@@ -156,6 +159,7 @@ def stats(open_id: str = Depends(current_open_id), db: Session = Depends(get_db)
         "done": sum(1 for r in rows if r.status == "done"),
         "failed": sum(1 for r in rows if r.status == "failed"),
         "estimated_cost_yuan": round(minutes / 60 * price, 2),
+        "price_per_hour": price,
     }
 
 
@@ -176,6 +180,7 @@ async def upload_segment(
     open_id: str = Depends(current_open_id),
     db: Session = Depends(get_db),
 ) -> RecordingOut:
+    enforce(open_id, "segment")
     rec = _owned(db, recording_id, open_id)
     if rec.status not in (STATUS_CREATED, STATUS_RECORDING, STATUS_FAILED):
         raise HTTPException(status_code=409, detail=f"当前状态不允许上传分段: {rec.status}")
@@ -232,6 +237,7 @@ def delete_recording(
     db: Session = Depends(get_db),
 ) -> None:
     """移除录音记录：删除音频、分段与纪要（分享链接随之失效）。"""
+    enforce(open_id, "delete")
     rec = _owned(db, recording_id, open_id)
     if rec.status in ("queued", "transcribing", "summarizing"):
         raise HTTPException(status_code=409, detail="正在处理中，请稍后再移除")
@@ -246,8 +252,45 @@ def get_share_link(
     open_id: str = Depends(current_open_id),
     db: Session = Depends(get_db),
 ) -> dict:
+    enforce(open_id, "share")
     rec = _owned(db, recording_id, open_id)
-    return {"url": share_url(rec.id)}
+    from ..models import ShareRevocation
+
+    revoked = db.get(ShareRevocation, rec.id) is not None
+    return {"url": share_url(rec.id), "revoked": revoked}
+
+
+@router.post("/recordings/{recording_id}/share/revoke")
+def revoke_share(
+    recording_id: str,
+    open_id: str = Depends(current_open_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    from ..models import ShareRevocation
+
+    enforce(open_id, "share")
+    rec = _owned(db, recording_id, open_id)
+    if db.get(ShareRevocation, rec.id) is None:
+        db.add(ShareRevocation(recording_id=rec.id))
+        db.commit()
+    return {"revoked": True}
+
+
+@router.delete("/recordings/{recording_id}/share/revoke")
+def unrevoke_share(
+    recording_id: str,
+    open_id: str = Depends(current_open_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    from ..models import ShareRevocation
+
+    enforce(open_id, "share")
+    rec = _owned(db, recording_id, open_id)
+    row = db.get(ShareRevocation, rec.id)
+    if row is not None:
+        db.delete(row)
+        db.commit()
+    return {"revoked": False}
 
 
 @router.post("/recordings/{recording_id}/send")
@@ -262,6 +305,7 @@ def send_to_chat(
 
     from ..models import DeliveryLog
 
+    enforce(open_id, "send")
     rec = _owned(db, recording_id, open_id)
     if rec.status != "done":
         raise HTTPException(status_code=409, detail="纪要还没生成完成")
@@ -292,6 +336,7 @@ def finish_recording(
     open_id: str = Depends(current_open_id),
     db: Session = Depends(get_db),
 ) -> FinishOut:
+    enforce(open_id, "finish")
     rec = _owned(db, recording_id, open_id)
     if not rec.segments:
         raise HTTPException(status_code=400, detail="还没有上传任何分段")
@@ -313,6 +358,7 @@ def rerun_recording(
     open_id: str = Depends(current_open_id),
     db: Session = Depends(get_db),
 ) -> FinishOut:
+    enforce(open_id, "finish")
     rec = _owned(db, recording_id, open_id)
     if not rec.segments:
         raise HTTPException(status_code=400, detail="没有音频分段")

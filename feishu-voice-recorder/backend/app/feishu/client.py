@@ -89,6 +89,34 @@ class FeishuClient:
         self._token_exp = time.time() + int(data.get("expire", 7200))
         return self._token
 
+    def send_text(self, receive_id: str, text: str, receive_id_type: str = "open_id") -> dict:
+        if self.settings.feishu_mode != "real":
+            outbox = self.settings.data_dir / "outbox"
+            outbox.mkdir(parents=True, exist_ok=True)
+            path = outbox / f"feishu-text-{int(time.time() * 1000)}.json"
+            path.write_text(
+                json.dumps({"receive_id": receive_id, "text": text}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            return {"mode": "mock", "path": str(path)}
+
+        token = self._tenant_token()
+        resp = httpx.post(
+            f"{BASE}/im/v1/messages",
+            params={"receive_id_type": receive_id_type},
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "receive_id": receive_id,
+                "msg_type": "text",
+                "content": json.dumps({"text": text}, ensure_ascii=False),
+            },
+            timeout=15,
+        )
+        data = resp.json()
+        if data.get("code") != 0:
+            raise RuntimeError(f"飞书发文本失败: code={data.get('code')} msg={data.get('msg')}")
+        return {"mode": "real", "message_id": data.get("data", {}).get("message_id")}
+
     def send_card(
         self, receive_id: str, card: dict, receive_id_type: str = "open_id"
     ) -> dict:

@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -9,6 +9,7 @@ from .api import auth, media, recordings, shared
 from .config import REPO_ROOT, get_settings
 from .db import init_db
 from .maintenance import cleanup_expired, cleanup_orphan_files, start_maintenance, stop_maintenance
+from .monitoring import snapshot, start_watchdog, stop_watchdog
 from .pipeline import requeue_interrupted
 from .schemas import HealthOut
 from .worker import start_worker, stop_worker
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
     s = get_settings()
     start_worker()
     start_maintenance()
+    start_watchdog()
     logging.getLogger(__name__).info(
         "启动 %s | asr=%s llm=%s feishu=%s | 重排队 %d | 过期音频 %d | 孤儿目录 %d",
         s.app_name, s.asr_provider, s.llm_provider, s.feishu_mode, requeued, cleaned, orphans,
@@ -34,6 +36,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
     yield
     stop_worker()
     stop_maintenance()
+    stop_watchdog()
 
 
 app = FastAPI(title="feishu-minutes", version="0.1.0", lifespan=lifespan)
@@ -50,8 +53,20 @@ if WEB_DIR.exists():
 def health() -> HealthOut:
     s = get_settings()
     return HealthOut(
-        asr_provider=s.asr_provider, llm_provider=s.llm_provider, feishu_mode=s.feishu_mode
+        asr_provider=s.asr_provider,
+        llm_provider=s.llm_provider,
+        feishu_mode=s.feishu_mode,
+        version="1.0.0",
+        db_ok=snapshot().get("db_ok", False),
     )
+
+
+@app.get("/api/v1/ops/health")
+def ops_health(x_ops_token: str = Header(default="")) -> dict:
+    s = get_settings()
+    if not s.ops_token or x_ops_token != s.ops_token:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return snapshot()
 
 
 NO_STORE = {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"}

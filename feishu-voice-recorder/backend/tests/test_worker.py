@@ -106,3 +106,12 @@ def test_pipeline_distributes_email(tmp_path: Path) -> None:
 
     after = {x.name for x in outbox.glob("email-*.json")}
     assert after - before
+
+
+def test_monitoring_snapshot() -> None:
+    from app.monitoring import snapshot
+
+    s = snapshot()
+    assert s["db_ok"] is True
+    assert "recordings" in s
+    assert "disk_free_gb" in s

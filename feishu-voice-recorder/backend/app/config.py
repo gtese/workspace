@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     share_ttl_days: int = 30
     sync_pipeline: bool = False
     worker_enabled: bool = True
+    worker_count: int = 2
+    monitoring_enabled: bool = True
+    watchdog_seconds: int = 300
+    ops_token: str = ""
+    alert_open_ids: str = ""
     retention_days: int = 90
     retention_check_seconds: int = 6 * 3600
 

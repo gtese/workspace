@@ -35,7 +35,9 @@ Base：`https://voice.traceic.com:5266`；文档页：`/docs`；OpenAPI：`/open
 | POST | `/api/v1/recordings/{id}/finish` | 提交转写（完成后返回，处理中 409） |
 | POST | `/api/v1/recordings/{id}/rerun` | 重新生成（处理中 409） |
 | DELETE | `/api/v1/recordings/{id}` | 移除录音（音频+纪要，处理中 409） |
-| GET | `/api/v1/recordings/{id}/share` | 生成 30 天签名分享链接 |
+| GET | `/api/v1/recordings/{id}/share` | 生成 30 天签名分享链接（返回 `revoked` 状态） |
+| POST | `/api/v1/recordings/{id}/share/revoke` | 撤销分享链接 |
+| DELETE | `/api/v1/recordings/{id}/share/revoke` | 恢复分享链接 |
 | POST | `/api/v1/recordings/{id}/send` | `{receive_id, receive_id_type}` 转发卡片 |
 | PUT | `/api/v1/recordings/{id}/speakers` | `{mapping: {"发言人1":"张三"}}` 改名 |
 
@@ -50,8 +52,20 @@ Base：`https://voice.traceic.com:5266`；文档页：`/docs`；OpenAPI：`/open
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/v1/shared/{id}?exp&sig` | 分享链接只读详情 |
+| GET | `/api/v1/shared/{id}?exp&sig` | 分享链接只读详情（撤销后 403，访问写审计） |
 | GET | `/media/{path}?exp&sig` | 签名音频 |
+
+## 运维接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/health` | 公开探活（含 version、db_ok） |
+| GET | `/api/v1/ops/health` | 需 `X-Ops-Token: $FM_OPS_TOKEN`，返回队列/失败/磁盘快照 |
+
+## 限流
+
+按 open_id + 动作的令牌桶，超限返回 `429` + `Retry-After: 30`。
+默认：创建 20/min、分段 120/min、提交 20/min、分享/删除/发送 30/min、改名 60/min（突发上限见 `app/ratelimit.py`）。
 
 ## 状态码
 

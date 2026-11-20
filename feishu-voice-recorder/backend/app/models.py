@@ -91,6 +91,31 @@ class DeliveryLog(Base):
     recording: Mapped[Recording] = relationship(back_populates="deliveries")
 
 
+class ShareRevocation(Base):
+    """分享链接撤销记录：存在即表示该录音的分享链接已失效。"""
+
+    __tablename__ = "share_revocations"
+
+    recording_id: Mapped[str] = mapped_column(
+        ForeignKey("recordings.id", ondelete="CASCADE"), primary_key=True
+    )
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ShareAccess(Base):
+    """分享链接访问审计。"""
+
+    __tablename__ = "share_accesses"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: new_id("sa_"))
+    recording_id: Mapped[str] = mapped_column(
+        ForeignKey("recordings.id", ondelete="CASCADE"), index=True
+    )
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    ua: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Document(Base):
     """每条录音对应的飞书云文档（同步成功后写入）。"""
 

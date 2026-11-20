@@ -21,3 +21,11 @@ def _init_db():
 
     init_db()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    from app import ratelimit
+
+    ratelimit.reset()
+    yield
