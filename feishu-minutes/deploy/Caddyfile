@@ -1,0 +1,10 @@
+{$DOMAIN:localhost} {
+	encode gzip
+
+	# 音频下载走应用层签名校验，Caddy 只做 TLS 与转发
+	reverse_proxy api:8000
+
+	request_body {
+		max_size 100MB
+	}
+}

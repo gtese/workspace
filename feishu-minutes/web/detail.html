@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>纪要详情</title>
+<style>
+  :root { --bg:#0f1115; --card:#171a21; --line:#262b36; --text:#e8ecf3; --muted:#8b94a7; --accent:#3b82f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:20px 16px 64px; }
+  h1 { font-size:20px; margin:0 0 6px; }
+  h2 { font-size:14px; color:var(--muted); margin:22px 0 8px; font-weight:600; letter-spacing:.5px; }
+  .meta { color:var(--muted); font-size:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-top:12px; }
+  ul { margin:6px 0 0; padding-left:20px; }
+  li { margin:4px 0; }
+  audio { width:100%; margin-top:12px; }
+  .ts { color:var(--muted); font-variant-numeric:tabular-nums; font-size:12px; margin-right:8px; }
+  .speaker { color:#93c5fd; font-weight:600; margin-right:6px; }
+  .line { padding:6px 0; border-bottom:1px dashed #20242d; }
+  .line:last-child { border-bottom:0; }
+  .empty { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div id="app" class="empty">加载中…</div>
+</main>
+<script>
+const id = location.pathname.split('/').pop();
+const uid = localStorage.getItem('fm_uid') || 'demo';
+async function load() {
+  const r = await fetch('/api/v1/recordings/' + id, { headers: { 'X-Employee-Open-Id': uid } });
+  if (!r.ok) { document.getElementById('app').textContent = '读取失败：' + (await r.text()); return; }
+  const rec = await r.json();
+  const s = rec.summary || {};
+  const todo = (s.todos || []).map(t => `<li>${t.owner ? '<b>' + esc(t.owner) + '</b> ' : ''}${esc(t.item)}${t.due ? '（' + esc(t.due) + '）' : ''}</li>`).join('');
+  const lines = (rec.transcript || []).map(t => {
+    const mm = String(Math.floor(t.start / 60)).padStart(2, '0');
+    const ss = String(Math.floor(t.start % 60)).padStart(2, '0');
+    return `<div class="line"><span class="ts">${mm}:${ss}</span><span class="speaker">${esc(t.speaker)}</span>${esc(t.text)}</div>`;
+  }).join('');
+  document.getElementById('app').className = '';
+  document.getElementById('app').innerHTML = `
+    <h1>${esc(rec.title)}</h1>
+    <div class="meta">${rec.scene} · 时长 ${rec.duration_sec} 秒 · ${rec.segment_count} 段 · 状态 ${rec.status}</div>
+    ${rec.audio_url ? `<audio controls preload="none" src="${rec.audio_url}"></audio>` : ''}
+    <div class="card"><h2>摘要</h2><div>${esc(s.summary || '（无）')}</div></div>
+    ${(s.key_points || []).length ? `<div class="card"><h2>要点</h2><ul>${s.key_points.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
+    ${(s.decisions || []).length ? `<div class="card"><h2>结论 / 决策</h2><ul>${s.decisions.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
+    ${todo ? `<div class="card"><h2>待办</h2><ul>${todo}</ul></div>` : ''}
+    ${(s.risks || []).length ? `<div class="card"><h2>风险</h2><ul>${s.risks.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
+    <div class="card"><h2>转写全文</h2>${lines || '<div class="empty">暂无转写</div>'}</div>
+  `;
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+load();
+</script>
+</body>
+</html>
