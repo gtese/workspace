@@ -9,7 +9,7 @@
 本地 mock 模式（无需任何凭据）即可跑通：**录音 → 分段上传 → 合并 → 转写 → 纪要 → 飞书卡片（落盘模拟）→ 签名音频播放**。
 
 ```bash
-cd backend
+cd feishu-voice-recorder/backend
 FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 # 打开 http://127.0.0.1:8000/
 ```
@@ -52,6 +52,10 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 | [POC 计划](docs/05-POC计划.md) | 先验证什么、怎么验证、需要什么素材 |
 | [开发与部署](docs/06-开发与部署.md) | 本地运行、测试、切真实服务、Docker 部署 |
 | [上线验收清单](docs/07-上线验收清单.md) | 应用/服务端/真机/质量/运维/安全 逐项勾选 |
+| [项目总览](docs/00-项目总览.md) | 架构图、功能矩阵、文档索引、关键约束 |
+| [API 接口](docs/10-API接口.md) | 鉴权模式与全部 HTTP 接口 |
+| [运维手册](docs/11-运维手册.md) | 服务、发布、备份、证书、故障排查 |
+| [变更日志](docs/12-变更日志.md) | 版本演进 |
 | [员工使用说明](docs/08-员工使用说明.md) | 一页版：怎么用、录音贴士、隐私、FAQ |
 | [部署记录](docs/09-部署记录.md) | 服务器布局、systemd、SELinux、HTTPS 待决策 |
 
