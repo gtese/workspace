@@ -62,6 +62,46 @@ def test_requeue_interrupted() -> None:
 
     db = SessionLocal()
     try:
-        assert db.get(Recording, rid).status == STATUS_QUEUED
+        rec = db.get(Recording, rid)
+        assert rec.status == STATUS_QUEUED
+        db.delete(rec)  # 清理，避免污染后续用例的队列
+        db.commit()
     finally:
         db.close()
+
+
+def test_pipeline_distributes_email(tmp_path: Path) -> None:
+    from app.models import DeliveryLog, Employee
+    from app.storage import data_dir
+
+    db = SessionLocal()
+    try:
+        emp = db.get(Employee, "u_mail") or Employee(open_id="u_mail", name="张三", email="zs@example.com")
+        db.add(emp)
+        rec = Recording(owner_open_id="u_mail", title="邮件测试", scene="client", status="queued")
+        db.add(rec)
+        db.commit()
+        db.refresh(rec)
+        p = make_wav(tmp_path / "m.wav", 1.0)
+        db.add(Segment(recording_id=rec.id, idx=0, path=str(p), size=p.stat().st_size))
+        db.commit()
+        rid = rec.id
+    finally:
+        db.close()
+
+    outbox = data_dir() / "outbox"
+    before = set(x.name for x in outbox.glob("email-*.json")) if outbox.exists() else set()
+
+    assert Worker().process_one() is True
+
+    db = SessionLocal()
+    try:
+        logs = db.query(DeliveryLog).filter(DeliveryLog.recording_id == rid).all()
+        email_logs = [x for x in logs if x.channel == "email"]
+        assert email_logs and email_logs[0].status == "sent"
+        assert email_logs[0].target == "zs@example.com"
+    finally:
+        db.close()
+
+    after = set(x.name for x in outbox.glob("email-*.json"))
+    assert after - before

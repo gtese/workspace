@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     website_callback_secret: str = ""
 
     # 邮件
+    email_mode: str = "mock"  # mock | real
     smtp_host: str = ""
     smtp_port: int = 465
     smtp_user: str = ""

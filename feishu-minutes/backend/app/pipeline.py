@@ -14,6 +14,7 @@ from . import audio, storage
 from .asr import get_asr_provider
 from .config import get_settings
 from .db import SessionLocal
+from .email_send import EmailSender, build_minutes_email
 from .feishu import FeishuClient, build_minutes_card
 from .llm.summarize import SCENE_LABELS, summarize
 from .models import (
@@ -24,6 +25,7 @@ from .models import (
     STATUS_TRANSCRIBED,
     STATUS_TRANSCRIBING,
     DeliveryLog,
+    Employee,
     Recording,
 )
 from .security import hmac_sha256_hex, signed_url
@@ -169,4 +171,26 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
                 target=settings.website_callback_url, status=status, detail=detail,
             )
         )
+        db.commit()
+
+    # 3) 邮件（发给录音本人；未配置 SMTP 时 mock 落盘）
+    emp = db.get(Employee, rec.owner_open_id)
+    if emp is not None and emp.email:
+        subject, html = build_minutes_email(rec.title, summary, detail_url)
+        try:
+            result = EmailSender().send(emp.email, subject, html)
+            db.add(
+                DeliveryLog(
+                    recording_id=rec.id, channel="email", target=emp.email,
+                    status="sent", detail=json.dumps(result, ensure_ascii=False),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("邮件发送失败")
+            db.add(
+                DeliveryLog(
+                    recording_id=rec.id, channel="email", target=emp.email,
+                    status="failed", detail=str(exc)[:500],
+                )
+            )
         db.commit()
