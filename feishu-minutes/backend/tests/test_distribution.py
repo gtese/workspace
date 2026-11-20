@@ -14,6 +14,12 @@ from app.worker import Worker  # noqa: E402
 from tests.test_audio import make_wav  # noqa: E402
 
 
+def _drain() -> None:
+    worker = Worker()
+    while worker.process_one():
+        pass
+
+
 def _queued_recording(db, owner: str, tmp_path: Path) -> str:
     rec = Recording(owner_open_id=owner, title="分发测试", scene="meeting", status="queued")
     db.add(rec)
@@ -45,6 +51,7 @@ def test_website_callback_signed(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(pipeline.httpx, "post", fake_post)
 
+    _drain()
     db = SessionLocal()
     try:
         rid = _queued_recording(db, "u_web", tmp_path)
@@ -90,6 +97,7 @@ def test_website_callback_failure_recorded(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(pipeline.httpx, "post", lambda *a, **k: Resp())
 
+    _drain()
     db = SessionLocal()
     try:
         rid = _queued_recording(db, "u_web2", tmp_path)

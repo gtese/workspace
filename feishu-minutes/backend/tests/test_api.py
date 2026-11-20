@@ -98,3 +98,44 @@ def test_next_segment_index(client: TestClient, tmp_path: Path) -> None:
     _upload(client, rid, 0, make_wav(tmp_path / "a.wav", 1.0))
     r = _upload(client, rid, 1, make_wav(tmp_path / "b.wav", 1.0))
     assert r.json()["next_segment_index"] == 2
+
+
+def test_finish_idempotent_and_busy_guard(client: TestClient, tmp_path: Path) -> None:
+    rid = client.post("/api/v1/recordings", json={"title": "幂等", "scene": "meeting"}, headers=HEADERS).json()["id"]
+    _upload(client, rid, 0, make_wav(tmp_path / "i.wav", 1.0))
+
+    r = client.post(f"/api/v1/recordings/{rid}/finish", headers=HEADERS)
+    assert r.status_code == 200
+    assert r.json()["status"] == "done"
+
+    # 已完成后再 finish：不再排队，直接返回
+    r = client.post(f"/api/v1/recordings/{rid}/finish", headers=HEADERS)
+    assert r.status_code == 200
+    assert r.json()["status"] == "done"
+
+
+def test_rerun_busy_guard(client: TestClient, tmp_path: Path) -> None:
+    from app.db import SessionLocal
+    from app.models import Recording
+
+    rid = client.post("/api/v1/recordings", json={"title": "忙", "scene": "meeting"}, headers=HEADERS).json()["id"]
+    _upload(client, rid, 0, make_wav(tmp_path / "b.wav", 1.0))
+    db = SessionLocal()
+    try:
+        rec = db.get(Recording, rid)
+        rec.status = "transcribing"
+        db.commit()
+    finally:
+        db.close()
+    r = client.post(f"/api/v1/recordings/{rid}/rerun", headers=HEADERS)
+    assert r.status_code == 409
+    r = client.post(f"/api/v1/recordings/{rid}/finish", headers=HEADERS)
+    assert r.status_code == 409
+
+    # 清理：避免下次启动 lifespan 把它重新排队，污染其它测试
+    db = SessionLocal()
+    try:
+        db.delete(db.get(Recording, rid))
+        db.commit()
+    finally:
+        db.close()

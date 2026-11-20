@@ -279,6 +279,10 @@ def finish_recording(
     rec = _owned(db, recording_id, open_id)
     if not rec.segments:
         raise HTTPException(status_code=400, detail="还没有上传任何分段")
+    if rec.status == "done":
+        return FinishOut(id=rec.id, status=rec.status, segment_count=len(rec.segments))
+    if rec.status in ("queued", "transcribing", "summarizing"):
+        raise HTTPException(status_code=409, detail=f"正在处理中：{rec.status}")
     rec.status = STATUS_QUEUED
     db.commit()
     if get_settings().sync_pipeline:  # 测试/调试：同步跑完
@@ -296,6 +300,8 @@ def rerun_recording(
     rec = _owned(db, recording_id, open_id)
     if not rec.segments:
         raise HTTPException(status_code=400, detail="没有音频分段")
+    if rec.status in ("queued", "transcribing", "summarizing"):
+        raise HTTPException(status_code=409, detail=f"正在处理中：{rec.status}")
     rec.status = STATUS_QUEUED
     rec.error = ""
     db.commit()
