@@ -12,10 +12,13 @@ from ..models import (
     Recording,
     Segment,
 )
+from ..feishu import FeishuClient, build_minutes_card
+from ..llm.summarize import SCENE_LABELS
 from ..pipeline import process_recording
-from ..schemas import FinishOut, RecordingCreate, RecordingOut
-from ..security import signed_url
+from ..schemas import FinishOut, RecordingCreate, RecordingOut, SendIn
+from ..security import share_url
 from .deps import current_open_id
+from .serializers import to_out
 
 router = APIRouter(prefix="/api/v1", tags=["recordings"])
 
@@ -29,31 +32,6 @@ def _owned(db: Session, recording_id: str, open_id: str) -> Recording:
     return rec
 
 
-def _to_out(rec: Recording, include_detail: bool = False) -> RecordingOut:
-    data = RecordingOut(
-        id=rec.id,
-        title=rec.title,
-        scene=rec.scene,
-        status=rec.status,
-        duration_sec=rec.duration_sec,
-        created_at=rec.created_at.isoformat(),
-        segment_count=len(rec.segments),
-        next_segment_index=max((s.idx for s in rec.segments), default=-1) + 1,
-        error=rec.error,
-    )
-    if include_detail:
-        import json
-
-        audio_file = storage.merged_path(rec.id)
-        data.transcript = (
-            json.loads(rec.transcript_json).get("segments") if rec.transcript_json else None
-        )
-        data.summary = json.loads(rec.summary_json) if rec.summary_json else None
-        if audio_file.exists():
-            data.audio_url = signed_url(storage.rel_media_path(audio_file))
-    return data
-
-
 @router.post("/recordings", response_model=RecordingOut)
 def create_recording(
     body: RecordingCreate,
@@ -64,7 +42,7 @@ def create_recording(
     db.add(rec)
     db.commit()
     db.refresh(rec)
-    return _to_out(rec)
+    return to_out(rec)
 
 
 @router.get("/recordings", response_model=list[RecordingOut])
@@ -78,7 +56,7 @@ def list_recordings(
         .limit(100)
         .all()
     )
-    return [_to_out(r) for r in rows]
+    return [to_out(r) for r in rows]
 
 
 @router.get("/stats")
@@ -101,7 +79,7 @@ def get_recording(
     open_id: str = Depends(current_open_id),
     db: Session = Depends(get_db),
 ) -> RecordingOut:
-    return _to_out(_owned(db, recording_id, open_id), include_detail=True)
+    return to_out(_owned(db, recording_id, open_id), include_detail=True)
 
 
 @router.post("/recordings/{recording_id}/segments", response_model=RecordingOut)
@@ -158,7 +136,53 @@ async def upload_segment(
     rec.status = STATUS_RECORDING
     db.commit()
     db.refresh(rec)
-    return _to_out(rec)
+    return to_out(rec)
+
+
+@router.get("/recordings/{recording_id}/share")
+def get_share_link(
+    recording_id: str,
+    open_id: str = Depends(current_open_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    rec = _owned(db, recording_id, open_id)
+    return {"url": share_url(rec.id)}
+
+
+@router.post("/recordings/{recording_id}/send")
+def send_to_chat(
+    recording_id: str,
+    body: SendIn,
+    open_id: str = Depends(current_open_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    """把纪要卡片转发到指定会话/个人（默认发给自己）。"""
+    import json as _json
+    from datetime import datetime, timezone
+
+    from ..models import DeliveryLog
+
+    rec = _owned(db, recording_id, open_id)
+    if rec.status != "done":
+        raise HTTPException(status_code=409, detail="纪要还没生成完成")
+    summary = _json.loads(rec.summary_json) if rec.summary_json else {}
+    card = build_minutes_card(
+        rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, share_url(rec.id)
+    )
+    target = body.receive_id or rec.owner_open_id
+    try:
+        result = FeishuClient().send_card(target, card, receive_id_type=body.receive_id_type)
+        status, detail = "sent", _json.dumps(result, ensure_ascii=False)
+    except Exception as exc:  # noqa: BLE001
+        status, detail = "failed", str(exc)[:500]
+    db.add(
+        DeliveryLog(
+            recording_id=rec.id, channel="feishu", target=target,
+            status=status, detail=detail,
+        )
+    )
+    db.commit()
+    return {"status": status, "target": target, "detail": detail}
 
 
 @router.post("/recordings/{recording_id}/finish", response_model=FinishOut)

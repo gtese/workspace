@@ -32,6 +32,32 @@ def verify(path: str, exp: str | int, sig: str) -> bool:
     return hmac.compare_digest(_sign(path, exp_i), sig)
 
 
+# ---- 分享链接：/s/<rid>?exp=<unix>&sig=<hmac>，默认 30 天 ----
+
+def share_signature(rid: str, exp: int) -> str:
+    secret = get_settings().secret_key.encode()
+    msg = f"share:{rid}:{exp}".encode()
+    return hmac.new(secret, msg, hashlib.sha256).hexdigest()[:32]
+
+
+def share_url(rid: str, ttl: int | None = None) -> str:
+    settings = get_settings()
+    ttl = ttl or settings.share_ttl_days * 86400
+    exp = int(time.time()) + ttl
+    sig = share_signature(rid, exp)
+    return f"{settings.public_base_url.rstrip('/')}/s/{rid}?exp={exp}&sig={sig}"
+
+
+def verify_share(rid: str, exp: str | int, sig: str) -> bool:
+    try:
+        exp_i = int(exp)
+    except (TypeError, ValueError):
+        return False
+    if exp_i < int(time.time()):
+        return False
+    return hmac.compare_digest(share_signature(rid, exp_i), sig)
+
+
 def hmac_sha256_hex(secret: str, body: bytes) -> str:
     return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 

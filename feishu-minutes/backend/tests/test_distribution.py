@@ -62,6 +62,7 @@ def test_website_callback_signed(monkeypatch, tmp_path: Path) -> None:
     assert payload["event"] == "minutes.ready"
     assert payload["recording"]["id"] == rid
     assert payload["summary"]["summary"]
+    assert "/s/" in payload["detail_url"] and "sig=" in payload["detail_url"]
 
     db = SessionLocal()
     try:

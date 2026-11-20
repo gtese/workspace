@@ -16,10 +16,11 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 
 - 录音页：`/`（WAV 编码、2 分钟自动分段、断点重传、环境自检、飞书免登）
 - 我的纪要：`/mine`（历史列表、状态、总时长、预估成本）
+- 分享链接：详情页「复制分享链接」→ `/s/<id>?exp&sig`，群成员无需登录可看（30 天有效）
 - 本地音频上传兜底：wav/m4a/mp3/webm，服务端 ffmpeg 转 16k 单声道 WAV
 - 详情页：`/d/{id}`（摘要/要点/待办/全文/音频播放）
 - API 文档：`/docs`（FastAPI 自动生成）
-- 测试：`cd backend && ../.venv/bin/python -m pytest -q`（41 个用例）
+- 测试：`cd backend && ../.venv/bin/python -m pytest -q`（47 个用例）
 - 浏览器 E2E：`cd backend && FM_E2E_BASE=http://127.0.0.1:8777 ../.venv/bin/python tests/e2e/test_recorder_browser.py`
 
 ## 文档
@@ -64,4 +65,5 @@ cd backend
 - 分发：飞书卡片（mock 落盘）、网站回调（HMAC 签名）、邮件 SMTP（mock 落盘）三条通道已实现
 - 兜底：手机系统录音 App 录的 m4a 可直接上传（已用真实 m4a 验证）
 - 断点续录：刷新/中断后页面提示「继续录音」，已上传段落不丢（E2E 验证）
+- 分享：签名只读链接 + 卡片转发到指定会话（`POST /recordings/{id}/send`）
 - 下一步：飞书应用 + 腾讯云 ASR 凭据到位后真机联调

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     secret_key: str = "dev-only-change-me"
     public_base_url: str = "http://127.0.0.1:8000"
     media_url_ttl_seconds: int = 3600
+    share_ttl_days: int = 30
     sync_pipeline: bool = False
     worker_enabled: bool = True
     retention_days: int = 90

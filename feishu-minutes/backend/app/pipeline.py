@@ -28,7 +28,7 @@ from .models import (
     Employee,
     Recording,
 )
-from .security import hmac_sha256_hex, signed_url
+from .security import hmac_sha256_hex, share_url, signed_url
 
 log = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
 
 
 def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  # noqa: ANN001
-    detail_url = f"{settings.public_base_url.rstrip('/')}/d/{rec.id}"
+    detail_url = share_url(rec.id)
 
     # 1) 飞书卡片
     card = build_minutes_card(

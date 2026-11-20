@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
-from .api import auth, media, recordings
+from .api import auth, media, recordings, shared
 from .config import REPO_ROOT, get_settings
 from .db import init_db
 from .maintenance import cleanup_expired, start_maintenance, stop_maintenance
@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
 app = FastAPI(title="feishu-minutes", version="0.1.0", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(recordings.router)
+app.include_router(shared.router)
 app.include_router(media.router)
 
 if WEB_DIR.exists():
@@ -60,6 +61,11 @@ def index() -> FileResponse:
 @app.get("/mine", include_in_schema=False)
 def mine_page() -> FileResponse:
     return FileResponse(WEB_DIR / "mine.html")
+
+
+@app.get("/s/{recording_id}", include_in_schema=False)
+def shared_page(recording_id: str) -> FileResponse:  # noqa: ARG001
+    return FileResponse(WEB_DIR / "detail.html")
 
 
 @app.get("/d/{recording_id}", include_in_schema=False)

@@ -45,6 +45,11 @@ class HealthOut(BaseModel):
     feishu_mode: str
 
 
+class SendIn(BaseModel):
+    receive_id: str = ""
+    receive_id_type: str = "open_id"
+
+
 class FeishuLoginIn(BaseModel):
     code: str = Field(min_length=1)
 
