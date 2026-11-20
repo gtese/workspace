@@ -65,3 +65,4 @@ iKuai 上旧线路 `ovpnUcloud`、`ovpnTokyo` 保留但已停用。
 | 2026-11-18 | 开启「禁止 AAAA 解析」；补 CDN/反欺诈域名 |
 | 2026-11-19 | Google 全家桶 47 域、GitHub 全家桶 12 域、Claude Code/ChatGPT 全家桶扩展至 49 域；YouTube 排除 |
 | 2026-11-20 | 项目资料归档并推送至 git.tri.local/it/gateway 与 workspace |
+| 2026-11-20 | 遗留清理：删除 iKuai 旧 OpenVPN 线路 ovpnUcloud/ovpnTokyo、删除旧 WireGuard 接口 wgoffice 及对端；仅保留 ovpnAliyun。变更前配置快照留存在操作机本地 |

@@ -14,7 +14,7 @@
 | tunnel_ip | 10.66.66.2 |
 | 状态 | enabled |
 
-历史线路（已停用保留）：`ovpnUcloud`（154.83.199.67:8443，美国 UCloud）、`ovpnTokyo`（101.36.104.146:443，东京 UCloud）。
+历史线路 `ovpnUcloud`（154.83.199.67，美国 UCloud）、`ovpnTokyo`（101.36.104.146，东京 UCloud）已于 **2026-11-20 删除**；旧 WireGuard 配置（接口 `wgoffice` 与对端）同批删除。iKuai 当前线路仅剩：wan1、l2tpToSx、ovpnAliyun。
 
 ## 2. 域名分流规则（全部 → ovpnAliyun，已启用）
 
