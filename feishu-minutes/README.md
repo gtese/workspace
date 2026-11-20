@@ -17,10 +17,12 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 - 录音页：`/`（WAV 编码、2 分钟自动分段、断点重传、环境自检、飞书免登）
 - 我的纪要：`/mine`（历史列表、状态、总时长、预估成本）
 - 分享链接：详情页「复制分享链接」→ `/s/<id>?exp&sig`，群成员无需登录可看（30 天有效）
+- 说话人改名：详情页点「发言人1」改成真实姓名，可重跑纪要；映射持久化
+- 全文搜索：`/mine` 顶部搜索框，检索标题/转写/纪要
 - 本地音频上传兜底：wav/m4a/mp3/webm，服务端 ffmpeg 转 16k 单声道 WAV
 - 详情页：`/d/{id}`（摘要/要点/待办/全文/音频播放）
 - API 文档：`/docs`（FastAPI 自动生成）
-- 测试：`cd backend && ../.venv/bin/python -m pytest -q`（47 个用例）
+- 测试：`cd backend && ../.venv/bin/python -m pytest -q`（51 个用例）
 - 浏览器 E2E：`cd backend && FM_E2E_BASE=http://127.0.0.1:8777 ../.venv/bin/python tests/e2e/test_recorder_browser.py`
 
 ## 文档

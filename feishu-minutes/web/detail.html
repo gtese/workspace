@@ -19,6 +19,8 @@
   audio { width:100%; margin-top:12px; }
   .ts { color:var(--muted); font-variant-numeric:tabular-nums; font-size:12px; margin-right:8px; }
   .speaker { color:#93c5fd; font-weight:600; margin-right:6px; }
+  .speaker.editable { cursor:pointer; border-bottom:1px dashed #3b556f; }
+  .hint { color:#8b94a7; font-size:12px; margin-top:6px; }
   .line { padding:6px 0; border-bottom:1px dashed #20242d; }
   .line:last-child { border-bottom:0; }
   .empty { color:var(--muted); }
@@ -47,7 +49,8 @@ async function load() {
   const lines = (rec.transcript || []).map(t => {
     const mm = String(Math.floor(t.start / 60)).padStart(2, '0');
     const ss = String(Math.floor(t.start % 60)).padStart(2, '0');
-    return `<div class="line"><span class="ts">${mm}:${ss}</span><span class="speaker">${esc(t.speaker)}</span>${esc(t.text)}</div>`;
+    const editable = !isShared && /^发言人/.test(t.speaker) ? ' editable' : '';
+    return `<div class="line"><span class="ts">${mm}:${ss}</span><span class="speaker${editable}" data-speaker="${esc(t.speaker)}" title="${isShared ? '' : '点击改名'}">${esc(t.speaker)}</span>${esc(t.text)}</div>`;
   }).join('');
   document.getElementById('app').className = '';
   document.getElementById('app').innerHTML = `
@@ -61,10 +64,26 @@ async function load() {
     ${(s.decisions || []).length ? `<div class="card"><h2>结论 / 决策</h2><ul>${s.decisions.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
     ${todo ? `<div class="card"><h2>待办</h2><ul>${todo}</ul></div>` : ''}
     ${(s.risks || []).length ? `<div class="card"><h2>风险</h2><ul>${s.risks.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
-    <div class="card"><h2>转写全文</h2>${lines || '<div class="empty">暂无转写</div>'}</div>
+    <div class="card"><h2>转写全文</h2>${lines || '<div class="empty">暂无转写</div>'}
+      ${(!isShared && /发言人/.test(lines)) ? '<div class="hint">点击说话人名字可改名；改完点「重新生成」让纪要也使用新名字。</div>' : ''}
+    </div>
   `;
 }
 document.addEventListener('click', async (ev) => {
+  const sp = ev.target;
+  if (sp && sp.classList && sp.classList.contains('editable')) {
+    const from = sp.getAttribute('data-speaker');
+    const current = sp.textContent.trim();
+    const name = prompt('把「' + current + '」改成谁？', current);
+    if (name === null) return;
+    const r = await fetch('/api/v1/recordings/' + id + '/speakers', {
+      method: 'PUT',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mapping: { [from]: name.trim() } }),
+    });
+    if (r.ok) location.reload(); else alert('改名失败');
+    return;
+  }
   if (ev.target && ev.target.id === 'btnShare') {
     const r = await fetch('/api/v1/recordings/' + id + '/share', { headers: authHeaders });
     const data = await r.json();

@@ -27,6 +27,7 @@ from .models import (
     DeliveryLog,
     Employee,
     Recording,
+    SpeakerName,
 )
 from .security import hmac_sha256_hex, share_url, signed_url
 
@@ -93,7 +94,16 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
 
     rec.status = STATUS_SUMMARIZING
     db.commit()
-    summary = summarize(transcript.plain_text(), rec.title, rec.scene)
+    llm_text = transcript.plain_text()
+    names = {
+        x.speaker: x.name
+        for x in db.query(SpeakerName).filter(SpeakerName.recording_id == rec.id).all()
+    }
+    if names:  # 说话人已改名，喂给 LLM 的文本用真实姓名
+        llm_text = "\n".join(
+            f"{names.get(s.speaker, s.speaker)}：{s.text}" for s in transcript.segments
+        )
+    summary = summarize(llm_text, rec.title, rec.scene)
     rec.summary_json = json.dumps(summary, ensure_ascii=False)
     db.commit()
 

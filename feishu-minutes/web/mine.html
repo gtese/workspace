@@ -28,6 +28,9 @@
   .top { display:flex; justify-content:space-between; align-items:baseline; }
   .top a { color:#93c5fd; font-size:13px; text-decoration:none; }
   .empty { color:var(--muted); text-align:center; padding:40px 0; }
+  input#q { width:100%; margin-bottom:14px; padding:11px 14px; border-radius:10px; border:1px solid var(--line); background:#0d0f14; color:var(--text); font-size:15px; }
+  .hit { display:block; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:10px; color:inherit; text-decoration:none; }
+  .snippet { color:var(--muted); font-size:12px; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -35,6 +38,7 @@
   <div class="top"><h1>我的纪要</h1><a href="/">去录音 →</a></div>
   <div class="sub" id="who"></div>
   <div class="stats" id="stats"></div>
+  <input id="q" placeholder="搜索纪要内容、标题…" autocomplete="off">
   <div id="list"><div class="empty">加载中…</div></div>
 </main>
 <script>
@@ -76,6 +80,35 @@ async function load() {
     </a>`;
   }).join('');
 }
+function renderList(list) {
+  if (!list.length) {
+    document.getElementById('list').innerHTML = '<div class="empty">没有匹配的纪要</div>';
+    return;
+  }
+  document.getElementById('list').innerHTML = list.map(r => {
+    const [label, cls] = LABEL[r.status] || [r.status, ''];
+    const d = new Date(r.created_at);
+    const when = isNaN(d) ? r.created_at : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const dur = r.duration_sec ? Math.round(r.duration_sec / 60 * 10) / 10 + ' 分钟' : '—';
+    return `<a class="item" href="/d/${r.id}">
+      <div class="row"><span class="title">${esc(r.title)}</span><span class="pill ${cls}">${label}</span></div>
+      <div class="meta">${when}${r.duration_sec ? ' · ' + dur : ''}${r.segment_count != null ? ' · ' + r.segment_count + ' 段' : ''}</div>
+      ${r.snippet ? `<div class="snippet">…${esc(r.snippet)}…</div>` : ''}
+    </a>`;
+  }).join('');
+}
+
+let searchTimer = null;
+document.getElementById('q').addEventListener('input', (e) => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  searchTimer = setTimeout(async () => {
+    if (!q) { load(); return; }
+    const hits = await fetch('/api/v1/search?q=' + encodeURIComponent(q), { headers }).then(r => r.json()).catch(() => []);
+    renderList(hits);
+  }, 250);
+});
+
 load();
 </script>
 </body>

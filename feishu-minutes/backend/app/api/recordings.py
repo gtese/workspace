@@ -11,11 +11,21 @@ from ..models import (
     STATUS_RECORDING,
     Recording,
     Segment,
+    SpeakerName,
 )
 from ..feishu import FeishuClient, build_minutes_card
 from ..llm.summarize import SCENE_LABELS
 from ..pipeline import process_recording
-from ..schemas import FinishOut, RecordingCreate, RecordingOut, SendIn
+from sqlalchemy import or_
+
+from ..schemas import (
+    FinishOut,
+    RecordingCreate,
+    RecordingOut,
+    SearchHit,
+    SendIn,
+    SpeakerRenameIn,
+)
 from ..security import share_url
 from .deps import current_open_id
 from .serializers import to_out
@@ -57,6 +67,81 @@ def list_recordings(
         .all()
     )
     return [to_out(r) for r in rows]
+
+
+@router.get("/search", response_model=list[SearchHit])
+def search_recordings(
+    q: str,
+    open_id: str = Depends(current_open_id),
+    db: Session = Depends(get_db),
+) -> list[SearchHit]:
+    q = q.strip()
+    if not q:
+        return []
+    like = f"%{q}%"
+    rows = (
+        db.query(Recording)
+        .filter(
+            Recording.owner_open_id == open_id,
+            or_(
+                Recording.title.like(like),
+                Recording.transcript_json.like(like),
+                Recording.summary_json.like(like),
+            ),
+        )
+        .order_by(Recording.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    hits: list[SearchHit] = []
+    for rec in rows:
+        text = rec.transcript_json or ""
+        idx = text.find(q)
+        snippet = ""
+        if idx >= 0:
+            snippet = text[max(0, idx - 30): idx + 90].replace("\\n", " ")
+        elif rec.summary_json:
+            idx = rec.summary_json.find(q)
+            snippet = rec.summary_json[max(0, idx - 30): idx + 90] if idx >= 0 else ""
+        hits.append(
+            SearchHit(
+                id=rec.id,
+                title=rec.title,
+                status=rec.status,
+                created_at=rec.created_at.isoformat(),
+                snippet=snippet,
+            )
+        )
+    return hits
+
+
+@router.put("/recordings/{recording_id}/speakers", response_model=RecordingOut)
+def rename_speakers(
+    recording_id: str,
+    body: SpeakerRenameIn,
+    open_id: str = Depends(current_open_id),
+    db: Session = Depends(get_db),
+) -> RecordingOut:
+    rec = _owned(db, recording_id, open_id)
+    for speaker, name in body.mapping.items():
+        speaker = speaker.strip()[:20]
+        name = (name or "").strip()[:50]
+        if not speaker:
+            continue
+        row = (
+            db.query(SpeakerName)
+            .filter(SpeakerName.recording_id == rec.id, SpeakerName.speaker == speaker)
+            .first()
+        )
+        if name and row:
+            row.name = name
+        elif name:
+            db.add(SpeakerName(recording_id=rec.id, speaker=speaker, name=name))
+        elif row:
+            db.delete(row)
+    db.commit()
+    db.refresh(rec)
+    return to_out(rec, include_detail=True)
 
 
 @router.get("/stats")

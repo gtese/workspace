@@ -49,6 +49,9 @@ class Recording(Base):
     deliveries: Mapped[list["DeliveryLog"]] = relationship(
         back_populates="recording", cascade="all, delete-orphan"
     )
+    speaker_names: Mapped[list["SpeakerName"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 class Segment(Base):
@@ -83,6 +86,21 @@ class DeliveryLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     recording: Mapped[Recording] = relationship(back_populates="deliveries")
+
+
+class SpeakerName(Base):
+    """说话人改名映射：原始标签（发言人1）→ 真实姓名。"""
+
+    __tablename__ = "speaker_names"
+    __table_args__ = (UniqueConstraint("recording_id", "speaker", name="uq_speaker"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: new_id("spk_"))
+    recording_id: Mapped[str] = mapped_column(
+        ForeignKey("recordings.id", ondelete="CASCADE"), index=True
+    )
+    speaker: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Employee(Base):

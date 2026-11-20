@@ -8,6 +8,10 @@ from ..schemas import RecordingOut
 from ..security import signed_url
 
 
+def speaker_map(rec: Recording) -> dict[str, str]:
+    return {s.speaker: s.name for s in (rec.speaker_names or [])}
+
+
 def to_out(rec: Recording, include_detail: bool = False) -> RecordingOut:
     data = RecordingOut(
         id=rec.id,
@@ -24,6 +28,12 @@ def to_out(rec: Recording, include_detail: bool = False) -> RecordingOut:
         data.transcript = (
             json.loads(rec.transcript_json).get("segments") if rec.transcript_json else None
         )
+        if data.transcript:
+            names = speaker_map(rec)
+            data.transcript = [
+                {**seg, "speaker": names.get(seg.get("speaker", ""), seg.get("speaker", ""))}
+                for seg in data.transcript
+            ]
         data.summary = json.loads(rec.summary_json) if rec.summary_json else None
         audio_file = storage.merged_path(rec.id)
         if audio_file.exists():

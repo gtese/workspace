@@ -45,6 +45,18 @@ class HealthOut(BaseModel):
     feishu_mode: str
 
 
+class SpeakerRenameIn(BaseModel):
+    mapping: dict[str, str] = Field(default_factory=dict)
+
+
+class SearchHit(BaseModel):
+    id: str
+    title: str
+    status: str
+    created_at: str
+    snippet: str = ""
+
+
 class SendIn(BaseModel):
     receive_id: str = ""
     receive_id_type: str = "open_id"
