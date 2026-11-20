@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>飞书卡片预览</title>
+<style>
+  body { margin:0; background:#eef0f3; font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; color:#1f2329; }
+  .phone { max-width:420px; margin:24px auto; padding:0 16px 40px; }
+  .tip { color:#8f959e; font-size:12px; text-align:center; margin:16px 0; }
+  .card { background:#fff; border-radius:8px; box-shadow:0 1px 2px rgba(31,35,41,.08); overflow:hidden; }
+  .card-head { background:#3370ff; color:#fff; padding:12px 14px; font-weight:600; font-size:15px; }
+  .card-body { padding:14px; }
+  .sec { margin-bottom:12px; }
+  .sec h4 { margin:0 0 4px; font-size:12px; color:#8f959e; font-weight:500; }
+  .sec p { margin:0; }
+  .sec ul { margin:4px 0 0; padding-left:18px; }
+  .sec li { margin:2px 0; }
+  .btn { display:inline-block; margin-top:6px; padding:8px 18px; border-radius:6px; background:#3370ff; color:#fff; font-size:13px; text-decoration:none; }
+  .divider { height:1px; background:#eff0f1; margin:12px 0; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="tip">飞书机器人卡片预览（数据来自纪要详情）</div>
+  <div id="app" style="color:#8f959e">加载中…</div>
+  <div class="tip">实际样式以飞书客户端渲染为准</div>
+</div>
+<script>
+const id = location.pathname.split('/').pop();
+const uid = localStorage.getItem('fm_uid') || 'demo';
+const token = localStorage.getItem('fm_token') || '';
+const headers = { 'X-Employee-Open-Id': uid, ...(token ? { Authorization: 'Bearer ' + token } : {}) };
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+(async () => {
+  const r = await fetch('/api/v1/recordings/' + id, { headers });
+  if (!r.ok) { document.getElementById('app').textContent = '读取失败：' + (await r.text()); return; }
+  const rec = await r.json();
+  const s = rec.summary || {};
+  const todos = (s.todos || []).map(t => `<li>${t.owner ? '<b>' + esc(t.owner) + '</b> ' : ''}${esc(t.item)}${t.due ? '（' + esc(t.due) + '）' : ''}</li>`).join('');
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <div class="card-head">纪要完成 · ${esc(rec.title)}</div>
+      <div class="card-body">
+        <div class="sec"><h4>摘要</h4><p>${esc(s.summary || '')}</p></div>
+        ${(s.key_points || []).length ? `<div class="sec"><h4>要点</h4><ul>${s.key_points.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
+        ${todos ? `<div class="divider"></div><div class="sec"><h4>待办</h4><ul>${todos}</ul></div>` : ''}
+        <a class="btn" href="/d/${rec.id}">查看全文</a>
+      </div>
+    </div>`;
+})();
+</script>
+</body>
+</html>

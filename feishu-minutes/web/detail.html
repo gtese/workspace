@@ -55,7 +55,7 @@ async function load() {
   document.getElementById('app').className = '';
   document.getElementById('app').innerHTML = `
     <h1>${esc(rec.title)}</h1>
-    <div class="meta">${rec.scene} · 时长 ${rec.duration_sec} 秒 · ${rec.segment_count} 段 · 状态 ${rec.status}</div>
+    <div class="meta">${sceneLabel(rec.scene)} · ${Math.max(1, Math.round(rec.duration_sec / 60))} 分钟 · ${rec.segment_count} 段 · ${statusLabel(rec.status)}</div>
     ${rec.audio_url ? `<audio controls preload="none" src="${rec.audio_url}"></audio>` : ''}
     ${(!isShared && rec.status === 'failed') ? `<div class="card"><h2>处理失败</h2><div style="color:#f87171">${esc(rec.error)}</div><p><button id="btnRetry" style="padding:10px 16px;border:0;border-radius:10px;background:#3b82f6;color:#fff">重新生成</button></p></div>` : ''}
     ${!isShared ? `<div class="card"><button id="btnShare" style="padding:10px 16px;border:0;border-radius:10px;background:#1f2937;color:#e8ecf3;border:1px solid #262b36">复制分享链接</button><span class="meta" style="margin-left:10px">链接 30 天有效，可发到飞书群</span></div>` : ''}
@@ -100,6 +100,10 @@ document.addEventListener('click', async (ev) => {
     location.reload();
   }
 });
+const SCENES = { meeting: '内部会议', client: '客户沟通', memo: '语音速记' };
+const STATUSES = { created: '草稿', recording: '录音中', queued: '排队中', transcribing: '转写中', transcribed: '转写完成', summarizing: '生成纪要', done: '已完成', failed: '失败' };
+function sceneLabel(s) { return SCENES[s] || s; }
+function statusLabel(s) { return STATUSES[s] || s; }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 load();
 </script>

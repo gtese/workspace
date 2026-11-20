@@ -58,6 +58,11 @@ def index() -> FileResponse:
     return FileResponse(WEB_DIR / "recorder.html")
 
 
+@app.get("/preview/card/{recording_id}", include_in_schema=False)
+def card_preview(recording_id: str) -> FileResponse:  # noqa: ARG001
+    return FileResponse(WEB_DIR / "card_preview.html")
+
+
 @app.get("/mine", include_in_schema=False)
 def mine_page() -> FileResponse:
     return FileResponse(WEB_DIR / "mine.html")

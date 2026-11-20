@@ -25,6 +25,19 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 - 测试：`cd backend && ../.venv/bin/python -m pytest -q`（51 个用例）
 - 浏览器 E2E：`cd backend && FM_E2E_BASE=http://127.0.0.1:8777 ../.venv/bin/python tests/e2e/test_recorder_browser.py`
 
+## 界面一览
+
+| 录音 | 纪要详情 |
+|---|---|
+| <img src="docs/screenshots/01-recorder.png" width="300"> | <img src="docs/screenshots/02-detail.png" width="300"> |
+
+| 我的纪要 | 飞书卡片（预览） |
+|---|---|
+| <img src="docs/screenshots/04-mine.png" width="300"> | <img src="docs/screenshots/03-feishu-card.png" width="300"> |
+
+> 截图用 `backend/scripts/seed_demo.py` 的虚构数据生成，可重跑：
+> `python scripts/seed_demo.py --reset` 后 `python tests/e2e/capture_screenshots.py`。
+
 ## 文档
 
 | 文档 | 内容 |
