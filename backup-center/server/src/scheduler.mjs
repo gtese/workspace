@@ -1,14 +1,17 @@
 import fs from 'node:fs';
 import { id, nowIso, parseJson, sleep } from './util.mjs';
 import { nextOccurrence, inWindow } from './cron.mjs';
-import { resticForget, resticCheck } from './restic.mjs';
+import { resticForget, resticCheck, listSnapshots, runRestic, firstFileInSnapshot } from './restic.mjs';
 
 export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }) {
   let timer = null;
   let lastCapacityCheck = 0;
   let lastOfflineCheck = 0;
   let checkBusy = false;
+  let lastSlaCheck = 0;
+  let drillBusy = false;
   const pruneInFlight = new Set();
+  const catchupAt = new Map();
 
   function clientOnline(client, nowMs = Date.now()) {
     if (!client.last_seen_at) return false;
@@ -85,7 +88,12 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
       lastCapacityCheck = nowMs;
       capacityAlerts();
     }
+    if (nowMs - lastSlaCheck > 15 * 60 * 1000) {
+      lastSlaCheck = nowMs;
+      slaCheck(nowMs, active);
+    }
     scheduleChecks();
+    scheduleDrills();
   }
 
   function offlineAlerts(nowMs) {
@@ -96,6 +104,39 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
       if (nowMs - baseline > threshold) {
         alerts.send({ type: 'client_offline', severity: 'warning', message: `节点 ${c.hostname} 已离线超过 ${Math.round(threshold / 60000)} 分钟`, clientId: c.id, dedupeMinutes: 720 }).catch(() => {});
       }
+    }
+  }
+
+  function lastSuccessAt(planId) {
+    const row = store.get("SELECT finished_at FROM runs WHERE plan_id=? AND status='success' ORDER BY finished_at DESC LIMIT 1", planId);
+    return row ? new Date(row.finished_at).getTime() : null;
+  }
+
+  // BCP：RPO/SLA 监控 + 错过后自动补备（每计划最多 1 小时一次）
+  function slaCheck(nowMs, active) {
+    const plans = store.all('SELECT * FROM plans WHERE enabled=1');
+    for (const plan of plans) {
+      const rpoHours = Math.max(1, Number(plan.rpo_hours || 26));
+      const created = plan.created_at ? new Date(plan.created_at).getTime() : nowMs;
+      const last = lastSuccessAt(plan.id);
+      const baseline = last || created;
+      const ageMs = nowMs - baseline;
+      if (ageMs <= rpoHours * 3600 * 1000) continue;
+      const client = store.get('SELECT * FROM clients WHERE id=?', plan.client_id);
+      alerts.send({
+        type: 'backup_sla', severity: 'critical',
+        message: `计划「${plan.name}」已 ${(ageMs / 3600000).toFixed(1)} 小时未成功备份（RPO ${rpoHours} 小时）`,
+        clientId: plan.client_id, dedupeMinutes: 360,
+      }).catch(() => {});
+      if (!client || client.status !== 'active' || !clientOnline(client, nowMs)) continue;
+      if (!canStart(plan, active)) continue;
+      if (nowMs - (catchupAt.get(plan.id) || 0) < 3600 * 1000) continue;
+      catchupAt.set(plan.id, nowMs);
+      try {
+        const run = jobs.createRun(plan, { trigger: 'sla_catchup' });
+        active.push(run);
+        console.log(`[scheduler] SLA catch-up 已触发：${plan.name} -> ${run.id}`);
+      } catch (e) { console.error('[scheduler] sla catch-up', e.message); }
     }
   }
 
@@ -168,11 +209,59 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
     }
   }
 
+  // BCP：定期恢复演练（服务端从最新快照还原一个小文件并 --verify）
+  async function drillClientRepo(clientId, repositoryId = null) {
+    const ctx = snapshots.ctx(clientId, repositoryId);
+    const snaps = await listSnapshots(cfg, ctx.dir, ctx.password);
+    if (!snaps.length) throw new Error('没有可用快照');
+    snaps.sort((a, b) => (a.time < b.time ? 1 : -1));
+    const snap = snaps[0];
+    const file = await firstFileInSnapshot(cfg, { repo: ctx.dir, password: ctx.password, snapshotId: snap.id });
+    const tmp = fs.mkdtempSync(`${cfg.paths.data}/restore-drill-`);
+    const checkId = id('chk', 8);
+    const started = nowIso();
+    store.run('INSERT INTO repo_checks(id,repository_id,client_id,kind,status,started_at,detail) VALUES(?,?,?,?,?,?,?)',
+      checkId, ctx.repositoryId, clientId, 'restore-drill', 'running', started, JSON.stringify({ snapshot: snap.short_id, file: file.path, size: file.size }));
+    try {
+      const r = await runRestic(cfg, {
+        repo: ctx.dir, password: ctx.password, timeoutMs: 120000,
+        args: ['restore', snap.id, '--target', tmp, '--include', file.path,
+          '--overwrite', 'always', '--exclude-xattr', 'security.selinux', '--verify', '--json'],
+      });
+      if (r.code !== 0) throw new Error((r.stderr || r.stdout || '').slice(-800));
+      store.run("UPDATE repo_checks SET status='ok', finished_at=?, detail=? WHERE id=?",
+        nowIso(), JSON.stringify({ snapshot: snap.short_id, file: file.path, size: file.size, verified: true }), checkId);
+      return { ok: true, snapshot: snap.short_id, file: file.path, size: file.size };
+    } catch (e) {
+      store.run("UPDATE repo_checks SET status='failed', finished_at=?, detail=? WHERE id=?",
+        nowIso(), JSON.stringify({ snapshot: snap.short_id, file: file.path, error: String(e.message || e).slice(0, 500) }), checkId);
+      await alerts.send({ type: 'restore_drill_failed', severity: 'critical', message: `节点 ${ctx.client.hostname} 恢复演练失败：${e.message}`, clientId, dedupeMinutes: 360 });
+      throw e;
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  async function scheduleDrills() {
+    if (drillBusy || checkBusy) return;
+    drillBusy = true;
+    try {
+      const days = Number(cfg.scheduler.restore_drill_interval_days || 30) * 24 * 3600 * 1000;
+      const pairs = store.all('SELECT client_id, repository_id FROM client_repo_keys');
+      for (const p of pairs) {
+        const last = store.get("SELECT started_at FROM repo_checks WHERE client_id=? AND repository_id=? AND kind='restore-drill' AND status='ok' ORDER BY started_at DESC LIMIT 1", p.client_id, p.repository_id);
+        if (last && Date.now() - new Date(last.started_at).getTime() < days) continue;
+        await drillClientRepo(p.client_id, p.repository_id).catch(() => {});
+        await sleep(1000);
+      }
+    } finally { drillBusy = false; }
+  }
+
   function lastCheckAt(clientId, kinds, repositoryId = null) {
     const args = [clientId];
     let extra = '';
     if (repositoryId) { extra = ' AND repository_id=?'; args.push(repositoryId); }
-    const rows = store.all(`SELECT kind, started_at FROM repo_checks WHERE client_id=? AND status='ok' AND kind IN (${kinds.map(() => '?').join(',')})${extra} ORDER BY started_at DESC LIMIT 1`, ...args, ...kinds);
+    const rows = store.all(`SELECT kind, started_at FROM repo_checks WHERE client_id=?${extra} AND status='ok' AND kind IN (${kinds.map(() => '?').join(',')}) ORDER BY started_at DESC LIMIT 1`, ...args, ...kinds);
     return rows.length ? new Date(rows[0].started_at).getTime() : 0;
   }
 
@@ -181,7 +270,7 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
     checkBusy = true;
     try {
       // 按 (节点, 备份池) 维度巡检，支持一个节点加入多个池
-      const pairs = store.all('SELECT client_id, repository_id FROM client_repo_keys');
+      const pairs = store.all("SELECT crk.client_id, crk.repository_id FROM client_repo_keys crk JOIN clients c ON c.id=crk.client_id WHERE c.status='active'");
       const week = 7 * 24 * 3600 * 1000;
       const month = 30 * 24 * 3600 * 1000;
       for (const p of pairs) {
@@ -205,5 +294,5 @@ export function createScheduler({ cfg, store, storage, jobs, snapshots, alerts }
     timer = null;
   }
 
-  return { start, stop, tick, pruneClient, checkClient, maybeRetention, clientOnline };
+  return { start, stop, tick, pruneClient, checkClient, maybeRetention, clientOnline, slaCheck, drillClient: drillClientRepo };
 }

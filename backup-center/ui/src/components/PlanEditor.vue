@@ -54,6 +54,7 @@ function initialForm() {
     skipOutside: windowValue.skip_outside !== false,
     compression: plan.compression || 'auto',
     limit_upload_kib: Number(plan.limit_upload_kib) || 0,
+    rpo_hours: Number(plan.rpo_hours ?? 26) || 26,
     keepLast: Number(retention.keep_last ?? 5),
     keepDaily: Number(retention.keep_daily ?? 7),
     keepWeekly: Number(retention.keep_weekly ?? 4),
@@ -100,6 +101,7 @@ function validate() {
   if (!/^\d{2}:\d{2}$/.test(form.windowStart) || !/^\d{2}:\d{2}$/.test(form.windowEnd)) {
     errors.window = '备份窗口时间格式需为 HH:MM'
   }
+  if (!(Number(form.rpo_hours) >= 1)) errors.rpo = 'RPO 必须为正整数小时'
   for (const key of ['keepLast', 'keepDaily', 'keepWeekly', 'keepMonthly', 'keepYearly', 'limit_upload_kib']) {
     if (Number(form[key]) < 0 || Number.isNaN(Number(form[key]))) {
       errors.retention = '保留数量与限速必须为非负整数'
@@ -152,6 +154,7 @@ async function save() {
       },
       compression: form.compression,
       limit_upload_kib: Number(form.limit_upload_kib) || 0,
+      rpo_hours: Number(form.rpo_hours) || 26,
       retention: {
         keep_last: Number(form.keepLast) || 0,
         keep_daily: Number(form.keepDaily) || 0,
@@ -316,6 +319,11 @@ async function save() {
           <div>
             <label class="bc-label">上传限速（KiB/s，0 为不限）</label>
             <input v-model.number="form.limit_upload_kib" type="number" min="0" class="bc-input" />
+          </div>
+          <div>
+            <label class="bc-label">RPO（小时）</label>
+            <input v-model.number="form.rpo_hours" type="number" min="1" max="8760" class="bc-input" />
+            <p class="mt-1 text-[11px] text-slate-400">超过该时长没有成功备份会触发 SLA 告警，并在客户端在线时自动补备。</p>
           </div>
         </div>
       </section>

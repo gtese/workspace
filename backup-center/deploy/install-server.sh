@@ -125,6 +125,16 @@ chmod 0640 /etc/backup-center/config.json
 install -m 0644 "$SRC/deploy/systemd/backup-center.service" /etc/systemd/system/backup-center.service
 install -m 0644 "$SRC/deploy/systemd/backup-mountd.service" /etc/systemd/system/backup-mountd.service
 install -m 0644 "$SRC/deploy/systemd/backup-center.tmpfiles" /etc/tmpfiles.d/backup-center.conf
+install -m 0644 "$SRC/deploy/logrotate/backup-center" /etc/logrotate.d/backup-center
+install -m 0755 "$SRC/deploy/dr-export.sh" /opt/backup-center/bin/dr-export.sh
+install -m 0644 "$SRC/deploy/systemd/backup-center-dr-export.service" /etc/systemd/system/backup-center-dr-export.service
+install -m 0644 "$SRC/deploy/systemd/backup-center-dr-export.timer" /etc/systemd/system/backup-center-dr-export.timer
+install -m 0644 "$SRC/deploy/dr-export.env.example" /etc/backup-center/dr-export.env.example
+if [[ ! -f /etc/backup-center/dr.pass ]]; then
+  openssl rand -base64 32 > /etc/backup-center/dr.pass
+  chmod 600 /etc/backup-center/dr.pass
+  echo "已生成 /etc/backup-center/dr.pass，请立即离线托管该口令（与 DR 介质分开）"
+fi
 systemd-tmpfiles --create /etc/tmpfiles.d/backup-center.conf
 systemctl daemon-reload
 systemctl enable backup-mountd.service backup-center.service >/dev/null

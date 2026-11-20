@@ -45,6 +45,11 @@ try {
   store.run(`INSERT OR IGNORE INTO client_repo_keys(client_id,repository_id,repo_password_enc,created_at)
              SELECT client_id,repository_id,repo_password_enc,created_at FROM client_repos`);
 } catch (e) { console.error('[migrate] client_repo_keys', e.message); }
+// 迁移：计划增加 RPO 字段（小时）
+try {
+  const cols = store.all('PRAGMA table_info(plans)').map((c) => c.name);
+  if (!cols.includes('rpo_hours')) store.run('ALTER TABLE plans ADD COLUMN rpo_hours INTEGER NOT NULL DEFAULT 26');
+} catch (e) { console.error('[migrate] rpo_hours', e.message); }
 // 安全迁移：只允许 admin 角色登录后，清理历史 viewer/operator 会话并停用 OIDC 非管理员账号
 try {
   store.run("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin')");
@@ -61,7 +66,7 @@ const clients = createClients({ cfg, store, ca, storage, audit });
 const jobs = createJobs({ cfg, store, storage, audit });
 const snapshots = createSnapshots({ cfg, store, storage, jobs });
 const alerts = createAlerts({ cfg, store, masterKey });
-const metrics = createMetrics({ store });
+const metrics = createMetrics({ store, cfg });
 const scheduler = createScheduler({ cfg, store, storage, jobs, snapshots, alerts });
 jobs.setOnRunSuccess((run) => scheduler.maybeRetention(run));
 

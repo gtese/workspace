@@ -1,0 +1,11 @@
+[Unit]
+Description=backup-center control-plane DR export
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/backup-center/dr-export.env
+ExecStart=/opt/backup-center/bin/dr-export.sh
+Nice=10
+IOSchedulingClass=idle

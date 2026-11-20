@@ -130,6 +130,46 @@ export async function resticCheck(cfg, repoPath, password, { readDataSubset } = 
   return runRestic(cfg, { repo: repoPath, password, args, timeoutMs: 24 * 3600 * 1000 });
 }
 
+export function firstFileInSnapshot(cfg, { repo, password, snapshotId, maxSize = 5 * 1024 * 1024, timeoutMs = 20000 }) {
+  return new Promise((resolve, reject) => {
+    const child = spawnRestic(cfg, { repo, password, args: ['ls', '--json', snapshotId] });
+    let carry = '';
+    let lines = 0;
+    let settled = false;
+    let found = null;
+    const finish = (err, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      err ? reject(err) : resolve(value);
+    };
+    const timer = setTimeout(() => finish(new Error('查找快照文件超时')), timeoutMs);
+    child.stdout.on('data', (buf) => {
+      if (settled) return;
+      const text = carry + buf.toString('utf8');
+      const parts = text.split('\n');
+      carry = parts.pop();
+      for (const line of parts) {
+        if (++lines > 50000) { finish(new Error('快照文件过多，无法选取演练文件')); return; }
+        try {
+          const j = JSON.parse(line);
+          if (j.struct_type === 'node' && j.type === 'file' && Number(j.size) > 0 && Number(j.size) <= maxSize) {
+            found = { path: j.path, size: Number(j.size) };
+            finish(null, found);
+            return;
+          }
+        } catch { /* ignore */ }
+      }
+    });
+    child.on('error', (e) => finish(e));
+    child.on('close', () => {
+      if (found) finish(null, found);
+      else finish(new Error('快照中未找到适合演练的小文件'));
+    });
+  });
+}
+
 export async function resticStats(cfg, repoPath, password) {
   const r = await runRestic(cfg, { repo: repoPath, password, args: ['stats', '--json', '--mode', 'raw-data'] });
   if (r.code !== 0) return null;

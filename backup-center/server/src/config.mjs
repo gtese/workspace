@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULTS = {
+  metrics: { token: '' },
   tls: {
     enabled: true, cert: '', key: '', ca: '',
     enterprise_ca: '/etc/pki/ca-trust/source/anchors/tri-local-enterprise-root-ca.crt',

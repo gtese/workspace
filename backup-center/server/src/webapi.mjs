@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { createRouter, parseCookies, cookieHeader, clearCookie, sendJson, sendError, readJsonBody, securityHeaders } from './http.mjs';
 import { ApiError, id, nowIso, parseJson, parseBool, toInt, timingSafeEqualStr, clientIp, randomToken } from './util.mjs';
@@ -118,8 +119,22 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
 
   router.add('GET', '/healthz', async (ctx) => {
     let dbOk = true;
+    let checks = {};
     try { store.get('SELECT 1 AS x'); } catch { dbOk = false; }
-    sendJson(ctx.res, 200, { ok: dbOk, version: '0.1.0', db: dbOk ? 'ok' : 'error', time: nowIso() });
+    if (ctx.query.get('deep')) {
+      try { dbOk = dbOk && store.get('PRAGMA quick_check').quick_check === 'ok'; } catch { dbOk = false; }
+      const repos = store.all('SELECT id,name,mountpoint FROM repositories');
+      for (const r of repos) {
+        try { fs.statfsSync(r.mountpoint); checks[r.name] = 'ok'; } catch { checks[r.name] = 'unavailable'; }
+      }
+      checks.restic = fs.existsSync(cfg.restic.binary) ? 'ok' : 'missing';
+      try {
+        const cert = new crypto.X509Certificate(fs.readFileSync(cfg.tls.cert));
+        checks.tls_cert = cert.validTo;
+      } catch { checks.tls_cert = 'unreadable'; }
+    }
+    const ok = dbOk && Object.values(checks).every((v) => v !== 'unavailable' && v !== 'missing' && v !== 'unreadable');
+    sendJson(ctx.res, ok ? 200 : 503, { ok, version: '0.1.0', db: dbOk ? 'ok' : 'error', checks, time: nowIso() });
   });
 
   /* ---------- clients ---------- */
@@ -318,6 +333,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
     if (body.window !== undefined) out.window_json = JSON.stringify(body.window || {});
     if (body.compression !== undefined) out.compression = ['auto', 'max', 'off'].includes(body.compression) ? body.compression : 'auto';
     if (body.limit_upload_kib !== undefined) out.limit_upload_kib = Math.max(0, toInt(body.limit_upload_kib, 0));
+    if (body.rpo_hours !== undefined) out.rpo_hours = Math.max(1, toInt(body.rpo_hours, 26));
     if (body.retention !== undefined) out.retention_json = JSON.stringify(body.retention || {});
     if (body.hooks !== undefined) out.hooks_json = JSON.stringify(body.hooks || {});
     if (body.enabled !== undefined) out.enabled = body.enabled ? 1 : 0;
@@ -347,12 +363,12 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
     const planId = id('p', 6);
     const next = nextRun(fields.cron);
     store.run(`INSERT INTO plans(id,name,client_id,repository_id,paths_json,excludes_json,cron,window_json,compression,
-      limit_upload_kib,retention_json,hooks_json,enabled,created_by,created_at,next_run_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      limit_upload_kib,rpo_hours,retention_json,hooks_json,enabled,created_by,created_at,next_run_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       planId, fields.name, fields.client_id, repoId, fields.paths_json, fields.excludes_json || '[]', fields.cron,
       fields.window_json || '{}', fields.compression || 'auto', fields.limit_upload_kib || 0,
-      fields.retention_json || '{}', fields.hooks_json || '{}', fields.enabled === undefined ? 1 : fields.enabled,
-      ctx.user.id, nowIso(), next);
+      fields.rpo_hours || 26, fields.retention_json || '{}', fields.hooks_json || '{}',
+      fields.enabled === undefined ? 1 : fields.enabled, ctx.user.id, nowIso(), next);
     log(ctx, 'plan.create', planId, { name: fields.name, client_id: fields.client_id });
     sendJson(ctx.res, 200, planOut(store.get('SELECT * FROM plans WHERE id=?', planId)));
   });
@@ -696,7 +712,9 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('GET', '/api/metrics', async (ctx) => {
-    requireRole(ctx, ['admin']);
+    const bearer = String(ctx.req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const token = bearer || String(ctx.query.get('token') || '');
+    if (!(cfg.metrics.token && timingSafeEqualStr(token, cfg.metrics.token))) requireRole(ctx, ['admin']);
     ctx.res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     ctx.res.end(metrics.render());
   });
@@ -716,7 +734,10 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
       try {
         // 仅管理员可访问管理/数据接口（Group_Roots 成员或本地应急 admin）
         const publicApi = new Set(['/api/auth/login', '/api/auth/config', '/api/auth/logout']);
-        if (pathname.startsWith('/api/') && !publicApi.has(pathname)) {
+        const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+        const metricsTokenOk = pathname === '/api/metrics' && cfg.metrics.token &&
+          timingSafeEqualStr(bearer || String(url.searchParams.get('token') || ''), cfg.metrics.token);
+        if (pathname.startsWith('/api/') && !publicApi.has(pathname) && !metricsTokenOk) {
           if (!session) throw new ApiError(401, 'unauthorized', '请先登录');
           if (session.user.role !== 'admin') throw new ApiError(403, 'forbidden', '仅管理员可访问');
         }
