@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     aliyun_api_key: str = ""
     aliyun_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     asr_model: str = "qwen3-asr-flash"
+    asr_filetrans_model: str = "qwen-audio-3.1-asr-flash-filetrans"
+    asr_diarization: bool = True
     asr_chunk_concurrency: int = 3
 
     # LLM
