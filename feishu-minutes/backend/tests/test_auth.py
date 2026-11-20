@@ -80,3 +80,32 @@ def test_expired_bearer_rejected(client: TestClient) -> None:
     r = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
     # 过期 token 不作为身份，回落到默认 demo
     assert r.json()["open_id"] == "demo"
+
+
+def test_real_mode_requires_feishu_login(client: TestClient, monkeypatch) -> None:
+    from app.api import deps
+    from app.config import get_settings
+    from app.security import issue_session
+
+    real = get_settings().model_copy(update={"feishu_mode": "real"})
+    monkeypatch.setattr(deps, "get_settings", lambda: real)
+
+    assert client.get("/api/v1/recordings").status_code == 401
+    assert client.get("/api/v1/recordings", headers={"X-Employee-Open-Id": "demo"}).status_code == 401
+    assert client.get("/api/v1/me").status_code == 401
+
+    token = issue_session("ou_real_user")
+    r = client.get("/api/v1/recordings", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    r = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert r.json()["open_id"] == "ou_real_user"
+
+
+def test_real_mode_health_stays_public(client: TestClient, monkeypatch) -> None:
+    from app.api import deps
+    from app.config import get_settings
+
+    real = get_settings().model_copy(update={"feishu_mode": "real"})
+    monkeypatch.setattr(deps, "get_settings", lambda: real)
+    assert client.get("/health").status_code == 200

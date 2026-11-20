@@ -5,29 +5,27 @@
 <link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>纪要详情</title>
-<style>
-  :root { --bg:#0f1115; --card:#171a21; --line:#262b36; --text:#e8ecf3; --muted:#8b94a7; --accent:#3b82f6; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
-  main { max-width:760px; margin:0 auto; padding:20px 16px 64px; }
-  h1 { font-size:20px; margin:0 0 6px; }
-  h2 { font-size:14px; color:var(--muted); margin:22px 0 8px; font-weight:600; letter-spacing:.5px; }
-  .meta { color:var(--muted); font-size:12px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-top:12px; }
-  ul { margin:6px 0 0; padding-left:20px; }
-  li { margin:4px 0; }
-  audio { width:100%; margin-top:12px; }
-  .ts { color:var(--muted); font-variant-numeric:tabular-nums; font-size:12px; margin-right:8px; }
-  .speaker { color:#93c5fd; font-weight:600; margin-right:6px; }
-  .speaker.editable { cursor:pointer; border-bottom:1px dashed #3b556f; }
-  .hint { color:#8b94a7; font-size:12px; margin-top:6px; }
-  .line { padding:6px 0; border-bottom:1px dashed #20242d; }
-  .line:last-child { border-bottom:0; }
-  .empty { color:var(--muted); }
-</style>
+<link rel="stylesheet" href="/static/theme.css">
 </head>
 <body>
 <main>
+  <div class="hero">
+    <div class="brand">
+      <span class="chip-icon" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="8" y="8" width="16" height="16" rx="3" fill="#1f6feb" opacity=".92"/>
+          <rect x="12" y="12" width="8" height="8" rx="1.5" fill="#eaf3ff"/>
+          <path d="M16 2v6M16 24v6M2 16h6M24 16h6M6 5l4 4M22 23l4 4M26 5l-4 4M10 23l-4 4" stroke="#4c9aff" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="16" cy="16" r="1.6" fill="#1f6feb"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>纪要详情 <span class="badge">AI</span></h1>
+        <div class="sub">摘要 · 待办 · 转写全文</div>
+      </div>
+      <a class="nav" href="/mine">我的纪要 →</a>
+    </div>
+  </div>
   <div id="app" class="empty">加载中…</div>
 </main>
 <script>
@@ -42,6 +40,10 @@ async function load() {
     ? '/api/v1/shared/' + id + '?exp=' + encodeURIComponent(qs.get('exp') || '') + '&sig=' + encodeURIComponent(qs.get('sig') || '')
     : '/api/v1/recordings/' + id;
   const r = await fetch(apiUrl, isShared ? {} : { headers: authHeaders });
+  if (r.status === 401) {
+    document.getElementById('app').innerHTML = '<div class="card"><h2>需要登录飞书</h2><p class="meta">请从飞书工作台打开本应用后再查看。</p></div>';
+    return;
+  }
   if (!r.ok) { document.getElementById('app').textContent = '读取失败：' + (await r.text()); return; }
   const rec = await r.json();
   const s = rec.summary || {};
@@ -58,7 +60,7 @@ async function load() {
     <div class="meta">${sceneLabel(rec.scene)} · ${Math.max(1, Math.round(rec.duration_sec / 60))} 分钟 · ${rec.segment_count} 段 · ${statusLabel(rec.status)}</div>
     ${rec.audio_url ? `<audio controls preload="none" src="${rec.audio_url}"></audio>` : ''}
     ${(!isShared && rec.status === 'failed') ? `<div class="card"><h2>处理失败</h2><div style="color:#f87171">${esc(rec.error)}</div><p><button id="btnRetry" style="padding:10px 16px;border:0;border-radius:10px;background:#3b82f6;color:#fff">重新生成</button></p></div>` : ''}
-    ${!isShared ? `<div class="card"><button id="btnShare" style="padding:10px 16px;border:0;border-radius:10px;background:#1f2937;color:#e8ecf3;border:1px solid #262b36">复制分享链接</button><span class="meta" style="margin-left:10px">链接 30 天有效，可发到飞书群</span></div>` : ''}
+    ${!isShared ? `<div class="card"><button id="btnShare" class="ghost">复制分享链接</button><span class="meta" style="margin-left:10px">链接 30 天有效，可发到飞书群</span></div>` : ''}
     <div class="card"><h2>摘要</h2><div>${esc(s.summary || '（无）')}</div></div>
     ${(s.key_points || []).length ? `<div class="card"><h2>要点</h2><ul>${s.key_points.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
     ${(s.decisions || []).length ? `<div class="card"><h2>结论 / 决策</h2><ul>${s.decisions.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}

@@ -1,5 +1,6 @@
-from fastapi import Header
+from fastapi import Header, HTTPException
 
+from ..config import get_settings
 from ..security import verify_session
 
 
@@ -12,6 +13,9 @@ def current_open_id(
         open_id = verify_session(authorization.split(" ", 1)[1].strip())
         if open_id:
             return open_id
+    if get_settings().feishu_mode == "real":
+        # 生产环境必须登录飞书，不再接受自报 open_id
+        raise HTTPException(status_code=401, detail="请登录飞书后使用")
     if x_employee_open_id:
         return x_employee_open_id
     return "demo"

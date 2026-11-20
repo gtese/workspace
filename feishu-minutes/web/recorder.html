@@ -6,45 +6,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>纪要录音 · POC</title>
 <script defer src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.26.js"></script>
-<style>
-  :root { --bg:#0f1115; --card:#171a21; --line:#262b36; --text:#e8ecf3; --muted:#8b94a7; --accent:#3b82f6; --danger:#ef4444; --ok:#22c55e; }
-  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
-  main { max-width:560px; margin:0 auto; padding:20px 16px 56px; }
-  h1 { font-size:19px; margin:0 0 4px; }
-  .sub { color:var(--muted); font-size:12px; margin-bottom:18px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
-  label { display:block; font-size:12px; color:var(--muted); margin:0 0 6px; }
-  input, select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#0d0f14; color:var(--text); font-size:15px; }
-  .row { display:flex; gap:10px; margin-top:12px; }
-  .row > div { flex:1; }
-  button { border:0; border-radius:12px; padding:13px 18px; font-size:15px; font-weight:600; color:#fff; background:var(--accent); width:100%; }
-  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
-  button.danger { background:var(--danger); }
-  button:disabled { opacity:.45; }
-  .rec { display:flex; align-items:center; gap:10px; margin:14px 0 6px; }
-  .dot { width:12px; height:12px; border-radius:50%; background:var(--danger); animation:pulse 1.2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
-  .timer { font-variant-numeric:tabular-nums; font-size:30px; font-weight:700; letter-spacing:1px; }
-  .level { height:6px; background:#0d0f14; border-radius:99px; overflow:hidden; margin:10px 0 2px; }
-  .level > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#22c55e,#eab308,#ef4444); transition:width .08s linear; }
-  .meta { color:var(--muted); font-size:12px; }
-  .log { font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--muted); white-space:pre-wrap; max-height:180px; overflow:auto; }
-  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid var(--line); color:var(--muted); margin-right:6px; }
-  .pill.ok { color:var(--ok); border-color:#1f5133; }
-  .pill.bad { color:var(--danger); border-color:#5a2222; }
-  details summary { cursor:pointer; color:var(--muted); font-size:12px; }
-  #result a { color:#93c5fd; }
-</style>
+<link rel="stylesheet" href="/static/theme.css">
+<style>#result a{color:var(--primary)}</style>
 </head>
 <body>
 <main>
-  <div style="display:flex;justify-content:space-between;align-items:baseline">
-    <h1>纪要录音 · POC</h1>
-    <a href="/mine" style="color:#93c5fd;font-size:13px;text-decoration:none">我的纪要 →</a>
+  <div class="hero">
+    <div class="brand">
+      <span class="chip-icon" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="8" y="8" width="16" height="16" rx="3" fill="#1f6feb" opacity=".92"/>
+          <rect x="12" y="12" width="8" height="8" rx="1.5" fill="#eaf3ff"/>
+          <path d="M16 2v6M16 24v6M2 16h6M24 16h6M6 5l4 4M22 23l4 4M26 5l-4 4M10 23l-4 4" stroke="#4c9aff" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="16" cy="16" r="1.6" fill="#1f6feb"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>纪要录音 <span class="badge">AI</span></h1>
+        <div class="sub">录音自动转写 · AI 生成会议纪要</div>
+      </div>
+      <a class="nav" href="/mine">我的纪要 →</a>
+    </div>
+    <div class="meta" id="who" style="margin-top:10px">正在识别身份…</div>
   </div>
-  <div class="sub">录音 → 分段上传 → 转写 → 纪要。当前为 mock ASR/LLM 链路，用于验证录音通路。</div>
-  <div class="meta" id="who" style="margin:-10px 0 14px">未登录（POC 用 open_id 模拟）</div>
   <div class="card" id="resume" style="display:none"></div>
 
   <div class="card">
@@ -59,7 +43,7 @@
           <option value="memo">语音速记</option>
         </select>
       </div>
-      <div>
+      <div id="uidRow">
         <label>员工 open_id（POC）</label>
         <input id="uid" placeholder="demo" value="">
       </div>
@@ -74,7 +58,7 @@
       <button id="btnStart">开始录音</button>
       <button id="btnStop" class="danger" disabled>结束并生成纪要</button>
     </div>
-    <div class="row"><button id="btnUpload" class="ghost">上传本地音频（.wav 兜底）</button></div>
+    <div class="row"><button id="btnUpload" class="ghost">上传本地音频（m4a / wav 兜底）</button></div>
     <input id="fileInput" type="file" accept="audio/*,.wav" hidden>
     <div class="log" id="status" style="margin-top:12px"></div>
     <div class="row" id="retryBox" style="display:none"><button id="btnRetryUpload" class="danger">重试上传本段</button></div>
@@ -88,6 +72,21 @@
   </div>
 
   <div class="card" id="result" style="display:none"></div>
+
+  <div class="gate" id="gate" style="display:none">
+    <div class="gate-card">
+      <span class="chip-icon" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="8" y="8" width="16" height="16" rx="3" fill="#1f6feb" opacity=".92"/>
+          <rect x="12" y="12" width="8" height="8" rx="1.5" fill="#eaf3ff"/>
+          <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#4c9aff" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <h2 id="gateTitle">请在飞书内打开</h2>
+      <p id="gateMsg">本应用需要登录飞书账号后使用。</p>
+      <button id="btnRelogin">重试登录</button>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -232,6 +231,10 @@ async function api(path, opts = {}) {
     ...opts,
     headers: { 'X-Employee-Open-Id': uid(), ...auth, ...(opts.headers || {}) }
   });
+  if (r.status === 401) {
+    showGate('需要登录飞书', '请从飞书工作台打开本应用后再使用。');
+    throw new Error('未登录');
+  }
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
@@ -450,47 +453,86 @@ async function startResume(rec) {
 }
 
 /* ---------- 飞书免登（网页应用内） ---------- */
+const LOGIN_SCRIPT_FLAG = 'fm_login_done';
+
+function showGate(title, msg) {
+  $('#gate').style.display = 'grid';
+  $('#gateTitle').textContent = title;
+  $('#gateMsg').textContent = msg;
+  document.body.classList.add('locked');
+}
+function hideGate() {
+  $('#gate').style.display = 'none';
+  document.body.classList.remove('locked');
+}
+
+async function fetchConfig() {
+  try { return await fetch(API + '/feishu/app-id').then(r => r.json()); }
+  catch (e) { return { app_id: '', mode: 'mock' }; }
+}
+
+async function attemptFeishuLogin(appId) {
+  if (!window.h5sdk || !window.tt) throw new Error('NOT_IN_FEISHU');
+  const code = await new Promise((resolve, reject) => {
+    window.h5sdk.error(err => console.warn('h5sdk error', err));
+    window.h5sdk.ready(() => {
+      const ok = (res) => resolve(res.code);
+      const fail = (err) => reject(new Error('AUTH_FAIL:' + JSON.stringify(err)));
+      if (window.tt.requestAccess) {
+        window.tt.requestAccess({ appID: appId, scopeList: [], success: ok, fail });
+      } else if (window.tt.requestAuthCode) {
+        window.tt.requestAuthCode({ appId: appId, success: ok, fail });
+      } else {
+        reject(new Error('NO_AUTH_API'));
+      }
+    });
+  });
+  const r = await fetch(API + '/auth/feishu-login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code })
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || 'LOGIN_FAILED');
+  S.token = data.token; S.openId = data.open_id;
+  $('#uid').value = data.open_id;
+  localStorage.setItem('fm_uid', data.open_id);
+  localStorage.setItem('fm_token', data.token);
+  return data;
+}
+
 async function ensureLogin() {
+  const cfg = await fetchConfig();
+  S.mode = cfg.mode || 'mock';
+  if (S.mode !== 'real') {
+    $('#uidRow').style.display = '';
+    if (!$('#uid').value) $('#uid').value = localStorage.getItem('fm_uid') || 'demo';
+    $('#who').textContent = '开发模式 · 模拟身份 ' + uid();
+    hideGate();
+    return;
+  }
+  $('#uidRow').style.display = 'none';
+  if (!cfg.app_id) { showGate('应用未配置', '服务器尚未配置飞书 App ID，请联系管理员。'); return; }
+  if (!window.h5sdk || !window.tt) {
+    showGate('请在飞书客户端中打开', '本应用需要飞书登录，请从飞书工作台进入「纪要录音」。');
+    return;
+  }
   try {
-    const cfg = await fetch(API + '/feishu/app-id').then(r => r.json());
-    if (!cfg.app_id) {
-      $('#who').textContent = '未配置飞书应用，模拟身份：' + uid();
-      return;
-    }
-    if (!window.h5sdk || !window.tt) {
-      $('#who').textContent = '非飞书环境，模拟身份：' + uid();
-      return;
-    }
-    const code = await new Promise((resolve, reject) => {
-      window.h5sdk.error(err => console.warn('h5sdk error', err));
-      window.h5sdk.ready(() => {
-        const ok = (res) => resolve(res.code);
-        const fail = (err) => reject(new Error(JSON.stringify(err)));
-        if (window.tt.requestAccess) {
-          window.tt.requestAccess({ appID: cfg.app_id, scopeList: [], success: ok, fail });
-        } else if (window.tt.requestAuthCode) {
-          window.tt.requestAuthCode({ appId: cfg.app_id, success: ok, fail });
-        } else {
-          reject(new Error('客户端不支持 requestAccess'));
-        }
-      });
-    });
-    const r = await fetch(API + '/auth/feishu-login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code })
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || '登录失败');
-    S.token = data.token; S.openId = data.open_id;
-    $('#uid').value = data.open_id;
-    localStorage.setItem('fm_uid', data.open_id);
-    localStorage.setItem('fm_token', data.token);
-    $('#who').textContent = '已登录：' + (data.name || data.open_id) + (data.mock ? '（mock）' : '');
+    const data = await attemptFeishuLogin(cfg.app_id);
+    $('#who').textContent = '已登录：' + (data.name || data.open_id);
+    hideGate();
   } catch (e) {
     console.warn('飞书登录失败', e);
-    $('#who').textContent = '登录失败，模拟身份：' + uid();
+    const msg = String((e && e.message) || e);
+    if (msg === 'NOT_IN_FEISHU') {
+      showGate('请在飞书客户端中打开', '本应用需要飞书登录，请从飞书工作台进入「纪要录音」。');
+    } else {
+      showGate('登录失败', '请重新在飞书内打开；若持续失败，请检查应用的重定向 URL 配置。');
+    }
   }
 }
+
+$('#btnRelogin').onclick = () => ensureLogin();
+
 window.addEventListener('load', () => { ensureLogin(); checkResume(); });
 </script>
 </body>
