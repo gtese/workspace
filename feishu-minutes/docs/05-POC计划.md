@@ -12,7 +12,7 @@
 | # | 验证项 | 判定标准 |
 |---|---|---|
 | 1 | `navigator.mediaDevices.getUserMedia` 在飞书 WebView（iOS/Android）是否可用 | 能拿到 `MediaStream` 并录出可播放音频 |
-| 2 | 飞书 JSAPI `tt.getRecorderManager`（需 JSAPI config 鉴权）是否可用 | `start({duration:540000, sampleRate:16000, numberOfChannels:1})` 能录 9 分钟 |
+| 2 | 飞书 JSAPI `tt.getRecorderManager`（需 JSAPI config 鉴权）是否可用 | `start({duration:120000, sampleRate:16000, numberOfChannels:1})` 能录 2 分钟 |
 | 3 | `onFrameRecorded` / `onStop` 得到的文件能否被 `fetch` 或 `tt.uploadFile` 上传到自有域名 | 服务器收到完整分段 |
 | 4 | 息屏、切后台、来电后的行为 | 记录现象，决定是否需要"保持前台"引导 |
 | 5 | 上传耗时（4G/WiFi，17MB 一段） | 决定分段长度与码率策略 |

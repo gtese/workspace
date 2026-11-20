@@ -7,11 +7,12 @@ from ..db import get_db
 from ..models import (
     STATUS_CREATED,
     STATUS_FAILED,
-    STATUS_UPLOADED,
+    STATUS_QUEUED,
+    STATUS_RECORDING,
     Recording,
     Segment,
 )
-from ..pipeline import process_recording, start_processing
+from ..pipeline import process_recording
 from ..schemas import FinishOut, RecordingCreate, RecordingOut
 from ..security import signed_url
 from .deps import current_open_id
@@ -97,7 +98,7 @@ async def upload_segment(
     db: Session = Depends(get_db),
 ) -> RecordingOut:
     rec = _owned(db, recording_id, open_id)
-    if rec.status not in (STATUS_CREATED, STATUS_UPLOADED, STATUS_FAILED):
+    if rec.status not in (STATUS_CREATED, STATUS_RECORDING, STATUS_FAILED):
         raise HTTPException(status_code=409, detail=f"当前状态不允许上传分段: {rec.status}")
 
     data = await file.read()
@@ -132,7 +133,7 @@ async def upload_segment(
         )
     if rec.status == STATUS_FAILED:
         rec.error = ""
-    rec.status = STATUS_UPLOADED
+    rec.status = STATUS_RECORDING
     db.commit()
     db.refresh(rec)
     return _to_out(rec)
@@ -147,13 +148,11 @@ def finish_recording(
     rec = _owned(db, recording_id, open_id)
     if not rec.segments:
         raise HTTPException(status_code=400, detail="还没有上传任何分段")
-    rec.status = STATUS_UPLOADED
+    rec.status = STATUS_QUEUED
     db.commit()
-    if get_settings().sync_pipeline:
+    if get_settings().sync_pipeline:  # 测试/调试：同步跑完
         process_recording(rec.id)
         db.refresh(rec)
-    else:
-        start_processing(rec.id)
     return FinishOut(id=rec.id, status=rec.status, segment_count=len(rec.segments))
 
 
@@ -166,11 +165,10 @@ def rerun_recording(
     rec = _owned(db, recording_id, open_id)
     if not rec.segments:
         raise HTTPException(status_code=400, detail="没有音频分段")
-    rec.status = STATUS_UPLOADED
+    rec.status = STATUS_QUEUED
     rec.error = ""
     db.commit()
+    # worker 会在 2 秒内取走；sync 模式直接跑
     if get_settings().sync_pipeline:
         process_recording(rec.id)
-    else:
-        start_processing(rec.id)
     return FinishOut(id=rec.id, status=rec.status, segment_count=len(rec.segments))

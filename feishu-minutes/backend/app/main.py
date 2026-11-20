@@ -8,8 +8,10 @@ from contextlib import asynccontextmanager
 from .api import auth, media, recordings
 from .config import REPO_ROOT, get_settings
 from .db import init_db
-from .pipeline import recover_stuck
+from .maintenance import cleanup_expired, start_maintenance, stop_maintenance
+from .pipeline import requeue_interrupted
 from .schemas import HealthOut
+from .worker import start_worker, stop_worker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -19,13 +21,18 @@ WEB_DIR = REPO_ROOT / "web"
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
     init_db()
-    stuck = recover_stuck()
+    requeued = requeue_interrupted()
+    cleaned = cleanup_expired()
     s = get_settings()
+    start_worker()
+    start_maintenance()
     logging.getLogger(__name__).info(
-        "启动 %s | asr=%s llm=%s feishu=%s | 恢复中断任务 %d 个",
-        s.app_name, s.asr_provider, s.llm_provider, s.feishu_mode, stuck,
+        "启动 %s | asr=%s llm=%s feishu=%s | 重新排队 %d 个 | 清理过期音频 %d 条",
+        s.app_name, s.asr_provider, s.llm_provider, s.feishu_mode, requeued, cleaned,
     )
     yield
+    stop_worker()
+    stop_maintenance()
 
 
 app = FastAPI(title="feishu-minutes", version="0.1.0", lifespan=lifespan)

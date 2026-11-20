@@ -15,9 +15,10 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# 状态机：created -> transcribed -> summarized -> done / failed
+# 状态机：created -> recording -> queued -> transcribing -> transcribed -> summarizing -> done / failed
 STATUS_CREATED = "created"
-STATUS_UPLOADED = "uploaded"
+STATUS_RECORDING = "recording"
+STATUS_QUEUED = "queued"
 STATUS_TRANSCRIBING = "transcribing"
 STATUS_TRANSCRIBED = "transcribed"
 STATUS_SUMMARIZING = "summarizing"

@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     public_base_url: str = "http://127.0.0.1:8000"
     media_url_ttl_seconds: int = 3600
     sync_pipeline: bool = False
+    worker_enabled: bool = True
+    retention_days: int = 90
+    retention_check_seconds: int = 6 * 3600
 
     # ASR
     asr_provider: str = "mock"  # mock | tencent

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
 import time
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -21,6 +19,7 @@ from .llm.summarize import SCENE_LABELS, summarize
 from .models import (
     STATUS_DONE,
     STATUS_FAILED,
+    STATUS_QUEUED,
     STATUS_SUMMARIZING,
     STATUS_TRANSCRIBED,
     STATUS_TRANSCRIBING,
@@ -32,31 +31,22 @@ from .security import hmac_sha256_hex, signed_url
 log = logging.getLogger(__name__)
 
 
-def recover_stuck(minutes: int = 30) -> int:
-    """服务重启后，把卡在中间态超过 N 分钟的任务标记为失败，允许用户重跑。"""
+def requeue_interrupted() -> int:
+    """服务重启后，把卡在转写/纪要中的任务重新排队（单 worker 假定，安全）。"""
     db: Session = SessionLocal()
     try:
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutes)
         rows = (
             db.query(Recording)
-            .filter(
-                Recording.status.in_([STATUS_TRANSCRIBING, STATUS_SUMMARIZING]),
-                Recording.updated_at < cutoff,
-            )
+            .filter(Recording.status.in_([STATUS_TRANSCRIBING, STATUS_SUMMARIZING]))
             .all()
         )
         for rec in rows:
-            rec.status = STATUS_FAILED
-            rec.error = "处理中途中断（服务重启或超时），请点「重新生成」"
+            rec.status = STATUS_QUEUED
+            rec.error = "服务重启，已重新排队"
         db.commit()
         return len(rows)
     finally:
         db.close()
-
-
-def start_processing(recording_id: str) -> None:
-    """后台线程跑流水线（POC 用；M2 换 RQ）。"""
-    threading.Thread(target=process_recording, args=(recording_id,), daemon=True).start()
 
 
 def process_recording(recording_id: str) -> None:

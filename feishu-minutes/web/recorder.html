@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>纪要录音 · POC</title>
 <script defer src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.26.js"></script>
@@ -61,7 +62,7 @@
 
   <div class="card">
     <div class="rec"><span id="dot" class="dot" style="display:none"></span><span id="timer" class="timer">00:00</span></div>
-    <div class="meta" id="hint">手机放桌面中央，录音时请勿锁屏；每 9 分钟自动落一段。</div>
+    <div class="meta" id="hint">手机放桌面中央，录音时请勿锁屏；每 2 分钟自动落一段（最长丢 2 分钟）。</div>
     <div class="row">
       <button id="btnStart">开始录音</button>
       <button id="btnStop" class="danger" disabled>结束并生成纪要</button>
@@ -83,7 +84,7 @@
 
 <script>
 const API = '/api/v1';
-const MAX_SEG_MS = 9 * 60 * 1000;
+const MAX_SEG_MS = 2 * 60 * 1000;
 
 const $ = s => document.querySelector(s);
 const uid = () => ($('#uid').value.trim() || 'demo');
