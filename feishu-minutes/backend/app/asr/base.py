@@ -6,6 +6,14 @@ from typing import Protocol
 
 
 @dataclass
+class AudioChunk:
+    path: Path
+    public_url: str
+    offset: float
+    duration: float
+
+
+@dataclass
 class Segment:
     start: float
     end: float
@@ -43,5 +51,9 @@ class ASRProvider(Protocol):
     name: str
 
     def transcribe(
-        self, audio_path: Path, duration: float, public_url: str | None = None
+        self,
+        audio_path: Path,
+        duration: float,
+        public_url: str | None = None,
+        chunks: list[AudioChunk] | None = None,
     ) -> Transcript: ...

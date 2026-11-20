@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 
 from ..config import get_settings
-from .base import ASRProvider, Segment, Transcript
+from .base import ASRProvider, AudioChunk, Segment, Transcript
 
 HOST = "asr.tencentcloudapi.com"
 SERVICE = "asr"
@@ -105,7 +105,11 @@ class TencentASR(ASRProvider):
         return data["Response"]
 
     def transcribe(
-        self, audio_path: Path, duration: float, public_url: str | None = None
+        self,
+        audio_path: Path,
+        duration: float,
+        public_url: str | None = None,
+        chunks: list[AudioChunk] | None = None,
     ) -> Transcript:
         if not public_url:
             raise RuntimeError("腾讯 ASR 需要公网可访问的音频 URL（public_url）")

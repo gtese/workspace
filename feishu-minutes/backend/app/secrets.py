@@ -22,6 +22,10 @@ SECRET_FILES: dict[str, dict[str, str]] = {
         "TENCENT_SECRET_KEY": "tencent_secret_key",
     },
     "deepseek": {"DEEPSEEK_API_KEY": "deepseek_api_key"},
+    "aliyun": {
+        "ALIYUN_API_KEY": "aliyun_api_key",
+        "ALIYUN_BASE_URL": "aliyun_base_url",
+    },
     "website-callback": {
         "WEBSITE_CALLBACK_URL": "website_callback_url",
         "WEBSITE_CALLBACK_SECRET": "website_callback_secret",

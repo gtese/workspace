@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from .base import ASRProvider, Segment, Transcript
+from .base import ASRProvider, AudioChunk, Segment, Transcript
 
 _SENTENCES = [
     "我们先把上周的进展过一遍，主要是三个方向。",
@@ -23,7 +23,11 @@ class MockASR(ASRProvider):
     name = "mock"
 
     def transcribe(
-        self, audio_path: Path, duration: float, public_url: str | None = None
+        self,
+        audio_path: Path,
+        duration: float,
+        public_url: str | None = None,
+        chunks: list[AudioChunk] | None = None,
     ) -> Transcript:
         rng = random.Random(audio_path.name)
         segs: list[Segment] = []

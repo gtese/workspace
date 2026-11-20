@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from . import audio, storage
 from .asr import get_asr_provider
+from .asr.base import AudioChunk
 from .config import get_settings
 from .db import SessionLocal
 from .email_send import EmailSender, build_minutes_email
@@ -89,8 +90,28 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
 
     # 腾讯需要公网 URL；mock 忽略
     public_url = signed_url(storage.rel_media_path(merged), ttl=6 * 3600)
+    chunks: list[AudioChunk] = []
+    offset = 0.0
+    for seg in segments:
+        seg_path = Path(seg.path)
+        try:
+            seg_url = signed_url(storage.rel_media_path(seg_path), ttl=6 * 3600)
+        except ValueError:  # 不在 data 目录（例如测试里的临时文件）
+            seg_url = ""
+        chunks.append(
+            AudioChunk(
+                path=seg_path,
+                public_url=seg_url,
+                offset=offset,
+                duration=float(seg.duration_sec or 0.0),
+            )
+        )
+        offset += float(seg.duration_sec or 0.0)
+
     t_asr = time.time()
-    transcript = get_asr_provider().transcribe(merged, info["duration"], public_url)
+    transcript = get_asr_provider().transcribe(
+        merged, info["duration"], public_url, chunks=chunks
+    )
     log.info("转写 %s: %d 段文本，耗时 %.2fs", rec.id, len(transcript.segments), time.time() - t_asr)
     rec.transcript_json = json.dumps(transcript.to_dict(), ensure_ascii=False)
     rec.status = STATUS_TRANSCRIBED

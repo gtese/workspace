@@ -100,9 +100,36 @@ def _deepseek(title: str, scene: str, transcript: str) -> dict:
     return _normalize(json.loads(content))
 
 
+def _aliyun(title: str, scene: str, transcript: str) -> dict:
+    settings = get_settings()
+    if not settings.aliyun_api_key:
+        raise RuntimeError("缺少阿里云 MaaS 凭据（~/.mm/aliyun）")
+    payload = {
+        "model": settings.llm_model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _user_prompt(title, scene, transcript)},
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.2,
+        "max_tokens": 2000,
+    }
+    resp = httpx.post(
+        f"{settings.aliyun_base_url.rstrip('/')}/chat/completions",
+        headers={"Authorization": f"Bearer {settings.aliyun_api_key}"},
+        json=payload,
+        timeout=180,
+    )
+    resp.raise_for_status()
+    content = resp.json()["choices"][0]["message"]["content"]
+    return _normalize(json.loads(content))
+
+
 def summarize(transcript: str, title: str, scene: str) -> dict:
     settings = get_settings()
     if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
         return _deepseek(title, scene, transcript)
+    if settings.llm_provider == "aliyun" and settings.aliyun_api_key:
+        return _aliyun(title, scene, transcript)
     log.info("LLM 使用 mock 模式")
     return _mock(title, transcript)

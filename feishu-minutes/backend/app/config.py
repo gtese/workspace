@@ -33,8 +33,14 @@ class Settings(BaseSettings):
     tencent_engine_model: str = "16k_zh_en_meeting"
     asr_price_per_hour: float = 0.8
 
+    # 阿里云百炼 / MaaS（OpenAI 兼容）
+    aliyun_api_key: str = ""
+    aliyun_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    asr_model: str = "qwen3-asr-flash"
+    asr_chunk_concurrency: int = 3
+
     # LLM
-    llm_provider: str = "mock"  # mock | deepseek
+    llm_provider: str = "mock"  # mock | deepseek | aliyun
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
