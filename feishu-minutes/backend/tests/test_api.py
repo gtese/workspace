@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.main import app  # noqa: E402
 from app.storage import data_dir  # noqa: E402
+
 from tests.test_audio import make_wav  # noqa: E402
 
 HEADERS = {"X-Employee-Open-Id": "u_test"}
@@ -139,3 +140,14 @@ def test_rerun_busy_guard(client: TestClient, tmp_path: Path) -> None:
         db.commit()
     finally:
         db.close()
+
+
+def test_created_at_has_timezone(client: TestClient) -> None:
+    from datetime import datetime
+
+    r = client.post("/api/v1/recordings", json={"title": "时区", "scene": "meeting"}, headers=HEADERS)
+    rid = r.json()["id"]
+    body = client.get(f"/api/v1/recordings/{rid}", headers=HEADERS).json()
+    dt = datetime.fromisoformat(body["created_at"])
+    assert dt.tzinfo is not None, "created_at 必须带时区，否则前端显示会差 8 小时"
+    assert dt.utcoffset().total_seconds() == 0

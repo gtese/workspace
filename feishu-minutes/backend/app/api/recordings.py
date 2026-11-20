@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .. import audio, storage
 from ..config import get_settings
 from ..db import get_db
+from ..feishu import FeishuClient, build_minutes_card
+from ..llm.summarize import SCENE_LABELS
 from ..models import (
     STATUS_CREATED,
     STATUS_FAILED,
@@ -13,11 +16,7 @@ from ..models import (
     Segment,
     SpeakerName,
 )
-from ..feishu import FeishuClient, build_minutes_card
-from ..llm.summarize import SCENE_LABELS
 from ..pipeline import process_recording
-from sqlalchemy import or_
-
 from ..schemas import (
     FinishOut,
     RecordingCreate,
@@ -28,7 +27,7 @@ from ..schemas import (
 )
 from ..security import share_url
 from .deps import current_open_id
-from .serializers import to_out
+from .serializers import iso_utc, to_out
 
 router = APIRouter(prefix="/api/v1", tags=["recordings"])
 
@@ -108,7 +107,7 @@ def search_recordings(
                 id=rec.id,
                 title=rec.title,
                 status=rec.status,
-                created_at=rec.created_at.isoformat(),
+                created_at=iso_utc(rec.created_at),
                 snippet=snippet,
             )
         )
@@ -243,7 +242,6 @@ def send_to_chat(
 ) -> dict:
     """把纪要卡片转发到指定会话/个人（默认发给自己）。"""
     import json as _json
-    from datetime import datetime, timezone
 
     from ..models import DeliveryLog
 

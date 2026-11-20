@@ -40,7 +40,7 @@ def merge(paths: list[Path], out: Path) -> dict:
         raise WavError("没有可合并的音频段")
     infos = [inspect(p) for p in paths]
     first = infos[0]
-    for p, info in zip(paths[1:], infos[1:]):
+    for p, info in zip(paths[1:], infos[1:], strict=True):
         for key in ("sample_rate", "channels", "sampwidth"):
             if info[key] != first[key]:
                 raise WavError(f"{p.name} 参数不一致：{key} {info[key]} != {first[key]}")

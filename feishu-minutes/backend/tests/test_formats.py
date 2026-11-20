@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.audio import ffmpeg_path  # noqa: E402
 from app.main import app  # noqa: E402
+
 from tests.test_audio import make_wav  # noqa: E402
 
 HEADERS = {"X-Employee-Open-Id": "u_formats"}

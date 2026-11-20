@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import json
 import sys
 from pathlib import Path

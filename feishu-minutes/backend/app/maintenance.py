@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import shutil
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from . import storage
 from .config import get_settings
@@ -19,7 +19,7 @@ _stop = threading.Event()
 def cleanup_expired(days: int | None = None) -> int:
     """删除超过保留期的音频文件与分段记录，返回处理的录音数。"""
     days = days or get_settings().retention_days
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
     db = SessionLocal()
     count = 0
     try:

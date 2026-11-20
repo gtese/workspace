@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -16,7 +16,7 @@ def test_cleanup_removes_audio_keeps_minutes(tmp_path: Path) -> None:
         rec = Recording(owner_open_id="u_cleanup", title="老录音", scene="meeting")
         rec.transcript_json = '{"segments": []}'
         rec.summary_json = '{"summary": "保留的纪要"}'
-        rec.created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=120)
+        rec.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=120)
         db.add(rec)
         db.commit()
         db.refresh(rec)

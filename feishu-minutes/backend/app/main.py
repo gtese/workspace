@@ -1,9 +1,9 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
 
 from .api import auth, media, recordings, shared
 from .config import REPO_ROOT, get_settings

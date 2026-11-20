@@ -26,7 +26,7 @@ def test_build_minutes_email() -> None:
 
 def test_mock_send_writes_outbox() -> None:
     outbox = data_dir() / "outbox"
-    before = set(p.name for p in outbox.glob("email-*.json")) if outbox.exists() else set()
+    before = {p.name for p in outbox.glob("email-*.json")} if outbox.exists() else set()
     result = EmailSender().send("someone@example.com", "主题", "<p>hi</p>")
     assert result["mode"] == "mock"
     path = Path(result["path"])

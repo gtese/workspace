@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
+import json
 import time
 
 from .config import get_settings
@@ -63,9 +65,6 @@ def hmac_sha256_hex(secret: str, body: bytes) -> str:
 
 
 # ---- 会话 token（网页应用免登后签发，不存服务器状态） ----
-
-import base64
-import json
 
 SESSION_PREFIX = "fm_"
 

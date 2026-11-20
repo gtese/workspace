@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.db import SessionLocal  # noqa: E402
 from app.models import STATUS_DONE, STATUS_QUEUED, Recording, Segment  # noqa: E402
 from app.worker import Worker  # noqa: E402
+
 from tests.test_audio import make_wav  # noqa: E402
 
 
@@ -90,7 +91,7 @@ def test_pipeline_distributes_email(tmp_path: Path) -> None:
         db.close()
 
     outbox = data_dir() / "outbox"
-    before = set(x.name for x in outbox.glob("email-*.json")) if outbox.exists() else set()
+    before = {x.name for x in outbox.glob("email-*.json")} if outbox.exists() else set()
 
     assert Worker().process_one() is True
 
@@ -103,5 +104,5 @@ def test_pipeline_distributes_email(tmp_path: Path) -> None:
     finally:
         db.close()
 
-    after = set(x.name for x in outbox.glob("email-*.json"))
+    after = {x.name for x in outbox.glob("email-*.json")}
     assert after - before

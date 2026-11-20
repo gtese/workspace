@@ -13,7 +13,7 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -44,7 +44,7 @@ def build_request(
         {"Action": action, **params}, separators=(",", ":"), ensure_ascii=False
     ).encode()
     ts = int(time.time())
-    date = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+    date = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
     canonical_request = "\n".join(
         [
             "POST",

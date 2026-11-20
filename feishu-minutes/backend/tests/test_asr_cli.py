@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.asr import cli  # noqa: E402
 from app.audio import ffmpeg_path  # noqa: E402
+
 from tests.test_audio import make_wav  # noqa: E402
 
 

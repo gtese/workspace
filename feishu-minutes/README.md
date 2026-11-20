@@ -35,6 +35,8 @@ FM_SYNC_PIPELINE=true ../.venv/bin/python -m uvicorn app.main:app --port 8000
 |---|---|
 | <img src="docs/screenshots/04-mine.png" width="300"> | <img src="docs/screenshots/03-feishu-card.png" width="300"> |
 
+> 首次接入前先跑 `cd backend && ../.venv/bin/python scripts/doctor.py`，它会告诉你还缺什么凭据。
+>
 > 截图用 `backend/scripts/seed_demo.py` 的虚构数据生成，可重跑：
 > `python scripts/seed_demo.py --reset` 后 `python tests/e2e/capture_screenshots.py`。
 

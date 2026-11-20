@@ -4,7 +4,6 @@ import wave
 from pathlib import Path
 
 import pytest
-
 from app import audio
 
 
