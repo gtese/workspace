@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>纪要录音 · POC</title>
+<title>Trace Voice</title>
 <script defer src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.26.js"></script>
 <link rel="stylesheet" href="/static/theme.css">
 <style>#result a{color:var(--primary)}</style>
@@ -22,7 +22,7 @@
         </svg>
       </span>
       <div class="brand-text">
-        <h1>纪要录音 <span class="badge">AI</span></h1>
+        <h1>Trace Voice <span class="badge">AI</span></h1>
         <div class="sub">录音自动转写 · AI 生成会议纪要</div>
       </div>
       <a class="nav" href="/mine">我的纪要 →</a>
@@ -33,7 +33,11 @@
 
   <div class="card">
     <label>会议标题</label>
-    <input id="title" placeholder="例如：客户 A 需求沟通" value="">
+    <input id="title" placeholder="自动生成：日期-时间-人员" value="">
+    <div style="margin-top:12px">
+      <label>参会人员（可选，逗号分隔）</label>
+      <input id="people" placeholder="例如：张三、李四" value="">
+    </div>
     <div class="row">
       <div>
         <label>场景</label>
@@ -64,13 +68,6 @@
     <div class="row" id="retryBox" style="display:none"><button id="btnRetryUpload" class="danger">重试上传本段</button></div>
   </div>
 
-  <div class="card">
-    <details>
-      <summary>环境自检（真机测试时展开）</summary>
-      <div class="log" id="diag"></div>
-    </details>
-  </div>
-
   <div class="card" id="result" style="display:none"></div>
 
   <div class="gate" id="gate" style="display:none">
@@ -97,26 +94,20 @@ const $ = s => document.querySelector(s);
 const uid = () => ($('#uid').value.trim() || 'demo');
 const savedUid = localStorage.getItem('fm_uid') || '';
 if (savedUid && !$('#uid').value) $('#uid').value = savedUid;
-const log = (msg) => { const el = $('#status'); el.textContent += msg + '\n'; el.scrollTop = el.scrollHeight; };
 
-/* ---------- 诊断 ---------- */
-(function diag() {
-  const AC = window.AudioContext || window.webkitAudioContext;
-  const lines = [
-    'UA: ' + navigator.userAgent,
-    'secureContext: ' + window.isSecureContext,
-    'mediaDevices: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
-    'AudioContext: ' + !!AC,
-    'AudioWorklet: ' + !!(AC && AC.prototype && 'audioWorklet' in AC.prototype),
-    'ScriptProcessor: ' + !!(AC && AC.prototype && 'createScriptProcessor' in AC.prototype),
-    'tt (飞书 JSAPI): ' + (typeof window.tt !== 'undefined'),
-    'tt.getRecorderManager: ' + !!(window.tt && window.tt.getRecorderManager),
-  ];
-  $('#diag').textContent = lines.join('\n');
-  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
-    $('#hint').textContent = '当前环境不支持 getUserMedia，请用「上传本地音频」兜底，或换成手机浏览器/飞书网页应用环境。';
-  }
-})();
+/* ---------- 默认标题：日期-时间-人员 ---------- */
+let titleTouched = false;
+const pad2 = (n) => String(n).padStart(2, '0');
+function autoTitle() {
+  const d = new Date();
+  const date = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  const time = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  const people = ($('#people').value || '').trim() || (S.userName || '').trim();
+  return date + '-' + time + (people ? '-' + people : '');
+}
+$('#title').addEventListener('input', () => { titleTouched = true; });
+$('#people').addEventListener('input', () => { if (!titleTouched) $('#title').value = autoTitle(); });
+const log = (msg) => { const el = $('#status'); el.textContent += msg + '\n'; el.scrollTop = el.scrollHeight; };
 
 /* ---------- WAV 编码 ---------- */
 function floatToInt16(f) { const s = Math.max(-1, Math.min(1, f)); return s < 0 ? s * 0x8000 : s * 0x7fff; }
@@ -213,7 +204,7 @@ class WavRecorder {
 }
 
 /* ---------- 会话状态 ---------- */
-const S = { rid: null, segIdx: 0, rec: null, segStart: 0, base: 0, timer: null, running: false, token: '', openId: '' };
+const S = { rid: null, segIdx: 0, rec: null, segStart: 0, base: 0, timer: null, running: false, token: '', openId: '', userName: '', mode: 'mock' };
 
 function fmt(ms) {
   const s = Math.floor(ms / 1000), m = Math.floor(s / 60);
@@ -313,6 +304,7 @@ async function endSegment(autoNext) {
 async function startSession() {
   $('#result').style.display = 'none';
   $('#status').textContent = '';
+  if (!titleTouched || !$('#title').value.trim()) $('#title').value = autoTitle();
   const rec = await createRecording();
   S.rid = rec.id; S.segIdx = 0; S.base = 0;
   localStorage.setItem('fm_rid', rec.id);
@@ -507,6 +499,7 @@ async function ensureLogin() {
     $('#uidRow').style.display = '';
     if (!$('#uid').value) $('#uid').value = localStorage.getItem('fm_uid') || 'demo';
     $('#who').textContent = '开发模式 · 模拟身份 ' + uid();
+    if (!titleTouched) $('#title').value = autoTitle();
     hideGate();
     return;
   }
@@ -533,7 +526,7 @@ async function ensureLogin() {
 
 $('#btnRelogin').onclick = () => ensureLogin();
 
-window.addEventListener('load', () => { ensureLogin(); checkResume(); });
+window.addEventListener('load', () => { if (!$('#title').value) $('#title').value = autoTitle(); ensureLogin(); checkResume(); });
 </script>
 </body>
 </html>

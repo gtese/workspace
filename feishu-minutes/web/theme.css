@@ -120,6 +120,7 @@ button.danger {
   background: linear-gradient(135deg, #ef4444, #f97066); box-shadow: 0 6px 16px rgba(240, 68, 56, .2);
 }
 button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+button.danger:disabled { background: #c9d6e8; color: #fff; opacity: 1; }
 
 /* 录音 */
 .rec { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; }
