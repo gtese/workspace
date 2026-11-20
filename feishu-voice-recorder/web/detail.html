@@ -27,6 +27,17 @@
     </div>
   </div>
   <div id="app" class="empty">加载中…</div>
+
+  <div class="modal" id="renameModal" style="display:none">
+    <div class="modal-card">
+      <h3>修改说话人姓名</h3>
+      <input id="renameInput" placeholder="例如：张三" value="">
+      <div class="row">
+        <button id="renameOk">保存</button>
+        <button id="renameCancel" class="ghost">取消</button>
+      </div>
+    </div>
+  </div>
 </main>
 <script>
 const id = location.pathname.split('/').pop();
@@ -59,6 +70,7 @@ async function load() {
     <h1>${esc(rec.title)}</h1>
     <div class="meta">${sceneLabel(rec.scene)} · ${Math.max(1, Math.round(rec.duration_sec / 60))} 分钟 · ${rec.segment_count} 段 · ${statusLabel(rec.status)}</div>
     ${rec.doc_url ? `<a class="btn doc-link" href="${rec.doc_url}" target="_blank" rel="noopener">打开飞书文档</a>` : ''}
+    ${(!isShared && rec.feishu_status === 'failed') ? `<div class="card"><h2>通知状态</h2><div style="color:#f04438">飞书卡片未发送：应用可能未开启「机器人」能力</div><button id="btnResendCard" class="ghost" style="margin-top:10px">重新发送卡片</button></div>` : ''}
     ${rec.audio_url ? `<audio controls preload="none" src="${rec.audio_url}"></audio>` : ''}
     ${(!isShared && rec.status === 'failed') ? `<div class="card"><h2>处理失败</h2><div style="color:#f87171">${esc(rec.error)}</div><p><button id="btnRetry" style="padding:10px 16px;border:0;border-radius:10px;background:#3b82f6;color:#fff">重新生成</button></p></div>` : ''}
     ${!isShared ? `<div class="card"><button id="btnShare" class="ghost">复制分享链接</button><span class="meta" style="margin-left:10px">链接 30 天有效，可发到飞书群</span></div>` : ''}
@@ -77,14 +89,30 @@ document.addEventListener('click', async (ev) => {
   if (sp && sp.classList && sp.classList.contains('editable')) {
     const from = sp.getAttribute('data-speaker');
     const current = sp.textContent.trim();
-    const name = prompt('把「' + current + '」改成谁？', current);
-    if (name === null) return;
-    const r = await fetch('/api/v1/recordings/' + id + '/speakers', {
-      method: 'PUT',
-      headers: { ...authHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mapping: { [from]: name.trim() } }),
-    });
-    if (r.ok) location.reload(); else alert('改名失败');
+    const modal = document.getElementById('renameModal');
+    modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true');
+    const input = document.getElementById('renameInput');
+    input.value = current;
+    modal.style.display = 'grid';
+    input.focus();
+    const save = async () => {
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      const r = await fetch('/api/v1/recordings/' + id + '/speakers', {
+        method: 'PUT',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mapping: { [from]: name } }),
+      });
+      if (r.ok) location.reload(); else toast('改名失败');
+    };
+    document.getElementById('renameOk').onclick = save;
+    document.getElementById('renameCancel').onclick = () => { modal.style.display = 'none'; };
+    input.onkeydown = (ev) => { if (ev.key === 'Enter') save(); };
+    return;
+  }
+  if (ev.target && ev.target.id === 'btnResendCard') {
+    const r = await fetch('/api/v1/recordings/' + id + '/send', { method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: '{}' });
+    if (r.ok) { toast('已重新发送'); location.reload(); } else { toast('发送失败：' + (await r.text())); }
     return;
   }
   if (ev.target && ev.target.id === 'btnShare') {
@@ -107,6 +135,13 @@ const SCENES = { meeting: '内部会议', client: '客户沟通', memo: '语音�
 const STATUSES = { created: '草稿', recording: '录音中', queued: '排队中', transcribing: '转写中', transcribed: '转写完成', summarizing: '生成纪要', done: '已完成', failed: '失败' };
 function sceneLabel(s) { return SCENES[s] || s; }
 function statusLabel(s) { return STATUSES[s] || s; }
+function toast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(window.__toast);
+  window.__toast = setTimeout(() => el.classList.remove('show'), 2200);
+}
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 load();
 </script>

@@ -46,6 +46,9 @@ def to_out(rec: Recording, include_detail: bool = False) -> RecordingOut:
         docs = rec.documents or []
         if docs:
             data.doc_url = docs[-1].url
+        feishu_logs = [d for d in (rec.deliveries or []) if d.channel == "feishu"]
+        if feishu_logs:
+            data.feishu_status = feishu_logs[-1].status
         audio_file = storage.merged_path(rec.id)
         if audio_file.exists():
             data.audio_url = signed_url(storage.rel_media_path(audio_file))

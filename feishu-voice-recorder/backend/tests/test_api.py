@@ -180,3 +180,11 @@ def test_delete_other_users_recording_forbidden(client: TestClient) -> None:
     rid = client.post("/api/v1/recordings", json={"title": "别人的", "scene": "memo"}, headers=HEADERS).json()["id"]
     r = client.delete(f"/api/v1/recordings/{rid}", headers={"X-Employee-Open-Id": "other"})
     assert r.status_code == 404
+
+
+def test_detail_exposes_feishu_delivery(client: TestClient, tmp_path: Path) -> None:
+    rid = client.post("/api/v1/recordings", json={"title": "投递状态", "scene": "meeting"}, headers=HEADERS).json()["id"]
+    _upload(client, rid, 0, make_wav(tmp_path / "f.wav", 1.0))
+    client.post(f"/api/v1/recordings/{rid}/finish", headers=HEADERS)
+    body = client.get(f"/api/v1/recordings/{rid}", headers=HEADERS).json()
+    assert body["feishu_status"] == "sent"

@@ -25,6 +25,7 @@ class RecordingOut(BaseModel):
     summary: dict[str, Any] | None = None
     audio_url: str | None = None
     doc_url: str | None = None
+    feishu_status: str | None = None
 
 
 class SegmentOut(BaseModel):
