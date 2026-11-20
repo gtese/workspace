@@ -8,3 +8,4 @@ data/
 .DS_Store
 *.db
 *.db-journal
+backups/

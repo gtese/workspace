@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from .api import auth, media, recordings, shared
 from .config import REPO_ROOT, get_settings
 from .db import init_db
-from .maintenance import cleanup_expired, start_maintenance, stop_maintenance
+from .maintenance import cleanup_expired, cleanup_orphan_files, start_maintenance, stop_maintenance
 from .pipeline import requeue_interrupted
 from .schemas import HealthOut
 from .worker import start_worker, stop_worker
@@ -23,12 +23,13 @@ async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
     init_db()
     requeued = requeue_interrupted()
     cleaned = cleanup_expired()
+    orphans = cleanup_orphan_files()
     s = get_settings()
     start_worker()
     start_maintenance()
     logging.getLogger(__name__).info(
-        "启动 %s | asr=%s llm=%s feishu=%s | 重新排队 %d 个 | 清理过期音频 %d 条",
-        s.app_name, s.asr_provider, s.llm_provider, s.feishu_mode, requeued, cleaned,
+        "启动 %s | asr=%s llm=%s feishu=%s | 重排队 %d | 过期音频 %d | 孤儿目录 %d",
+        s.app_name, s.asr_provider, s.llm_provider, s.feishu_mode, requeued, cleaned, orphans,
     )
     yield
     stop_worker()

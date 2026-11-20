@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db import SessionLocal  # noqa: E402
-from app.maintenance import cleanup_expired  # noqa: E402
+from app.maintenance import cleanup_expired, cleanup_orphan_files  # noqa: E402
 from app.models import Recording, Segment  # noqa: E402
 from app.storage import recording_dir  # noqa: E402
 
@@ -59,3 +59,45 @@ def test_cleanup_keeps_recent() -> None:
         assert db.get(Recording, rid) is not None
     finally:
         db.close()
+
+
+def test_cleanup_orphan_dirs(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from app.storage import data_dir
+
+    root = data_dir() / "recordings"
+    root.mkdir(parents=True, exist_ok=True)
+
+    orphan = root / "rec_orphan_xyz"
+    orphan.mkdir(exist_ok=True)
+    old = time.time() - 3 * 86400
+    os.utime(orphan, (old, old))
+
+    fresh = root / "rec_fresh_xyz"
+    fresh.mkdir(exist_ok=True)
+
+    removed = cleanup_orphan_files(older_than_days=1)
+    assert removed >= 1
+    assert not orphan.exists()
+    assert fresh.exists()
+    fresh.rmdir()
+
+
+def test_backup_archive(tmp_path: Path) -> None:
+    from app.maintenance import backup
+
+    archive = backup(tmp_path / "bak", keep=3)
+    assert archive.exists()
+    assert archive.stat().st_size > 0
+
+    import tarfile
+
+    with tarfile.open(archive) as tar:
+        names = tar.getnames()
+    assert any(n.endswith("app.db") for n in names)
+    from app.storage import data_dir
+
+    if (data_dir() / "recordings").exists():
+        assert any("recordings" in n for n in names)
