@@ -1,69 +1,48 @@
-# 06 节点历史与变更记录
+# 06 变更历史与踩坑记录
 
-## 1. 节点演进
+## 1. 节点/架构演进
 
-| 阶段 | 节点 | 方案 | 结果 |
-|---|---|---|---|
-| v1 | UCloud 美国 154.83.199.67（LA） | WireGuard 隧道 + iKuai IP 级 allowips（域名解析 IP 加入对端允许网段） | 出口可切换（ifconfig.me → 节点 IP），但 iKuai 域名分流不支持 WG 线路；跨境 200ms、2% 丢包，大文件吞吐差；TCP 443/1194 先后被封；弃用 |
-| v2 | UCloud 日本 101.36.104.146（东京） | OpenVPN（TCP 443）+ iKuai 域名分流 | 能连，但链路/端口仍不稳定，会话数分钟级断开、重拨不可靠；弃用 |
-| v3（当前） | 阿里云 ECS 东京 8.211.181.28（ap-northeast-1） | OpenVPN UDP 443 + dnsmasq 干净 DNS + NAT/BBR/MSS；iKuai 域名分流 + 按域名 DNS 分流 | 运行中：RTT≈43ms，Google/GitHub/AI 全部分流生效；YouTube 排除 |
+| 阶段 | 架构 | 结果 |
+|---|---|---|
+| v0 | 美国 UCloud + WireGuard 全量 | 放弃（WG 不做分流、链路差） |
+| v1 | iKuai OpenVPN → 阿里云 ECS（OpenVPN 服务端 + dnsmasq + WG）；订阅 Clash → 253 SS → WG → ECS | 运行（可回滚） |
+| v2（当前） | **253 服务中心**：办公网 iKuai L2TP → 253 → OpenVPN(51821) → ECS；订阅 Clash → SS 253 → dante → 同隧道 → ECS | 已全量切换 |
 
-保留：UCloud 美国节点的 WireGuard 配置（仅作历史/管理用途，已不在分流路径内）。
-iKuai 上旧线路 `ovpnUcloud`、`ovpnTokyo` 保留但已停用。
+## 2. v1 → v2 切换记录（2026-11-23）
 
-## 2. 关键踩坑记录
+- USG：新增 NAT `50180/50181 TCP`（订阅/SS）与 `51821 UDP`（253↔ECS），策略 `Clash_Access_253`；**已 save**。
+- 253：
+  - 部署 OpenVPN 服务端 `egress`（UDP 51821，10.99.99.0/24，证书认证，ccd 固定 ECS=10.99.99.2）；
+  - 策略路由 table 100（`from 10.10.10.0/24`、`fwmark 100`）+ `egress-up.sh` + `egress-routing.service`；
+  - dnsmasq（10.10.10.1 + 127.0.0.1）经隧道解析；resolv.conf → 127.0.0.1（NM dns=none）；
+  - dante `sockd`（127.0.0.1:1080，external 10.99.99.1，uid mark 100）；
+  - sing-box：SS 50181 → socks 127.0.0.1:1080；DNS 走本地 dnsmasq（detour direct，ipv4_only）；
+  - 禁用 IPv6；firewalld direct 放行 ppp0↔tun-egress + MSS 1360。
+- ECS：改为 OpenVPN 客户端（10.99.99.2）+ `egress-nat.service`（NAT 10.99.99.0/24）；旧服务 `openvpn-server@ovpn-office`/`dnsmasq`/`wg-quick@wg0` 已 disable --now（配置保留）。
+- iKuai：5 条分流规则 → `l2tpToSx`；230 条 DNS 规则 → `10.10.10.1`；`ovpnAliyun` 停用。
+- 验证：办公网 chatgpt/google 200、openai 401、baidu 直连 200、出口 8.211.181.28；订阅路径 chatgpt 200、openai 401、google/github 200、claude 403（可达）。
 
-1. **iKuai 域名分流不支持 WireGuard 线路**
-   - 对照实验：同一规则指向 L2TP 线路立即生效（出口变为 IDC），指向 WG 接口无任何效果。
-   - 官方论坛技术支持回复：WireGuard 线路暂不支持做分流。→ 改用 OpenVPN。
+## 3. 踩坑记录（含 v1）
 
-2. **iKuai OpenVPN「账号认证」不可用**
-   - 服务端日志：`Auth Username/Password verification failed`，认证脚本记录 `got_len=0`。
-   - 现象：iKuai 只发用户名、密码为空。→ 改为**客户端证书认证**（`verify-client-cert` 默认 require，去掉 auth-user-pass-verify）。
+1. iKuai 域名分流不支持 WireGuard 线路 → 改用 OpenVPN/L2TP。
+2. iKuai OpenVPN 账号认证不发密码 → 改客户端证书认证。
+3. iKuai 证书字段编码：空格→`#`、换行→`@`。
+4. 端口被墙/跨境质量：最终用 UDP 443（v1）/ UDP 51821（v2）。
+5. DNS 污染：白名单域名经隧道用 1.1.1.1/8.8.8.8 解析。
+6. **rp_filter**：253 默认 rp_filter=1 导致隧道 DNS 回包被丢 → 设 all/default=0。
+7. **firewalld 默认丢转发**：ppp0↔tun-egress 需 direct 规则放行。
+8. **MSS/MTU**：253/ECS 双向 TCPMSS 1360，避免大页面/TLS 卡死。
+9. **dante 解析**：resolv.conf 改 127.0.0.1 后必须重启 sockd；内网 tri.local 转发 172.16.10.111 需 dnsmasq mark 排除 172.16.0.0/16。
+10. **用户态 WG 不稳定**：跨境丢包导致 DNS 超时，改为 dante+OpenVPN 隧道。
+11. **终端 DNS 缓存**：切换后旧污染 IP 还在缓存里，需要刷新。
+12. Aegis 自保护（v1 清理云厂商 agent）：systemd drop-in + 重启绕过。
 
-3. **iKuai 证书字段编码**
-   - 直接提交 PEM 报 `[2005] Invalid characters`。→ 空格→`#`、换行→`@` 后成功。
-
-4. **端口被墙**
-   - 美国节点：UDP/TCP 1194 不通；改 TCP 443 可用一段时间后被封。
-   - 日本 UCloud：TCP 443 可连但会话易断。
-   - 阿里云东京：办公室到节点 TCP 443、UDP 443、UDP 1194 实测均可达 → 选 **UDP 443**（避开 TCP-over-TCP）。
-
-5. **TCP-over-TCP 吞吐差**
-   - 洛杉矶节点下载仅 10–25KB/s；UDP/TCP 切换与 MSS/MTU 调优效果有限，主因是 200ms RTT + 跨境丢包。
-
-6. **路径 MTU 与 MSS**
-   - PPPoE 路径 MTU 1492；隧道设 `tun-mtu 1400`、`mssfix 1360`，节点侧 `TCPMSS --set-mss 1360`，避免大包分片/黑洞。
-
-7. **DNS 污染**
-   - 国内公共 DNS（223.5.5.5 / 119.29.29.29 / 114.114.114.114 / 180.76.76.76）对 Google/OpenAI 等返回污染 IP。
-   - iKuai DNS 代理规则支持 `parse_type=proxy`（按域名转发到指定 DNS）→ 白名单域名经隧道到节点 dnsmasq 解析。
-   - 规则只精确匹配，子域需再加 `*.域名`。
-
-8. **iKuai DNS 代理规则上限**
-   - 约 255 条；当前 232 条（230 境外 + 2 内网）。
-
-9. **阿里云 ECS 自带 agent**
-   - 云监控插件未安装；云助手、Aegis、HBR 备份存在。
-   - Aegis 自保护（AliSecGuard 内核模块）导致 root 也无法 kill/删除/停服务；官方卸载脚本失败。
-   - 解决：systemd drop-in 将 aegis.service 的 ExecStart 改为 `/bin/true`，重启实例后模块不再加载，删除文件与 unit。
-
-10. **出口 IP 归属**
-    - 8.211.181.28：Cloudflare `loc=JP, colo=NRT`，DB-IP/ipinfo/ip-api 均 Japan；ip-api 标记 `hosting=true`。
-    - 若站点判定「中国 IP」，优先排查会话内是否有其他域名走中国直连（白名单缺口），而非出口 IP 归属。
-
-## 3. 变更时间线
+## 4. 变更时间线
 
 | 时间 | 变更 |
 |---|---|
-| 2026-11-17 | 美国节点 WireGuard 隧道建立；发现 iKuai 域名分流不支持 WG |
-| 2026-11-17 | 美国节点装 OpenVPN（证书认证、UDP/TCP 端口试错） |
-| 2026-11-17 | iKuai 域名分流（ifconfig.me）+ 按域名 DNS 分流打通 |
-| 2026-11-18 | 东京 UCloud 节点部署；因链路/端口问题停用 |
-| 2026-11-18 | 阿里云东京 ECS 部署；清理云厂商 agent（Aegis 自保护处理）；OpenVPN UDP 443 + dnsmasq + NAT/BBR 上线 |
-| 2026-11-18 | iKuai 线路 ovpnAliyun 启用；分流规则/DNS 规则迁移；Google/GitHub/AI/CDN 域名批量导入 |
-| 2026-11-18 | 开启「禁止 AAAA 解析」；补 CDN/反欺诈域名 |
-| 2026-11-19 | Google 全家桶 47 域、GitHub 全家桶 12 域、Claude Code/ChatGPT 全家桶扩展至 49 域；YouTube 排除 |
-| 2026-11-20 | 项目资料归档并推送至 git.tri.local/it/gateway 与 workspace |
-| 2026-11-20 | 遗留清理：删除 iKuai 旧 OpenVPN 线路 ovpnUcloud/ovpnTokyo、删除旧 WireGuard 接口 wgoffice 及对端；仅保留 ovpnAliyun。变更前配置快照留存在操作机本地 |
-| 2026-11-20 | 旧 UCloud 实例（美国 154.83.199.67、东京 101.36.104.146）已由用户释放；iKuai 侧旧线路/WG 配置已删除，无残留引用 |
+| 2026-11-17 | 美国节点 WG/OpenVPN 试错，iKuai 域名分流+DNS 分流打通 |
+| 2026-11-18 | 阿里云东京 ECS 上线（v1） |
+| 2026-11-19 | Google/GitHub/AI 域名扩展，YouTube 排除 |
+| 2026-11-20 | 旧线路/WG 清理，项目资料入库 |
+| 2026-11-23 | Claude 分流规则加入订阅；**v2 架构全量切换（253 服务中心）**；USG 保存 |

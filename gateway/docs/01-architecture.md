@@ -1,57 +1,60 @@
-# 01 架构与设计决策
+# 01 架构与数据流（v2：253 服务中心）
 
-## 1. 需求
+## 1. 需求与演进
 
-- 技术人员访问 GitHub、Google、主流 AI 工具（ChatGPT、Claude Code、Cursor 等）需要海外出口。
-- 带宽有限：**YouTube 等视频流量不走 VPN**。
-- 内网域名（tri.local）与国内网站继续走国内线路，不牺牲速度。
-- DNS 不能被污染（国内 DNS 对 Google/OpenAI 等返回污染 IP）。
+- 技术人员访问 GitHub、Google、主流 AI 工具需要海外出口；
+- **ECS 节点会更换**，希望替换 ECS 时：iKuai、订阅链接、用户配置都不变；
+- 因此引入 **253 作为服务中心（固定）**，ECS 只做可替换的“出口”。
 
-## 2. 方案对比与选型
+## 2. v1 → v2 变化
 
-| 方案 | 结论 |
-|---|---|
-| WireGuard 隧道 + iKuai 域名分流 | ❌ 实测不可用：iKuai 的「域名分流」不把 WireGuard 隧道当作可选线路（同规则指向 L2TP 生效、指向 WG 不生效；官方论坛亦确认 WireGuard 线路暂不支持分流） |
-| 静态路由/IP 级分流 | 只适合少量固定 IP，域名多时无法维护 |
-| **OpenVPN 隧道 + iKuai 域名分流** | ✅ 采用。iKuai 原生把 OpenVPN 客户端线路当作可分流线路 |
-| 旁路由 / 客户端代理 | 备选，需要额外设备，本次未采用 |
+| 项 | v1 | v2 |
+|---|---|---|
+| 办公网境外流量 | iKuai OpenVPN → ECS | iKuai L2TP → 253 → OpenVPN → ECS |
+| 订阅用户 | Clash → 253 SS → 用户态 WG → ECS | Clash → 253 SS → dante → OpenVPN 隧道 → ECS |
+| DNS | iKuai → 10.66.66.1（ECS dnsmasq） | iKuai → 10.10.10.1（253 dnsmasq） |
+| ECS 角色 | OpenVPN 服务端 + dnsmasq + WG 服务端 | OpenVPN 客户端 + NAT（纯出口） |
+| 换 ECS | 改 iKuai/订阅/证书 | 新 ECS 连回 253 即可，其他不动 |
 
 ## 3. 数据流
 
-### 3.1 请求境外白名单域名（如 www.google.com）
+### 3.1 办公网访问 ChatGPT（示例）
 
-1. 客户端 DNS 查询被 iKuai「强制 DNS 代理」接收。
-2. iKuai 命中 DNS 代理规则（google.com/*.google.com → 10.66.66.1），经 OpenVPN 隧道转发到节点 dnsmasq。
-3. dnsmasq 用 1.1.1.1/8.8.8.8 解析，返回干净 IP（无 GFW 污染）。
-4. iKuai 从 DNS 应答中学习「域名 → IP」，域名分流规则命中后把流量送往 ovpnAliyun 线路。
-5. 节点收到流量 → MASQUERADE → 从 8.211.181.28 出网。
+1. 终端（192.168.9.x）DNS 被 iKuai 强制代理接管；命中规则 `chatgpt.com`/`*.chatgpt.com` → **10.10.10.1**。
+2. 查询经 L2TP 到 253 的 dnsmasq（`10.10.10.1`），dnsmasq 通过隧道向 1.1.1.1 查询，返回干净 IP。
+3. 终端连接该 IP；iKuai 域名分流规则 `ai-tools` 命中 → 接口 **l2tpToSx**。
+4. 流量经 L2TP（源 10.10.10.10）到 253；253 策略路由 `from 10.10.10.0/24 table 100` → `tun-egress`。
+5. 253 SNAT（`-o tun-egress MASQUERADE`）→ OpenVPN 加密（UDP 51821）→ ECS（10.99.99.2）。
+6. ECS NAT（`10.99.99.0/24 → eth0`）→ 从 8.211.181.28 出网；回程对称。
 
-### 3.2 访问国内站点
+### 3.2 订阅用户（Clash）
 
-- DNS：由 iKuai 默认上游 119.29.29.29 解析，或命中内网规则走 AD DNS。
-- 流量：未命中分流规则，走 wan1 直连。
+1. 用户导入订阅 `http://<公网IP>:50180/s/<token>/clash`。
+2. Clash 按规则把白名单域名发往 SS 节点（253:50181，aes-256-gcm）。
+3. 253 的 sing-box 解 SS，转给本机 dante SOCKS（127.0.0.1:1080）。
+4. dante 以 uid 打 mark（100）→ 策略路由 table 100 → `tun-egress` → 51821 → ECS → 互联网。
+5. sing-box 的 DNS 走本地 dnsmasq（127.0.0.1，detour direct），保证解析干净。
 
-### 3.3 访问内网域名（man.tri.local 等）
+### 3.3 其他流量
 
-- DNS 命中 tri.local / *.tri.local 规则 → 172.16.10.114（AD DNS）。
-- 流量走 l2tpToSx → IDC，全程不经 VPN。
+- 未命中分流的流量：iKuai 走 wan1 直连；
+- `tri.local` 等内网域名：DNS → 172.16.10.114（AD），流量走 L2TP 到 IDC，不经 VPN。
 
-## 4. 关键设计点
+## 4. 关键设计
 
 | 设计 | 说明 |
 |---|---|
-| 证书认证 | iKuai OpenVPN 客户端用「账号认证」时只发用户名、密码为空（实测 AUTH_FAILED），因此服务端改为**客户端证书认证**（不启用 auth-user-pass） |
-| 证书编码 | iKuai API 的 PEM 字段要求：空格→`#`，换行→`@` |
-| UDP 443 | 办公室到节点的 UDP 443 实测可达，性能优于 TCP-over-TCP；1194 与 TCP 443 在部分节点被墙 |
-| tun-mtu 1400 / mssfix 1360 | 规避路径 MTU（PPPoe 1492）与 MSS 问题；节点侧再加 TCPMSS --set-mss 1360 |
-| 压缩 | iKuai 客户端默认 LZO，服务端 `allow-compression yes` + `comp-lzo adaptive` 兼容 |
-| BBR | 节点开启 BBR + fq，改善长肥管道吞吐 |
-| DNS 分流 | 默认上游保持国内 119.29.29.29；仅对白名单境外域名做干净解析（否则会被污染） |
-| YouTube 排除 | 视频流量大，从分流与干净 DNS 规则中全部移除，直连（被墙）即不可用 |
-| AAAA 禁用 | `forbid_dns_4a=1`，避免终端 IPv6 直连绕过 VPN |
+| 253 固定、ECS 可换 | 隧道由 253 做服务端、ECS 做客户端；换 ECS 只改 ECS 侧 |
+| 复用现有 L2TP | 办公网到 253 走既有 L2TP（不加新线路、不改办公网拓扑） |
+| 策略路由隔离 | 只把「办公网来源 10.10.10.0/24」和「打 mark 的进程流量」送进隧道，253 自身默认路由不变，不影响 L2TP |
+| dnsmasq 干净解析 | 253 的 dnsmasq 经隧道向 1.1.1.1 查询；内网域名转发 AD DNS（172.16.10.111/112） |
+| dante 做 SOCKS 出口 | 解决 sing-box 直接出站难以打 mark 的问题；dante 以 uid 打 mark → 隧道 |
+| 仅 IPv4 | 253 禁用 IPv6，避免 dante/sing-box 解析 AAAA 后连不通 |
+| MSS 钳制 | 253 与 ECS 双向 TCPMSS 1360，避免 L2TP/隧道 MTU 导致大包卡死 |
+| rp_filter 关闭 | 253 关闭 rp_filter（0），避免隧道回包被反向路径检查丢弃 |
 
 ## 5. 已知边界
 
-- iKuai DNS 代理规则上限约 255 条（当前 232）；域名规模扩大需重构（合并规则/改旁路由）。
-- 节点是数据中心 IP，部分站点风控更严（Cloudflare 判定 JP，ip-api 标记 hosting）。
-- 兼容性：iKuai OpenVPN 客户端协商结果为 TLS 1.2 / AES-256-CBC / HMAC-SHA1 / LZO。
+- 253 是单点：L2TP、VPN 出口、订阅、DNS 都在它上面；
+- ECS 只做 NAT，若 ECS 故障，办公网与订阅都会断（v1 同样依赖 ECS）；
+- iKuai DNS 规则上限约 255 条（当前 232），扩展前需清理。

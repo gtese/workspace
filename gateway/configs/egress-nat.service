@@ -1,0 +1,13 @@
+[Unit]
+Description=EGRESS NAT for OpenVPN client tunnel
+After=network-online.target openvpn-client@ecs-egress.service
+Wants=network-online.target openvpn-client@ecs-egress.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do ip link show tun-egress >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1'
+ExecStart=/usr/local/sbin/egress-nat.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

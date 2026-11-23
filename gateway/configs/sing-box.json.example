@@ -1,0 +1,17 @@
+{
+  "log": { "level": "info", "timestamp": true },
+  "dns": {
+    "servers": [ { "tag": "remote", "address": "127.0.0.1", "detour": "direct" } ],
+    "final": "remote",
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    { "type": "shadowsocks", "tag": "ss-in", "listen": "0.0.0.0", "listen_port": 50181,
+      "method": "aes-256-gcm", "password": "<SS_PASSWORD>" }
+  ],
+  "outbounds": [
+    { "type": "socks", "tag": "socks-out", "server": "127.0.0.1", "server_port": 1080, "version": "5" },
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": { "final": "socks-out", "auto_detect_interface": true }
+}

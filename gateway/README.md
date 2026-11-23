@@ -1,22 +1,29 @@
-# gateway — 办公网 VPN 网关与域名分流
+# gateway — 办公网 VPN 网关与域名分流（v2：253 服务中心架构）
 
-办公网（iKuai）通过 OpenVPN 隧道接入海外云节点，实现 **指定域名走海外节点、其余流量直连**；
-同时用 iKuai 的「按域名指定 DNS 服务器」能力做 DNS 分流，解决国内 DNS 对部分域名的污染问题。
+办公网（iKuai）通过 L2TP 把白名单域名流量交给 **253（服务中心）**，253 再经 OpenVPN 隧道送到 **ECS（可替换出口）** 出网；
+外网/移动用户通过 Clash 订阅接入 **253**，同样由 253 转发到 ECS。iKuai、订阅链接、用户侧配置都不随 ECS 变化。
 
-## 当前拓扑
+## v2 拓扑
 
 ```
 办公网 192.168.9.0/24
    │
-   ├─ iKuai 4.0.313 (IK-A160) 192.168.9.1
-   │    ├─ wan1 PPPoE 223.167.143.174（默认出口，国内直连）
-   │    ├─ l2tpToSx 10.10.10.10 → IDC（AD DNS 172.16.10.114, tri.local）
-   │    └─ ovpnAliyun（OpenVPN 客户端）─── UDP 443 ───┐
-   │                                                │
-   └─ 阿里云 ECS 东京（ap-northeast-1）8.211.181.28  │
-        ├─ OpenVPN server  tun 10.66.66.0/24       ←┘
-        ├─ dnsmasq 10.66.66.1:53 → 1.1.1.1/8.8.8.8（干净解析，走隧道）
-        └─ NAT（MASQUERADE 10.66.66.0/24 → eth0）→ 境外网站
+   ├─ iKuai 4.0.313 192.168.9.1
+   │    ├─ wan1 PPPoE（默认出口，国内直连）
+   │    ├─ l2tpToSx：L2TP 10.10.10.10 ↔ 10.10.10.1（253）  ← 白名单域名分流到这里
+   │    └─ ovpnAliyun（旧线路，已停用，保留回滚）
+   │
+   └─ 253 / trivm253（服务中心，172.16.10.253，Rocky 8.10）
+        ├─ L2TP 服务端（xl2tpd/ppp0，10.10.10.1）
+        ├─ OpenVPN 服务端 egress：UDP 51821，tun-egress 10.99.99.0/24（服务端 .1）
+        ├─ 策略路由 table 100：办公网来源 / 打 mark 的流量 → tun-egress
+        ├─ dnsmasq 10.10.10.1 + 127.0.0.1：白名单域名 → 1.1.1.1（经隧道）
+        ├─ dante sockd 127.0.0.1:1080（出站打 mark → 隧道）
+        ├─ sing-box：SS 入站 0.0.0.0:50181 → socks 127.0.0.1:1080
+        └─ nginx：订阅服务 50180（/s/<token>/clash）
+
+阿里云 ECS 东京（8.211.181.28）
+   └─ OpenVPN 客户端 → 253:51821（tun-egress 10.99.99.2）→ NAT（10.99.99.0/24 → eth0）→ 互联网
 ```
 
 ## 关键信息
@@ -24,56 +31,54 @@
 | 项目 | 值 |
 |---|---|
 | 办公网段 | 192.168.9.0/24，网关 192.168.9.1（iKuai OS 4.0.313） |
-| VPN 节点 | 阿里云 ECS 东京，公网 8.211.181.28，私网 172.21.44.11 |
-| 节点系统 | Ubuntu 24.04.5，2 vCPU / 1.7GB / 20GB，RTT(办公室) ≈ 43ms |
-| VPN | OpenVPN 2.6.19，UDP 443，证书认证，隧道 10.66.66.0/24 |
-| 隧道地址 | 服务端 10.66.66.1，iKuai 10.66.66.2 |
-| 干净 DNS | 10.66.66.1（dnsmasq，上游 1.1.1.1 / 8.8.8.8） |
-| 默认 DNS（国内） | 119.29.29.29（备用 172.16.10.114 AD DNS） |
-| 内网域名 | tri.local / *.tri.local → 172.16.10.114 |
+| 服务中心 | 253 / trivm253：172.16.10.253，Rocky 8.10 |
+| 出口节点 | 阿里云 ECS 东京 8.211.181.28（可替换，只负责 NAT 出网） |
+| 隧道 | 253 → ECS：OpenVPN UDP 51821，10.99.99.0/24（253=.1，ECS=.2） |
+| 办公网接入 | iKuai L2TP（10.10.10.0/24）到 253 |
+| 订阅 | http://<公网IP>:50180/s/<token>/clash（token 见 253 nginx 配置） |
+| DNS | 办公网：iKuai 强制代理 → 10.10.10.1（253 dnsmasq）→ 隧道 → 1.1.1.1；内网 tri.local → 172.16.10.114 |
+| USG | 172.16.10.254：NAT 50180/50181 TCP、51821 UDP（双 WAN）；策略 Clash_Access_253；已 save |
 
-## 域名分流现状（iKuai → ovpnAliyun）
+## 当前分流规则（iKuai → l2tpToSx）
 
 | 规则 | 域名数 | 内容 |
 |---|---|---|
-| ifconfig-me | 2 | ifconfig.me / ifconfig.co（验证出口用） |
-| tech-github | 12 | github.com、githubusercontent.com、github.io、githubassets.com、github.dev、githubpreview.dev、githubcopilot.com、ghcr.io、github.blog、githubapp.com、github.community、githubstatus.com |
-| google | 47 | Google 全家桶（含 20 个国家级域名），**不含 YouTube** |
-| ai-tools | 49 | OpenAI/ChatGPT、Anthropic/Claude Code、xAI、Perplexity、HuggingFace、Cursor、Windsurf/Mistral/Cohere/Groq/Together/OpenRouter 等 |
-| cdn-anti-bot | 6 | cloudflare.com、recaptcha.net、hcaptcha.com、akamaihd.net、akamaized.net、fastly.net |
+| ifconfig-me | 2 | ifconfig.me/co（出口验证） |
+| tech-github | 12 | GitHub 全家桶 |
+| google | 47 | Google 全家桶（不含 YouTube） |
+| ai-tools | 49 | OpenAI/ChatGPT、Anthropic/Claude、xAI、Cursor 等 |
+| cdn-anti-bot | 6 | cloudflare.com、recaptcha、hcaptcha、akamai、fastly 等 |
 
-- **YouTube 全家桶被排除**（youtube.com / youtu.be / ytimg.com / youtube-nocookie.com / googlevideo.com）：节省带宽，访问会被墙直连超时。
-- DNS 代理规则 **232 条**：230 条 → 10.66.66.1（境外域名干净解析），2 条 → 172.16.10.114（内网 tri.local）。
+DNS 代理规则 **232 条**：230 → 10.10.10.1（境外白名单），2 → 172.16.10.114（tri.local）。
 
 ## 文档索引
 
 | 文档 | 内容 |
 |---|---|
-| [docs/01-architecture.md](docs/01-architecture.md) | 架构、数据流、设计决策 |
-| [docs/02-node-deploy-aliyun.md](docs/02-node-deploy-aliyun.md) | 阿里云节点部署与清理（含阿里云 agent 卸载坑） |
-| [docs/03-ikuai-config.md](docs/03-ikuai-config.md) | iKuai 线路/分流/DNS 配置与 API 操作 |
-| [docs/04-domain-lists.md](docs/04-domain-lists.md) | 域名清单与维护方法、规则上限 |
-| [docs/05-operations.md](docs/05-operations.md) | 运维验证、加域名、切节点、回滚、故障排查 |
-| [docs/06-history.md](docs/06-history.md) | 节点历史与变更记录 |
+| [docs/01-architecture.md](docs/01-architecture.md) | v2 架构、数据流、设计决策 |
+| [docs/02-node-deploy-aliyun.md](docs/02-node-deploy-aliyun.md) | ECS 出口节点（OpenVPN 客户端）部署 |
+| [docs/03-ikuai-config.md](docs/03-ikuai-config.md) | iKuai 分流/DNS/线路配置 |
+| [docs/04-domain-lists.md](docs/04-domain-lists.md) | 域名清单与维护 |
+| [docs/05-operations.md](docs/05-operations.md) | 验证、替换 ECS、回滚、故障排查 |
+| [docs/06-history.md](docs/06-history.md) | 变更历史与踩坑记录 |
+| [docs/07-253-hub.md](docs/07-253-hub.md) | 253 服务中心组件与运维要点 |
 
 ## 快速验证
 
 ```bash
-# 出口应为 8.211.181.28（经 VPN），非分流站点应为办公室出口
+# 办公网：出口应为 8.211.181.28（经 253 → ECS）
 curl -s ifconfig.me
-curl -s https://ipinfo.io/ip
 
-# 干净解析验证（经 iKuai）
-dig +short @192.168.9.1 www.google.com
+# 干净解析（经 iKuai）
+dig +short @192.168.9.1 chatgpt.com
 dig +short @192.168.9.1 api.anthropic.com
 
-# 连通性
-curl -o /dev/null -w '%{http_code}\n' https://api.github.com/zen
-curl -o /dev/null -w '%{http_code}\n' https://api.openai.com/v1/models
+# 订阅服务（公网）
+curl -s -o /dev/null -w '%{http_code} %{size_download}\n' http://58.246.51.170:50180/s/<token>/clash
 ```
 
 ## 注意
 
-- 凭据（iKuai API token、SSH 私钥、OpenVPN 私钥/证书）**不进入本仓库**；脚本一律从环境变量或本机凭据目录读取。
-- iKuai DNS 代理规则上限约 255 条，当前 232 条，扩展前需清理/合并。
-- 节点出口为数据中心 IP（Cloudflare 判定 JP/NRT；ip-api 标记 hosting=true），部分站点反欺诈可能额外风控。
+- 凭据（token、SS 密码、证书私钥）不入库；脚本从环境变量读取。
+- 253 是单点（L2TP + VPN 出口 + 订阅），需监控；ECS 可随时替换。
+- iKuai DNS 规则上限约 255 条（当前 232）。

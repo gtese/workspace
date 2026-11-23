@@ -1,0 +1,12 @@
+[Unit]
+Description=Policy routing + marks for egress tunnel (tun-egress)
+After=openvpn-server@egress.service firewalld.service
+Wants=openvpn-server@egress.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/egress-up.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
