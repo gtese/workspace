@@ -18,6 +18,7 @@ import BaseButton from './ui/BaseButton.vue'
 import EmptyState from './ui/EmptyState.vue'
 import ErrorState from './ui/ErrorState.vue'
 import { api } from '../api/index.js'
+import { useAuthStore } from '../stores/auth.js'
 import { listOf } from '../lib/normalize.js'
 import { toast } from '../lib/toast.js'
 import { formatBytes, formatDateTime } from '../lib/format.js'
@@ -29,6 +30,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['restore'])
+const auth = useAuthStore()
 
 const currentPath = ref('/')
 const data = ref(null)
@@ -221,7 +223,7 @@ function selectedSizeInfo(item) {
           <FileArchive class="h-3.5 w-3.5" />
           下载目录 zip
         </a>
-        <BaseButton size="xs" :disabled="!selection.length" @click="restoreSelected">
+        <BaseButton v-if="auth.canWrite" size="xs" :disabled="!selection.length" @click="restoreSelected">
           <RotateCcw class="h-3.5 w-3.5" />
           恢复所选
           <span v-if="selection.length">（{{ selection.length }}）</span>
@@ -405,11 +407,11 @@ function selectedSizeInfo(item) {
         </span>
       </div>
       <div class="mt-2 flex items-center gap-2">
-        <BaseButton size="xs" @click="restoreSelected">
+        <BaseButton v-if="auth.canWrite" size="xs" @click="restoreSelected">
           <RotateCcw class="h-3 w-3" />
           恢复所选（{{ selection.length }}）
         </BaseButton>
-        <BaseButton variant="secondary" size="xs" @click="restoreCurrentDir">
+        <BaseButton v-if="auth.canWrite" variant="secondary" size="xs" @click="restoreCurrentDir">
           恢复当前目录
         </BaseButton>
       </div>

@@ -153,6 +153,7 @@ function openClient(client) {
           刷新
         </BaseButton>
         <RouterLink
+          v-if="auth.isAdmin"
           :to="{ name: 'enroll', query: { create: '1' } }"
           class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-700"
         >
@@ -273,7 +274,7 @@ function openClient(client) {
                       <Eye class="h-4 w-4" />
                     </button>
                     <button
-                      v-if="auth.canWrite"
+                      v-if="auth.isAdmin"
                       type="button"
                       class="rounded-lg p-1.5 transition hover:bg-slate-100"
                       :class="client.status === 'disabled' ? 'text-slate-400 hover:text-emerald-600' : 'text-slate-400 hover:text-amber-600'"

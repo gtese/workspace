@@ -208,7 +208,7 @@ function refresh() {
           <RefreshCw v-if="!loading" class="h-3.5 w-3.5" />
           刷新
         </BaseButton>
-        <BaseButton v-if="auth.canWrite" size="sm" @click="newPlan">
+        <BaseButton v-if="auth.isAdmin" size="sm" @click="newPlan">
           <Plus class="h-3.5 w-3.5" />
           新建计划
         </BaseButton>
@@ -244,7 +244,7 @@ function refresh() {
             : '创建计划后，可配置备份路径、cron 调度、备份窗口、压缩、限速、保留策略与钩子。'
         "
       >
-        <BaseButton v-if="auth.canWrite && !plans.length" size="sm" @click="newPlan">
+        <BaseButton v-if="auth.isAdmin && !plans.length" size="sm" @click="newPlan">
           <Plus class="h-3.5 w-3.5" />
           新建计划
         </BaseButton>
@@ -316,7 +316,7 @@ function refresh() {
                       <Play class="h-4 w-4" />
                     </button>
                     <button
-                      v-if="auth.canWrite"
+                      v-if="auth.isAdmin"
                       type="button"
                       class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-brand-600"
                       title="编辑"
@@ -325,7 +325,7 @@ function refresh() {
                       <Pencil class="h-4 w-4" />
                     </button>
                     <button
-                      v-if="auth.canWrite"
+                      v-if="auth.isAdmin"
                       type="button"
                       class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100"
                       :class="isEnabled(plan) ? 'hover:text-amber-600' : 'hover:text-emerald-600'"

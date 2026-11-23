@@ -309,6 +309,7 @@ function tagLabel(tag) {
             </div>
             <div class="flex items-center gap-1.5">
               <BaseButton
+                v-if="auth.isAdmin"
                 variant="secondary"
                 size="sm"
                 :loading="busyId === selectedSnapshot.id"

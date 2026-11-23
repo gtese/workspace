@@ -1,11 +1,12 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { AlertTriangle, RotateCcw } from 'lucide-vue-next'
 import Modal from './ui/Modal.vue'
 import BaseButton from './ui/BaseButton.vue'
 import { api } from '../api/index.js'
 import { toast } from '../lib/toast.js'
 import { splitLines } from '../lib/format.js'
+import { useAuthStore } from '../stores/auth.js'
 
 const props = defineProps({
   clientId: { type: String, required: true },
@@ -16,10 +17,12 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'submitted'])
+const auth = useAuthStore()
+const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const includesText = ref(props.includes.join('\n'))
 const inPlace = ref(true)
-const target = ref('/')
+const target = ref('/tmp/restore')
 const overwrite = ref('if-changed')
 const dryRun = ref(false)
 const submitting = ref(false)
@@ -27,16 +30,27 @@ const errors = reactive({})
 
 const includes = computed(() => splitLines(includesText.value))
 
+onMounted(() => {
+  if (!isAdmin.value) {
+    inPlace.value = false
+    if (target.value === '/') target.value = '/tmp/restore'
+  }
+})
+
 function validate() {
   for (const key of Object.keys(errors)) delete errors[key]
   if (!includes.value.length) errors.includes = '请至少填写一个恢复路径'
   if (!includes.value.every((path) => path.startsWith('/'))) {
     errors.includes = '恢复路径必须是绝对路径（以 / 开头）'
   }
-  if (!inPlace.value) {
+  if (!inPlace.value || !isAdmin.value) {
     const value = target.value.trim()
     if (!value.startsWith('/')) errors.target = '目标路径必须是绝对路径'
     if (value.includes('..')) errors.target = '目标路径不允许包含 ..'
+    const normalized = value.replace(/\/\.(?=\/|$)/g, '').replace(/\/+$/, '') || '/'
+    if (!isAdmin.value && normalized === '/') {
+      errors.target = '原地恢复到原始路径仅管理员可操作，请使用其他目标路径'
+    }
   }
   return Object.keys(errors).length === 0
 }
@@ -51,7 +65,7 @@ async function submit() {
     const result = await api.snapshots.restore(props.clientId, props.snapshotId, {
       repository_id: props.repositoryId || undefined,
       includes: includes.value,
-      target: inPlace.value ? '/' : target.value.trim(),
+      target: (inPlace.value && isAdmin.value) ? '/' : target.value.trim(),
       overwrite: overwrite.value,
       dry_run: !!dryRun.value,
     })
@@ -82,9 +96,10 @@ async function submit() {
 
       <div class="space-y-3 rounded-xl border border-slate-200 px-4 py-3">
         <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-          <input v-model="inPlace" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-          原地恢复（还原到快照中的原始路径）
+          <input v-model="inPlace" type="checkbox" :disabled="!isAdmin" class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50" />
+          原地恢复（还原到快照中的原始路径，仅管理员）
         </label>
+        <p v-if="!isAdmin" class="text-xs text-amber-600">操作员只能恢复到其他目标路径（如 /tmp/restore），不能原地覆盖原始路径。</p>
         <div v-if="!inPlace">
           <label class="bc-label">目标路径</label>
           <input v-model="target" class="bc-input font-mono" placeholder="/" />

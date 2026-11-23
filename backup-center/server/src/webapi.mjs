@@ -157,7 +157,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
 
   router.add('PATCH', '/api/clients/:id', async (ctx) => {
     checkCsrf(ctx);
-    requireRole(ctx, ['admin', 'operator']);
+    requireRole(ctx, ['admin']);
     const body = await readJsonBody(ctx.req);
     const out = clients.update(ctx.params.id, body);
     log(ctx, 'client.update', ctx.params.id, body);
@@ -165,14 +165,14 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('POST', '/api/clients/:id/enable', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const out = clients.setStatus(ctx.params.id, 'active');
     log(ctx, 'client.enable', ctx.params.id);
     sendJson(ctx.res, 200, out);
   });
 
   router.add('POST', '/api/clients/:id/disable', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const out = clients.setStatus(ctx.params.id, 'disabled', 'disabled by admin');
     log(ctx, 'client.disable', ctx.params.id);
     sendJson(ctx.res, 200, out);
@@ -200,7 +200,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('POST', '/api/clients/:id/check', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const body = await readJsonBody(ctx.req).catch(() => ({}));
     const result = await scheduler.checkClient(ctx.params.id, { readData: !!(body && body.readData), repositoryId: (body && body.repository_id) || ctx.query.get('repository_id') });
     log(ctx, 'client.check', ctx.params.id, body);
@@ -208,7 +208,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('POST', '/api/clients/:id/prune', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const body = await readJsonBody(ctx.req).catch(() => ({}));
     const result = await scheduler.pruneClient(ctx.params.id, undefined, (body && body.repository_id) || ctx.query.get('repository_id'));
     log(ctx, 'client.prune', ctx.params.id);
@@ -291,7 +291,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('POST', '/api/repositories/:id/validate', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const out = await storage.validateRepo(ctx.params.id);
     log(ctx, 'repository.validate', ctx.params.id);
     sendJson(ctx.res, 200, out);
@@ -353,7 +353,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('POST', '/api/plans', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const body = await readJsonBody(ctx.req);
     const fields = validatePlan(body);
     const client = store.get('SELECT * FROM clients WHERE id=?', fields.client_id);
@@ -374,7 +374,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('PATCH', '/api/plans/:id', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const row = store.get('SELECT * FROM plans WHERE id=?', ctx.params.id);
     if (!row) throw new ApiError(404, 'not_found', '计划不存在');
     const body = await readJsonBody(ctx.req);
@@ -391,7 +391,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('DELETE', '/api/plans/:id', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     store.run('DELETE FROM plans WHERE id=?', ctx.params.id);
     log(ctx, 'plan.delete', ctx.params.id);
     sendJson(ctx.res, 200, { ok: true });
@@ -408,7 +408,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('POST', '/api/plans/:id/enable', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const row = store.get('SELECT * FROM plans WHERE id=?', ctx.params.id);
     if (!row) throw new ApiError(404, 'not_found', '计划不存在');
     store.run('UPDATE plans SET enabled=1, next_run_at=? WHERE id=?', nextRun(row.cron), row.id);
@@ -417,7 +417,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('POST', '/api/plans/:id/disable', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     store.run('UPDATE plans SET enabled=0, next_run_at=NULL WHERE id=?', ctx.params.id);
     log(ctx, 'plan.disable', ctx.params.id);
     sendJson(ctx.res, 200, { ok: true });
@@ -503,8 +503,12 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
     const body = await readJsonBody(ctx.req);
     const includes = Array.isArray(body.includes) ? body.includes.map(String).filter(Boolean) : [];
     if (!includes.length) throw new ApiError(400, 'validation', '请选择要恢复的文件或目录（不允许空选择整快照覆盖）');
-    const target = String(body.target || '/');
-    if (!target.startsWith('/') || target.includes('..')) throw new ApiError(400, 'validation', '目标路径必须是绝对路径且不能包含 ..');
+    const rawTarget = String(body.target || '/');
+    if (!rawTarget.startsWith('/') || rawTarget.includes('..')) throw new ApiError(400, 'validation', '目标路径必须是绝对路径且不能包含 ..');
+    const target = path.posix.normalize(rawTarget).replace(/\/+$/, '') || '/';
+    if (target === '/' && ctx.user.role !== 'admin') {
+      throw new ApiError(403, 'forbidden', '原地恢复到原始路径仅管理员可操作；操作员请选择其他目标路径');
+    }
     const overwrite = String(body.overwrite || 'if-changed');
     if (!['always', 'if-changed', 'never'].includes(overwrite)) throw new ApiError(400, 'validation', '覆盖策略无效');
     const keys = store.all('SELECT repository_id FROM client_repo_keys WHERE client_id=?', ctx.params.clientId);
@@ -520,7 +524,7 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   });
 
   router.add('POST', '/api/snapshots/:clientId/:snapshotId/pin', async (ctx) => {
-    checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
+    checkCsrf(ctx); requireRole(ctx, ['admin']);
     const body = await readJsonBody(ctx.req);
     const out = await snapshots.pin(ctx.params.clientId, ctx.params.snapshotId, !!body.pinned, body.repository_id || ctx.query.get('repository_id'));
     log(ctx, 'snapshot.pin', `${ctx.params.clientId}/${ctx.params.snapshotId}`, body);

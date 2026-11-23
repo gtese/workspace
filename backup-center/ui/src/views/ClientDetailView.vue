@@ -209,12 +209,12 @@ async function copy(value, label) {
           <Camera class="h-3.5 w-3.5" />
           查看快照
         </RouterLink>
-        <BaseButton v-if="auth.canWrite" variant="secondary" size="sm" @click="openEdit">
+        <BaseButton v-if="auth.isAdmin" variant="secondary" size="sm" @click="openEdit">
           <Pencil class="h-3.5 w-3.5" />
           编辑信息
         </BaseButton>
         <BaseButton
-          v-if="auth.canWrite"
+          v-if="auth.isAdmin"
           :variant="detail?.status === 'disabled' ? 'success' : 'danger-outline'"
           size="sm"
           :loading="busy"
