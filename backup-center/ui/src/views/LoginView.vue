@@ -221,7 +221,7 @@ async function submit() {
             </a>
 
             <p class="mt-6 text-center text-xs leading-5 text-slate-400">
-              仅 Group_Roots 成员可登录（管理员）；其他 AD 账号会被拒绝。
+              Group_Roots 成员自动为管理员；其他域账号需由管理员在「用户与角色」中预置并启用后才能登录。
             </p>
           </template>
           <p v-else-if="oidcChecked" class="mt-6 text-center text-xs leading-5 text-slate-400">

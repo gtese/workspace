@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-11-23
+- 登录策略调整：`Group_Roots` 自动 admin；其他域账号在「用户与角色」预置并启用后可按 operator/viewer/auditor 登录；未预置账号仍拒绝。
+- zhoutao（operator）恢复登录能力；恢复快照需 operator/admin。
+- 修复恢复接口安全校验：禁止空 `includes`（防止整快照覆盖），校验目标路径/覆盖策略/多池 repository_id。
+- 文档同步登录与 RBAC 说明。
+
 ## 2026-11-20
 - 项目文档成型：`docs/项目文档.md`、README 更新、内网 GitLab 仓库 `it/backup` 发布。
 - **BCP 评估与 5 轮优化**：

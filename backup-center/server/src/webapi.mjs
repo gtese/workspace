@@ -501,10 +501,19 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
   router.add('POST', '/api/snapshots/:clientId/:snapshotId/restore', async (ctx) => {
     checkCsrf(ctx); requireRole(ctx, ['admin', 'operator']);
     const body = await readJsonBody(ctx.req);
+    const includes = Array.isArray(body.includes) ? body.includes.map(String).filter(Boolean) : [];
+    if (!includes.length) throw new ApiError(400, 'validation', '请选择要恢复的文件或目录（不允许空选择整快照覆盖）');
+    const target = String(body.target || '/');
+    if (!target.startsWith('/') || target.includes('..')) throw new ApiError(400, 'validation', '目标路径必须是绝对路径且不能包含 ..');
+    const overwrite = String(body.overwrite || 'if-changed');
+    if (!['always', 'if-changed', 'never'].includes(overwrite)) throw new ApiError(400, 'validation', '覆盖策略无效');
+    const keys = store.all('SELECT repository_id FROM client_repo_keys WHERE client_id=?', ctx.params.clientId);
+    let repositoryId = body.repository_id || null;
+    if (!repositoryId && keys.length > 1) throw new ApiError(400, 'validation', '该节点有多个备份池，请指定 repository_id');
+    if (!repositoryId && keys.length === 1) repositoryId = keys[0].repository_id;
     const restore = jobs.createRestore({
-      clientId: ctx.params.clientId, repositoryId: body.repository_id || null, snapshotId: ctx.params.snapshotId,
-      includes: body.includes || [], target: body.target || '/', overwrite: body.overwrite || 'always',
-      dryRun: !!body.dry_run, userId: ctx.user.id,
+      clientId: ctx.params.clientId, repositoryId, snapshotId: ctx.params.snapshotId,
+      includes, target, overwrite, dryRun: !!body.dry_run, userId: ctx.user.id,
     });
     log(ctx, 'snapshot.restore', `${ctx.params.clientId}/${ctx.params.snapshotId}`, body);
     sendJson(ctx.res, 200, restore);
@@ -732,14 +741,14 @@ export function createWebApi({ cfg, store, masterKey, auth, storage, clients, jo
         session: session || null, user: session ? session.user : null,
       };
       try {
-        // 仅管理员可访问管理/数据接口（Group_Roots 成员或本地应急 admin）
+        // 已配置角色（admin/operator/viewer/auditor）登录后按接口 RBAC 授权；
+        // 未配置的 AD 账号在 OIDC 登录阶段已被拒绝。
         const publicApi = new Set(['/api/auth/login', '/api/auth/config', '/api/auth/logout']);
         const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
         const metricsTokenOk = pathname === '/api/metrics' && cfg.metrics.token &&
           timingSafeEqualStr(bearer || String(url.searchParams.get('token') || ''), cfg.metrics.token);
         if (pathname.startsWith('/api/') && !publicApi.has(pathname) && !metricsTokenOk) {
           if (!session) throw new ApiError(401, 'unauthorized', '请先登录');
-          if (session.user.role !== 'admin') throw new ApiError(403, 'forbidden', '仅管理员可访问');
         }
         if (req.method !== 'GET' && req.method !== 'HEAD' && !pathname.startsWith('/api/auth/login') && !pathname.startsWith('/auth/oidc')) checkCsrf(ctx);
         await match.handler(ctx);

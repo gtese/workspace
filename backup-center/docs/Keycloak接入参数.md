@@ -21,12 +21,13 @@
 
 服务端请求的 scope：`openid profile email groups roles`。
 
-## 2. 权限模型（Group_Roots 管理，其他员工只读）
+## 2. 权限模型（Group_Roots 管理员 + 预置角色）
 
 | 身份 | 服务端角色 | 能力 |
 |---|---|---|
 | AD 组 `Group_Roots` 成员 | admin | 节点审批、备份计划、恢复、用户、设置、审计 |
-| 其他企业员工 | — | **拒绝登录**（403），不创建会话 |
+| 已预置的域账号（operator/viewer/auditor） | 按配置 | 登录后按角色授权；operator 可恢复快照 |
+| 未预置的 AD 账号 | — | **拒绝登录**（403），不创建会话 |
 | 本地 `admin` | admin | 仅应急（IdP 故障时） |
 
 服务端判定逻辑（大小写不敏感，兼容 `/Group_Roots` 前导斜杠）：

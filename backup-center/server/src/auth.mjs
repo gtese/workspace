@@ -68,9 +68,6 @@ export function createAuth({ cfg, store }) {
       loginFails.set(key, rec);
       throw new ApiError(401, 'unauthorized', '用户名或密码错误');
     }
-    if (user.role !== 'admin') {
-      throw new ApiError(403, 'forbidden', '仅 Group_Roots 管理员可登录本系统');
-    }
     loginFails.delete(key);
     store.run('UPDATE users SET last_login_at=? WHERE id=?', nowIso(), user.id);
     return createSession(user.id, meta);
@@ -199,21 +196,27 @@ export function createAuth({ cfg, store }) {
     const adminMatchers = [cfg.oidc.admin_group, cfg.oidc.admin_role, 'Group_Roots', 'backup:admin']
       .filter(Boolean).map(norm);
     const hasAdmin = [...groups, ...roles].some((v) => adminMatchers.includes(norm(v)));
-    const role = hasAdmin ? 'admin' : 'viewer';
-    if (role !== 'admin') {
-      // 只允许 Group_Roots / backup:admin 成员登录；其他 AD 账号直接拒绝，不创建用户、不发会话
-      throw new ApiError(403, 'forbidden', '仅 Group_Roots 成员可登录本系统');
-    }
     const username = String(claims.preferred_username || claims.email || claims.sub).slice(0, 128);
     let user = store.get('SELECT * FROM users WHERE username=?', username);
+    if (!user && claims.email) user = store.get('SELECT * FROM users WHERE email=?', String(claims.email));
+    // Group_Roots 成员始终是 admin；其他人只有在系统里预先配置并启用后才允许登录。
+    // 未配置的 AD 账号不会自动创建账号，避免全员可读备份。
+    if (!hasAdmin) {
+      if (!user) throw new ApiError(403, 'forbidden', '账号未在备份系统中配置，请联系管理员');
+      if (!user.enabled) throw new ApiError(403, 'forbidden', '账号已停用，请联系管理员');
+      if (!['admin', 'operator', 'viewer', 'auditor'].includes(user.role)) {
+        throw new ApiError(403, 'forbidden', '账号角色未配置，请联系管理员');
+      }
+    }
     if (!user) {
       const userId = id('u', 6);
       store.run('INSERT INTO users(id,username,display_name,email,role,source,enabled,created_at) VALUES(?,?,?,?,?,?,1,?)',
-        userId, username, String(claims.name || username), String(claims.email || ''), role, 'oidc', nowIso());
+        userId, username, String(claims.name || username), String(claims.email || ''), 'admin', 'oidc', nowIso());
       user = store.get('SELECT * FROM users WHERE id=?', userId);
     } else {
+      const nextRole = hasAdmin ? 'admin' : user.role;
       store.run('UPDATE users SET display_name=?,email=?,role=?,enabled=1,last_login_at=? WHERE id=?',
-        String(claims.name || user.display_name || username), String(claims.email || user.email || ''), role, nowIso(), user.id);
+        String(claims.name || user.display_name || username), String(claims.email || user.email || ''), nextRole, nowIso(), user.id);
       user = store.get('SELECT * FROM users WHERE id=?', user.id);
     }
     const session = createSession(user.id, {});

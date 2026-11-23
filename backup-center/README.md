@@ -11,7 +11,7 @@
 - 引擎：restic 0.18.0（首次全备 + 永久增量去重、zstd 压缩、AES-256 加密、快照保留）
 - 数据面：Node 内置 restic REST 协议（mTLS + append-only + 每个节点独立仓库）
 - 存储位置：本地目录 / NFS / SMB(CIFS) / FTP(S)；一个节点可加入多个备份池
-- 身份：Keycloak SSO（`Group_Roots`=管理员，其他员工只读）+ 本地应急管理员
+- 身份：Keycloak SSO（`Group_Roots`=管理员；其他域账号需预置角色 operator/viewer/auditor 才能登录）+ 本地应急管理员
 
 ## 目录
 
