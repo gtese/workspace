@@ -61,6 +61,22 @@ def health() -> HealthOut:
     )
 
 
+@app.post("/api/v1/ops/drive-cleanup")
+def ops_drive_cleanup(
+    payload: dict, x_ops_token: str = Header(default="")
+) -> dict:
+    s = get_settings()
+    if not s.ops_token or x_ops_token != s.ops_token:
+        raise HTTPException(status_code=404, detail="Not Found")
+    from .feishu.drive_cleanup import cleanup
+
+    open_id = str(payload.get("open_id", ""))
+    execute = bool(payload.get("execute", False))
+    if not open_id:
+        raise HTTPException(status_code=400, detail="open_id required")
+    return cleanup(open_id, execute)
+
+
 @app.get("/api/v1/ops/health")
 def ops_health(x_ops_token: str = Header(default="")) -> dict:
     s = get_settings()

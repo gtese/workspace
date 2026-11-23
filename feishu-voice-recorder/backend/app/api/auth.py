@@ -6,6 +6,7 @@ from ..feishu.auth import FeishuAuth
 from ..models import Employee
 from ..schemas import FeishuLoginIn, FeishuLoginOut
 from ..security import issue_session
+from ..user_tokens import put as put_user_token
 from .deps import current_open_id
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
@@ -47,6 +48,7 @@ def feishu_login(body: FeishuLoginIn) -> FeishuLoginOut:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=401, detail=f"飞书登录失败: {exc}") from exc
     _upsert_employee(info["open_id"], info.get("name", ""), info.get("email", ""))
+    put_user_token(info["open_id"], info.get("user_access_token", ""))
     return FeishuLoginOut(
         open_id=info["open_id"],
         name=info.get("name", ""),
