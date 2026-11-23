@@ -1,6 +1,9 @@
 # 变更记录
 
 ## 2026-11-23
+- 新增 `docs/恢复手册.md`：文件级/单机/控制面/仓库/密钥/Keycloak/勒索场景实操步骤。
+- `recover.mjs` 适配多备份池（`--repo-id`），未指定时列出可选池。
+- 恢复接口空 `includes` 校验（400），防止整快照覆盖。
 - 登录策略调整：`Group_Roots` 自动 admin；其他域账号在「用户与角色」预置并启用后可按 operator/viewer/auditor 登录；未预置账号仍拒绝。
 - zhoutao（operator）恢复登录能力；恢复快照需 operator/admin。
 - 修复恢复接口安全校验：禁止空 `includes`（防止整快照覆盖），校验目标路径/覆盖策略/多池 repository_id。
