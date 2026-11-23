@@ -37,7 +37,8 @@
     <div class="meta" id="hint">手机放桌面中央，录音时请勿锁屏；每 5 分钟自动保存一段（最长丢 5 分钟）。</div>
     <div class="row">
       <button id="btnStart">开始录音</button>
-      <button id="btnStop" class="danger" disabled>结束并生成纪要</button>
+      <button id="btnStop" class="danger" disabled title="结束并生成纪要">结束生成纪要</button>
+      <button id="btnAbort" class="ghost abort" disabled>放弃退出</button>
     </div>
     <div class="log" id="status" style="margin-top:12px"></div>
     <div class="row" id="retryBox" style="display:none"><button id="btnRetryUpload" class="danger">重试上传本段</button></div>
@@ -463,6 +464,12 @@ async function createRecording() {
     body: JSON.stringify({ title: $('#title').value.trim() || autoTitle(), scene: $('#scene').value }),
   });
 }
+function setRecordingButtons(recording) {
+  $('#btnStart').disabled = recording;
+  $('#btnStop').disabled = !recording;
+  $('#btnAbort').disabled = !recording;
+}
+
 function tick() {
   if (!state.running) return;
   const elapsed = Date.now() - state.startedAt;
@@ -506,8 +513,7 @@ async function startSession() {
   idbClear();
   localStorage.setItem('fm_rid', rec.id);
   log('已创建录音会话：' + rec.id);
-  $('#btnStart').disabled = true;
-  $('#btnStop').disabled = false;
+  setRecordingButtons(true);
   state.rec = new WavRecorder();
   await state.rec.start();
   acquireWakeLock();
@@ -526,7 +532,7 @@ async function stopSession() {
   clearInterval(state.tick);
   if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
   $('#dot').style.display = 'none';
-  $('#btnStop').disabled = true;
+  setRecordingButtons(false);
   const blob = state.rec.flush();
   enqueue(state.idx++, blob);
   await state.rec.stop();
@@ -582,7 +588,7 @@ async function poll() {
         catch (e) { toast('发送失败：' + e.message); }
       };
     }
-    $('#btnStart').disabled = false;
+    setRecordingButtons(false);
     loadRecords();
     return;
   }
@@ -595,7 +601,7 @@ async function poll() {
       await api('/recordings/' + state.rid + '/rerun', { method: 'POST' });
       poll();
     };
-    $('#btnStart').disabled = false;
+    setRecordingButtons(false);
     return;
   }
   setTimeout(poll, 2500);
@@ -626,9 +632,8 @@ async function startResume(rec) {
   state.pending = [];
   $('#result').style.display = 'none';
   $('#status').textContent = '';
-  $('#btnStart').disabled = true;
-  $('#btnStop').disabled = false;
   log('继续录音：' + rec.id + '，从第 ' + (state.idx + 1) + ' 段开始');
+  setRecordingButtons(true);
   state.rec = new WavRecorder();
   await state.rec.start();
   acquireWakeLock();
@@ -687,6 +692,32 @@ function renderRecords() {
 $('#recRange').addEventListener('change', renderRecords);
 $('#recSearch').addEventListener('input', renderRecords);
 
+/* ---------- 放弃退出 ---------- */
+async function abortSession() {
+  if (!state.running && !state.rid) return;
+  if (!confirm('放弃本次录音？已录内容不会生成纪要，且会被删除。')) return;
+  state.running = false;
+  clearTimeout(state.rotate);
+  clearInterval(state.tick);
+  state.finishing = false;
+  if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
+  const rid = state.rid;
+  try { if (state.rec) await state.rec.stop(); } catch (e) {}
+  state.pending = [];
+  idbClear();
+  localStorage.removeItem('fm_rid');
+  state.rid = null; state.idx = 0;
+  $('#dot').style.display = 'none';
+  $('#levelBar').style.width = '0%';
+  $('#timer').textContent = '00:00';
+  $('#status').textContent = '已放弃本次录音';
+  $('#result').style.display = 'none';
+  setRecordingButtons(false);
+  if (rid) { try { await api('/recordings/' + rid, { method: 'DELETE' }); } catch (e) { /* 忽略 */ } }
+  toast('已放弃本次录音');
+  try { if (window.tt && window.tt.closeWindow) window.tt.closeWindow({}); } catch (e) {}
+}
+
 /* ---------- 事件与初始化 ---------- */
 $('#btnStart').onclick = async () => {
   try { await startSession(); }
@@ -701,6 +732,7 @@ $('#btnStart').onclick = async () => {
   }
 };
 $('#btnStop').onclick = stopSession;
+$('#btnAbort').onclick = abortSession;
 $('#btnRelogin').onclick = () => ensureLogin();
 window.addEventListener('online', () => { if (state.pending.length) pump(); });
 window.addEventListener('beforeunload', (e) => {

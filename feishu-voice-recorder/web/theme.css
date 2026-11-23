@@ -224,3 +224,7 @@ body.locked main { filter: blur(2px); pointer-events: none; user-select: none; }
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); z-index: 90;
   background: #12233f; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .2s ease; max-width: 80vw; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.row > button { min-width: 0; padding-left: 10px; padding-right: 10px; font-size: 14px; }
+button.abort { color: #f04438; border-color: #f7c9c5; background: #fff5f4; }
+#btnStop { font-size: 14px; }
