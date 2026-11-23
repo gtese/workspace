@@ -46,7 +46,7 @@
 
   <div class="card">
     <label>会议标题</label>
-    <input id="title" placeholder="自动生成：日期-时间-人员" value="">
+    <input id="title" placeholder="自动生成：AI录音-日期-用户名" value="">
     <div style="margin-top:12px">
       <label>参会人员（可选，逗号分隔）</label>
       <input id="people" placeholder="例如：张三、李四" value="">
@@ -150,7 +150,7 @@ function autoTitle() {
   const date = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   const time = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
   const people = ($('#people').value || '').trim() || (state.userName || '').trim();
-  return date + '-' + time + (people ? '-' + people : '');
+  return 'AI录音-' + date + (people ? '-' + people : '');
 }
 $('#title').addEventListener('input', () => { titleTouched = true; });
 $('#people').addEventListener('input', () => { if (!titleTouched) $('#title').value = autoTitle(); });

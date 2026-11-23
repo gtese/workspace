@@ -28,6 +28,7 @@ from .models import (
     STATUS_TRANSCRIBING,
     DeliveryLog,
     Document,
+    DriveFolder,
     Employee,
     Recording,
     SpeakerName,
@@ -144,11 +145,27 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
 
     # 1) 同步为飞书云文档（失败不阻塞卡片）
     doc_url = ""
+    doc_hint = ""
     if settings.feishu_mode == "real" and settings.feishu_doc_enabled:
         try:
-            info = FeishuDocClient().create_minutes_doc(
-                rec.title, summary, detail_url, rec.owner_open_id
+            client = FeishuDocClient()
+            folder_token = ""
+            try:
+                row = db.get(DriveFolder, rec.owner_open_id)
+                if row and row.folder_token:
+                    folder_token = row.folder_token
+                else:
+                    folder_token = client.create_user_folder(rec.owner_open_id)
+                    db.add(DriveFolder(open_id=rec.owner_open_id, folder_token=folder_token))
+                    db.commit()
+            except Exception:  # noqa: BLE001
+                log.exception("创建 AI录音 目录失败，文档将放在云盘根目录")
+                folder_token = ""
+            info = client.create_minutes_doc(
+                rec.title, summary, detail_url, rec.owner_open_id, folder_token
             )
+            if folder_token:
+                doc_hint = "📁 已保存到飞书云盘「AI录音」目录"
             doc_url = info["url"]
             db.add(Document(recording_id=rec.id, doc_id=info["document_id"], url=doc_url))
             db.commit()
@@ -165,7 +182,7 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
 
     # 2) 飞书卡片
     card = build_minutes_card(
-        rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, detail_url, doc_url
+        rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, detail_url, doc_url, doc_hint
     )
     try:
         result = FeishuClient().send_card(rec.owner_open_id, card)

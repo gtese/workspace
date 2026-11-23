@@ -91,6 +91,16 @@ class DeliveryLog(Base):
     recording: Mapped[Recording] = relationship(back_populates="deliveries")
 
 
+class DriveFolder(Base):
+    """每个员工在飞书云盘的「AI录音」文件夹 token。"""
+
+    __tablename__ = "drive_folders"
+
+    open_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    folder_token: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class ShareRevocation(Base):
     """分享链接撤销记录：存在即表示该录音的分享链接已失效。"""
 

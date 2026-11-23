@@ -51,8 +51,48 @@ class FeishuDocClient:
             raise RuntimeError(f"tenant token 失败: {data.get('msg')}")
         return data["tenant_access_token"]
 
+    def create_user_folder(self, open_id: str, name: str = "AI录音") -> str:
+        """在员工云盘创建「AI录音」文件夹（转交拥有者，应用保留可编辑）。"""
+        token = self._token()
+        h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        r = httpx.post(
+            f"{BASE}/drive/v1/files/create_folder",
+            headers=h,
+            json={"name": name, "folder_token": ""},
+            timeout=20,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if data.get("code") != 0:
+            raise RuntimeError(f"创建文件夹失败: {data.get('msg')}")
+        folder = data["data"]["token"]
+        httpx.post(
+            f"{BASE}/drive/v1/permissions/{folder}/members?type=folder",
+            headers=h,
+            json={"member_type": "openid", "member_id": open_id, "perm": "full_access"},
+            timeout=20,
+        )
+        httpx.post(
+            f"{BASE}/drive/v1/permissions/{folder}/members/transfer_owner?type=folder",
+            headers=h,
+            json={
+                "member_type": "openid",
+                "member_id": open_id,
+                "old_owner_perm": "full_access",
+                "remove_old_owner": False,
+                "stay_put": True,
+            },
+            timeout=20,
+        )
+        return folder
+
     def create_minutes_doc(
-        self, title: str, summary: dict, share_url: str, open_id: str
+        self,
+        title: str,
+        summary: dict,
+        share_url: str,
+        open_id: str,
+        folder_token: str = "",
     ) -> dict:
         token = self._token()
         h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -93,6 +133,17 @@ class FeishuDocClient:
         r.raise_for_status()
         if r.json().get("code") != 0:
             raise RuntimeError(f"写入文档失败: {r.json().get('msg')}")
+
+        # 先移动到员工云盘的「AI录音」目录（此时文档仍归应用，移动权限足够）
+        if folder_token:
+            m = httpx.post(
+                f"{BASE}/drive/v1/files/{doc}/move",
+                headers=h,
+                json={"type": "docx", "folder_token": folder_token},
+                timeout=20,
+            )
+            if m.json().get("code") != 0:
+                log.warning("移动到 AI录音 目录失败: %s", m.text[:200])
 
         # 交给员工本人（失败不影响文档可用，只是仍在应用空间）
         try:

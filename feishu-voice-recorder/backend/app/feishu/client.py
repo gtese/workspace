@@ -15,7 +15,12 @@ BASE = "https://open.feishu.cn/open-apis"
 
 
 def build_minutes_card(
-    title: str, scene_label: str, summary: dict, detail_url: str, doc_url: str = ""
+    title: str,
+    scene_label: str,
+    summary: dict,
+    detail_url: str,
+    doc_url: str = "",
+    doc_hint: str = "",
 ) -> dict:
     def md(text: str) -> dict:
         return {"tag": "div", "text": {"tag": "lark_md", "content": text[:2500]}}
@@ -52,6 +57,8 @@ def build_minutes_card(
                 "url": doc_url,
             },
         )
+    if doc_hint:
+        elements.append(md(doc_hint))
     elements.append({"tag": "action", "actions": actions})
     return {
         "config": {"wide_screen_mode": True},
