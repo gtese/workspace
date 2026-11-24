@@ -49,7 +49,9 @@ def to_out(rec: Recording, include_detail: bool = False) -> RecordingOut:
         feishu_logs = [d for d in (rec.deliveries or []) if d.channel == "feishu"]
         if feishu_logs:
             data.feishu_status = feishu_logs[-1].status
-        audio_file = storage.merged_path(rec.id)
-        if audio_file.exists():
+        m4a = storage.merged_m4a_path(rec.id)
+        wav = storage.merged_path(rec.id)
+        audio_file = m4a if m4a.exists() else wav if wav.exists() else None
+        if audio_file is not None:
             data.audio_url = signed_url(storage.rel_media_path(audio_file))
     return data

@@ -94,3 +94,25 @@ def convert_to_wav(
         detail = proc.stderr.decode("utf-8", "ignore")[-300:]
         raise WavError(f"音频解码失败: {detail}")
     return inspect(dst)
+
+
+def convert_to_m4a(
+    src: Path, dst: Path, bitrate: str = "32k", sample_rate: int = 16000, channels: int = 1
+) -> dict:
+    """把 WAV 压缩为 AAC/m4a（16k 单声道，约 14MB/小时）。"""
+    exe = ffmpeg_path()
+    if not exe:
+        raise WavError("服务器未安装 ffmpeg，无法压缩音频")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        [
+            exe, "-y", "-loglevel", "error", "-i", str(src),
+            "-ar", str(sample_rate), "-ac", str(channels),
+            "-c:a", "aac", "-b:a", bitrate, str(dst),
+        ],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        detail = proc.stderr.decode("utf-8", "ignore")[-300:]
+        raise WavError(f"音频压缩失败: {detail}")
+    return {"path": str(dst), "size": dst.stat().st_size}

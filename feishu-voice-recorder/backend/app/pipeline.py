@@ -75,31 +75,69 @@ def process_recording(recording_id: str) -> None:
         db.close()
 
 
+def _compact_audio(rec: Recording, seg_files: list[Path], wav: Path) -> bool:
+    """转写完成后：WAV 转 AAC/m4a，删除分段文件，只留压缩后的合并文件。"""
+    m4a = storage.merged_m4a_path(rec.id)
+    try:
+        audio.convert_to_m4a(wav, m4a)
+    except Exception:  # noqa: BLE001
+        log.exception("音频压缩失败，保留 WAV")
+        return False
+    wav_mb = wav.stat().st_size / 1048576
+    wav.unlink(missing_ok=True)
+    for path in seg_files:
+        path.unlink(missing_ok=True)
+    log.info("音频压缩完成 %s: %.1fMB -> %.1fMB", rec.id, wav_mb, m4a.stat().st_size / 1048576)
+    return True
+
+
 def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
     segments = sorted(rec.segments, key=lambda s: s.idx)
-    if not segments:
-        raise RuntimeError("没有音频分段")
-
     rec.status = STATUS_TRANSCRIBING
     rec.error = ""
     db.commit()
 
-    merged = storage.merged_path(rec.id)
-    t_merge = time.time()
-    info = audio.merge([Path(s.path) for s in segments], merged)
-    log.info("合并 %s: %.1f 秒音频 / %d 段，耗时 %.2fs", rec.id, info["duration"], len(segments), time.time() - t_merge)
-    rec.duration_sec = int(round(info["duration"]))
-    db.commit()
+    merged_wav = storage.merged_path(rec.id)
+    merged_m4a = storage.merged_m4a_path(rec.id)
+    seg_files = [Path(seg.path) for seg in segments]
+    has_all_segments = bool(seg_files) and all(p.exists() for p in seg_files)
 
-    # 腾讯需要公网 URL；mock 忽略
-    public_url = signed_url(storage.rel_media_path(merged), ttl=6 * 3600)
+    if has_all_segments:
+        t_merge = time.time()
+        info = audio.merge(seg_files, merged_wav)
+        log.info(
+            "合并 %s: %.1f 秒音频 / %d 段，耗时 %.2fs",
+            rec.id, info["duration"], len(segments), time.time() - t_merge,
+        )
+        rec.duration_sec = int(round(info["duration"]))
+        source = merged_wav
+        db.commit()
+    elif merged_wav.exists():
+        source = merged_wav
+        if not rec.duration_sec:
+            rec.duration_sec = int(round(audio.inspect(merged_wav)["duration"]))
+            db.commit()
+        log.info("复用已有合并音频 %s", rec.id)
+    elif merged_m4a.exists():
+        if not rec.duration_sec:
+            raise RuntimeError("音频已压缩且缺少时长，无法重新处理")
+        source = merged_m4a
+        log.info("复用已压缩音频 %s", rec.id)
+    else:
+        raise RuntimeError("音频文件已清理，无法重新处理")
+
+    # 腾讯/阿里 filetrans 需要公网 URL
+    public_url = signed_url(storage.rel_media_path(source), ttl=6 * 3600)
     chunks: list[AudioChunk] = []
     offset = 0.0
     for seg in segments:
         seg_path = Path(seg.path)
+        if not seg_path.exists():
+            offset += float(seg.duration_sec or 0.0)
+            continue
         try:
             seg_url = signed_url(storage.rel_media_path(seg_path), ttl=6 * 3600)
-        except ValueError:  # 不在 data 目录（例如测试里的临时文件）
+        except ValueError:
             seg_url = ""
         chunks.append(
             AudioChunk(
@@ -113,12 +151,15 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
 
     t_asr = time.time()
     transcript = get_asr_provider().transcribe(
-        merged, info["duration"], public_url, chunks=chunks
+        source, float(rec.duration_sec or 0.0), public_url, chunks=chunks
     )
     log.info("转写 %s: %d 段文本，耗时 %.2fs", rec.id, len(transcript.segments), time.time() - t_asr)
     rec.transcript_json = json.dumps(transcript.to_dict(), ensure_ascii=False)
     rec.status = STATUS_TRANSCRIBED
     db.commit()
+
+    if source == merged_wav and merged_wav.exists():
+        _compact_audio(rec, seg_files, merged_wav)
 
     rec.status = STATUS_SUMMARIZING
     db.commit()
@@ -127,7 +168,7 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
         x.speaker: x.name
         for x in db.query(SpeakerName).filter(SpeakerName.recording_id == rec.id).all()
     }
-    if names:  # 说话人已改名，喂给 LLM 的文本用真实姓名
+    if names:
         llm_text = "\n".join(
             f"{names.get(s.speaker, s.speaker)}：{s.text}" for s in transcript.segments
         )
@@ -169,11 +210,11 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
             info = client.create_minutes_doc(
                 rec.title, summary, detail_url, rec.owner_open_id, folder_token
             )
+            doc_url = info["url"]
             if info.get("folder_ok"):
                 doc_hint = "📁 已保存到飞书云盘「AI录音」目录"
-            elif doc_url:
+            else:
                 doc_hint = "📁 已保存到你的飞书云盘"
-            doc_url = info["url"]
             db.add(Document(recording_id=rec.id, doc_id=info["document_id"], url=doc_url))
             db.commit()
             log.info("已同步飞书文档: %s", doc_url)

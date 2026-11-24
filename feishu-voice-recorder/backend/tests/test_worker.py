@@ -37,6 +37,12 @@ def test_process_one_completes(tmp_path: Path) -> None:
         assert rec.status == STATUS_DONE
         assert rec.summary_json
         assert rec.duration_sec >= 1
+        from app import audio as audio_mod
+        from app.storage import merged_m4a_path, merged_path
+
+        if audio_mod.ffmpeg_path():
+            assert merged_m4a_path(rid).exists(), "转写后应压缩为 m4a"
+            assert not merged_path(rid).exists(), "wav 应已删除"
     finally:
         db.close()
 

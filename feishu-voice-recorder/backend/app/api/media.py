@@ -17,4 +17,5 @@ def media(path: str, exp: str, sig: str) -> FileResponse:
     target = (root / path).resolve()
     if not str(target).startswith(str(root)) or not target.is_file():
         raise HTTPException(status_code=404, detail="文件不存在")
-    return FileResponse(target, media_type="audio/wav", filename=Path(target).name)
+    media_type = "audio/mp4" if target.suffix.lower() in (".m4a", ".aac") else "audio/wav"
+    return FileResponse(target, media_type=media_type, filename=Path(target).name)

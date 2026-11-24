@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     watchdog_seconds: int = 300
     ops_token: str = ""
     alert_open_ids: str = ""
-    retention_days: int = 90
+    retention_days: int = 30
     retention_check_seconds: int = 6 * 3600
 
     # ASR

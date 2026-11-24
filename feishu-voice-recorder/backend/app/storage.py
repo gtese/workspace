@@ -29,6 +29,10 @@ def merged_path(recording_id: str) -> Path:
     return recording_dir(recording_id) / "merged.wav"
 
 
+def merged_m4a_path(recording_id: str) -> Path:
+    return recording_dir(recording_id) / "merged.m4a"
+
+
 def segment_raw_path(recording_id: str, idx: int) -> Path:
     return recording_dir(recording_id) / f"seg_{idx:03d}.raw"
 
