@@ -1,50 +1,76 @@
+name: trace-voice
+
 services:
   api:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    image: trace-voice:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
-      FM_DATABASE_URL: postgresql+psycopg://fm:${POSTGRES_PASSWORD:-fm}@db:5432/fm
+      FM_DATA_DIR: /app/data
+      HOME: /app
+    volumes:
+      - ./data:/app/data:Z
+      - ${HOME}/.mm:/app/.mm:ro,Z
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  events:
+    image: trace-voice:${IMAGE_TAG:-latest}
+    command: ["python", "-m", "app.feishu.events"]
+    env_file: .env
+    environment:
+      HOME: /app
       FM_DATA_DIR: /app/data
     volumes:
-      - ./data:/app/data
+      - ${HOME}/.mm:/app/.mm:ro,Z
     depends_on:
-      db:
-        condition: service_healthy
+      api:
+        condition: service_started
     restart: unless-stopped
-
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: fm
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fm}
-      POSTGRES_DB: fm
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fm -d fm"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
   caddy:
-    image: caddy:2-alpine
+    image: docker.io/library/caddy:2-alpine
     environment:
-      DOMAIN: ${DOMAIN:-localhost}
+      DOMAIN: ${DOMAIN}
+      PORT: ${PORT:-5266}
     ports:
-      - "80:80"
-      - "443:443"
+      - "${PORT:-5266}:${PORT:-5266}"
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro,Z
+      - ./deploy/certs:/certs:ro,Z
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - api
+      api:
+        condition: service_started
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
-  pgdata:
   caddy_data:
   caddy_config:

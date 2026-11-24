@@ -1,0 +1,29 @@
+services:
+  api:
+    environment:
+      FM_DATABASE_URL: postgresql+psycopg://fm:${POSTGRES_PASSWORD:-fm}@db:5432/fm
+    depends_on:
+      api:
+        condition: service_started
+      db:
+        condition: service_healthy
+  db:
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: fm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fm}
+      POSTGRES_DB: fm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fm -d fm"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  pgdata:

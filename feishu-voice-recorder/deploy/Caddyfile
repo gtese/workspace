@@ -1,10 +1,17 @@
-{$DOMAIN:localhost} {
+https://{$DOMAIN}:{$PORT:5266} {
+	tls /certs/fullchain.pem /certs/privkey.pem
 	encode gzip
 
-	# 音频下载走应用层签名校验，Caddy 只做 TLS 与转发
-	reverse_proxy api:8000
-
 	request_body {
-		max_size 100MB
+		max_size 120MB
+	}
+
+	reverse_proxy api:8000 {
+		header_up X-Forwarded-Proto https
+	}
+
+	log {
+		output stdout
+		format json
 	}
 }

@@ -91,6 +91,10 @@ def build_ws_client() -> lark.ws.Client:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    settings = get_settings()
+    if settings.feishu_mode != "real":
+        log.info("FM_FEISHU_MODE=%s，跳过飞书长连接（mock 不加事件消费者）", settings.feishu_mode)
+        return
     log.info("启动飞书长连接事件消费者…")
     build_ws_client().start()
 

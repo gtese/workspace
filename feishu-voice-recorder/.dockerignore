@@ -1,0 +1,12 @@
+.git
+.gitignore
+.venv
+data
+.env
+deploy/certs
+docs/screenshots
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+*.log
