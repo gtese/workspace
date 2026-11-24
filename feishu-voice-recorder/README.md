@@ -85,7 +85,7 @@ cd backend
 
 - 需求：3 轮问答已对齐
 - 选型：已定稿（v0.2）
-- 生产：**https://voice.traceic.com:5266**（Let's Encrypt 正式证书），真实阿里云 ASR+LLM 链路验证通过
+- 生产：`https://<your-domain>:5266`（Let's Encrypt 正式证书，部署时通过 `FM_PUBLIC_BASE_URL` 指定）
 - POC：后端全链路已跑通（mock）；浏览器真实录音 E2E 已通过（Chromium 假麦克风）
 - 队列：DB worker 串行处理，重启不丢任务；音频 90 天自动清理
 - 分发：飞书卡片、飞书云文档（自动创建、放入云盘「AI录音」目录并转交员工）、网站回调、邮件 SMTP

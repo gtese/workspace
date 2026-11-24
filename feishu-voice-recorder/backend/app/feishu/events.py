@@ -23,8 +23,11 @@ from ..config import get_settings
 
 log = logging.getLogger(__name__)
 
-APP_URL = "https://voice.traceic.com:5266/"
 TRIGGERS = ("录音", "纪要", "trace", "Trace", "voice", "Voice")
+
+
+def _app_url() -> str:
+    return get_settings().public_base_url.rstrip("/") + "/"
 
 
 def _client() -> lark.Client:
@@ -65,7 +68,7 @@ def on_message(data: P2ImMessageReceiveV1) -> None:
         if any(k in text for k in TRIGGERS):
             _reply_text(
                 msg.chat_id,
-                f"打开 Trace Voice 开始录音：{APP_URL}\n录完会自动生成纪要并同步飞书文档。",
+                f"打开 Trace Voice 开始录音：{_app_url()}\n录完会自动生成纪要并同步飞书文档。",
             )
     except Exception:  # noqa: BLE001
         log.exception("处理消息事件失败")

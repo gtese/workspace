@@ -1,6 +1,6 @@
 # API 接口
 
-Base：`https://voice.traceic.com:5266`；文档页：`/docs`；OpenAPI：`/openapi.json`。
+Base：`https://voice.example.com:5266`；文档页：`/docs`；OpenAPI：`/openapi.json`。
 
 ## 鉴权
 
