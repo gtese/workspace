@@ -242,7 +242,7 @@ async function loadMe() {
     location.reload();
   };
   const current = (ME.orgs || []).find(o => o.id === ME.current_org_id);
-  $('adminLink').classList.toggle('hide', false);
+  $('adminLink').classList.toggle('hide', !ME.is_admin);
   if (!ME.email_verified) toast(zh ? '邮箱未验证，点击设置里的重发验证' : 'Email not verified');
   return current;
 }

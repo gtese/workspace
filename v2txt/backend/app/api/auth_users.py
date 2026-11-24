@@ -27,7 +27,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import Membership, Org, User, utcnow
 from ..ratelimit import enforce
-from .deps import current_user
+from .deps import current_user, is_platform_admin
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["auth"])
@@ -90,6 +90,7 @@ def user_dict(db: Session, user: User) -> dict:
         "locale": user.locale,
         "email_verified": user.email_verified_at is not None,
         "status": user.status,
+        "is_admin": is_platform_admin(user),
         "created_at": user.created_at.isoformat(),
         "default_org_id": user.default_org_id,
         "orgs": [
