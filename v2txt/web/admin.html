@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V2TXT · 运营后台</title>
+<link rel="stylesheet" href="/static/assets/style.css">
+<style>
+  .kpi { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .kpi .card { padding:16px; }
+  .kpi b { font-size:22px; display:block; }
+  @media (max-width:900px){ .kpi{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+<div class="wrap" style="padding-top:24px">
+  <div class="spread" style="margin-bottom:18px">
+    <div class="row"><b style="font-size:18px">V2TXT 运营后台</b><span class="badge gray" id="adminEmail"></span></div>
+    <div class="row"><a class="btn small" href="/app">返回控制台</a><button class="btn small" id="logout">退出</button></div>
+  </div>
+
+  <div class="kpi" style="margin-bottom:18px">
+    <div class="card"><span class="muted small">用户 / 空间</span><b id="kUsers">-</b><span class="tiny muted" id="kOrgs"></span></div>
+    <div class="card"><span class="muted small">录音总数（30天）</span><b id="kRecs">-</b><span class="tiny muted" id="kRecs30"></span></div>
+    <div class="card"><span class="muted small">30 天收入 / 成本</span><b id="kRevenue">-</b><span class="tiny muted" id="kCost"></span></div>
+    <div class="card"><span class="muted small">待确认订单</span><b id="kPending">-</b><span class="tiny muted">点击下方处理</span></div>
+  </div>
+
+  <div class="tabs">
+    <a href="#" data-tab="orders" class="active">订单</a>
+    <a href="#" data-tab="users">用户</a>
+    <a href="#" data-tab="usage">用量与毛利</a>
+  </div>
+
+  <section id="view-orders">
+    <div class="card">
+      <div class="spread" style="margin-bottom:12px">
+        <h3>订单</h3>
+        <select id="orderFilter" style="max-width:160px">
+          <option value="pending">待确认</option>
+          <option value="">全部</option>
+          <option value="confirmed">已开通</option>
+          <option value="canceled">已取消</option>
+        </select>
+      </div>
+      <div class="list" id="orderList"><p class="muted small">加载中…</p></div>
+    </div>
+  </section>
+
+  <section id="view-users" class="hide">
+    <div class="card">
+      <div class="spread" style="margin-bottom:12px">
+        <h3>用户</h3>
+        <input type="text" id="userSearch" placeholder="搜索邮箱或姓名" style="max-width:260px">
+      </div>
+      <div class="list" id="userList"><p class="muted small">加载中…</p></div>
+    </div>
+  </section>
+
+  <section id="view-usage" class="hide">
+    <div class="card">
+      <div class="spread" style="margin-bottom:12px"><h3>近 30 天用量与毛利</h3><button class="btn small" id="refreshUsage">刷新</button></div>
+      <div id="usageBox"><p class="muted small">加载中…</p></div>
+    </div>
+  </section>
+</div>
+
+<script src="/static/assets/api.js"></script>
+<script>
+const { Api, toast, needAuth, fmtDate } = UI;
+const $ = (id) => document.getElementById(id);
+const zh = Api.lang === 'zh';
+if (!needAuth()) throw new Error('redirecting');
+
+function setTab(name) {
+  document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === name));
+  ['orders', 'users', 'usage'].forEach(t => $('view-' + t).classList.toggle('hide', t !== name));
+  if (name === 'orders') loadOrders();
+  if (name === 'users') loadUsers();
+  if (name === 'usage') loadUsage();
+}
+document.querySelectorAll('.tabs a').forEach(a => a.onclick = (e) => { e.preventDefault(); setTab(a.dataset.tab); });
+
+async function loadOverview() {
+  try {
+    const d = await Api.req('/api/v1/admin/overview');
+    $('adminEmail').textContent = d.admin;
+    $('kUsers').textContent = d.users;
+    $('kOrgs').textContent = d.orgs + (zh ? ' 个空间' : ' workspaces');
+    $('kRecs').textContent = d.recordings;
+    $('kRecs30').textContent = (zh ? '30 天新增 ' : 'new in 30d ') + d.recordings_30d;
+    $('kRevenue').textContent = '$' + d.revenue_usd;
+    $('kCost').textContent = (zh ? '成本 ¥' : 'cost ¥') + d.cost_cny_30d + ' · ' + (zh ? '毛利 $' : 'margin $') + d.gross_margin_usd;
+    $('kPending').textContent = d.pending_orders;
+  } catch (e) {
+    if (e.status === 403) { document.body.innerHTML = '<p style="padding:40px;text-align:center">无运营权限</p>'; return; }
+    toast(e.message, true);
+  }
+}
+
+async function loadOrders() {
+  const status = $('orderFilter').value;
+  try {
+    const d = await Api.req('/api/v1/admin/orders' + (status ? '?status=' + status : ''));
+    if (!d.items.length) { $('orderList').innerHTML = '<p class="muted small" style="padding:12px 0">没有订单</p>'; return; }
+    $('orderList').innerHTML = d.items.map(o => `
+      <div class="item">
+        <div class="grow">
+          <b>${o.kind === 'subscription' ? '订阅 ' + o.plan_code : '充值'} · ${o.minutes} 分钟 · ${o.amount} ${o.currency}</b>
+          <div class="tiny muted">${o.org_name} · ${o.user_email || '-'} · ${o.id} · ${fmtDate(o.created_at, true)}</div>
+          ${o.payer_name ? `<div class="tiny muted">付款方：${o.payer_name}</div>` : ''}
+        </div>
+        <span class="badge ${o.status === 'pending' ? 'warn' : o.status === 'confirmed' ? 'ok' : 'gray'}">${o.status}</span>
+        ${o.status === 'pending' ? `<div class="row">
+          <input type="number" value="${o.minutes}" style="width:90px" data-min="${o.id}">
+          <button class="btn small primary" data-confirm="${o.id}">确认到账</button></div>` : ''}
+      </div>`).join('');
+    $('orderList').querySelectorAll('[data-confirm]').forEach(b => b.onclick = async () => {
+      const id = b.dataset.confirm;
+      const minutes = Number(document.querySelector(`[data-min="${id}"]`).value || 0);
+      b.disabled = true;
+      try {
+        await Api.req(`/api/v1/admin/orders/${id}/confirm`, { method: 'POST', body: { minutes } });
+        toast(zh ? '已确认开通' : 'Confirmed'); loadOrders(); loadOverview();
+      } catch (e) { toast(e.message, true); b.disabled = false; }
+    });
+  } catch (e) { toast(e.message, true); }
+}
+$('orderFilter').onchange = loadOrders;
+
+async function loadUsers() {
+  const q = $('userSearch').value.trim();
+  try {
+    const d = await Api.req('/api/v1/admin/users' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    $('userList').innerHTML = d.items.map(u => `
+      <div class="item">
+        <div class="grow">
+          <b>${u.name || u.email}</b>
+          <div class="tiny muted">${u.email} · ${fmtDate(u.created_at)} · ${u.minutes} 分钟 ${u.email_verified ? '' : '· 未验证'}</div>
+        </div>
+        <span class="badge ${u.status === 'active' ? 'ok' : 'err'}">${u.status}</span>
+        <div class="row">
+          <button class="btn small" data-grant="${u.org_id}">加额度</button>
+          <button class="btn small ${u.status === 'active' ? 'danger' : ''}" data-status="${u.id}" data-next="${u.status === 'active' ? 'disabled' : 'active'}">
+            ${u.status === 'active' ? '停用' : '启用'}
+          </button>
+        </div>
+      </div>`).join('') || '<p class="muted small" style="padding:12px 0">没有匹配用户</p>';
+    $('userList').querySelectorAll('[data-status]').forEach(b => b.onclick = async () => {
+      try { await Api.req(`/api/v1/admin/users/${b.dataset.status}/status`, { method: 'POST', body: { status: b.dataset.next } }); loadUsers(); }
+      catch (e) { toast(e.message, true); }
+    });
+    $('userList').querySelectorAll('[data-grant]').forEach(b => b.onclick = async () => {
+      const v = prompt(zh ? '增加多少分钟？' : 'Minutes to grant?', '100');
+      if (!v) return;
+      try { await Api.req(`/api/v1/admin/orgs/${b.dataset.grant}/grant`, { method: 'POST', body: { minutes: Number(v), note: '后台手工赠送' } }); toast('OK'); loadUsers(); }
+      catch (e) { toast(e.message, true); }
+    });
+  } catch (e) { toast(e.message, true); }
+}
+$('userSearch').onkeydown = (e) => { if (e.key === 'Enter') loadUsers(); };
+
+async function loadUsage() {
+  try {
+    const d = await Api.req('/api/v1/admin/usage?days=30');
+    if (!d.items.length) { $('usageBox').innerHTML = '<p class="muted small">暂无数据</p>'; return; }
+    $('usageBox').innerHTML = `<table><thead><tr>
+      <th>空间</th><th>任务</th><th>分钟</th><th>成本 ¥</th><th>收入 $</th><th>毛利 $</th></tr></thead><tbody>
+      ${d.items.map(i => `<tr><td>${i.org_name || i.org_id}</td><td>${i.tasks}</td><td>${i.minutes}</td>
+        <td>${i.cost_cny}</td><td>${i.revenue_usd}</td><td>${i.margin_usd}</td></tr>`).join('')}
+      </tbody></table>`;
+  } catch (e) { toast(e.message, true); }
+}
+$('refreshUsage').onclick = loadUsage;
+
+$('logout').onclick = async () => {
+  try { await Api.req('/api/v1/auth/logout', { method: 'POST' }); } catch (e) {}
+  Api.setToken(''); location.href = '/login';
+};
+
+loadOverview(); loadOrders(); loadUsers();
+</script>
+</body>
+</html>

@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>V2TXT · 控制台</title>
+<link rel="stylesheet" href="/static/assets/style.css">
+<style>
+  body { padding-bottom: 40px; }
+  header.top { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
+  header.top .inner { display:flex; align-items:center; gap:14px; padding:12px 0; }
+  .logo { font-weight:800; font-size:18px; letter-spacing:-.02em; }
+  .logo em { color:var(--brand); font-style:normal; }
+  .balance { display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:999px;
+             background:var(--brand-soft); color:var(--brand); font-weight:600; font-size:13px; cursor:pointer; }
+  main { padding-top: 22px; }
+  .rec-btn { width:104px; height:104px; border-radius:50%; border:none; background:var(--danger); color:#fff;
+             font-size:15px; font-weight:650; cursor:pointer; box-shadow:0 8px 24px rgba(220,38,38,.28); transition:.2s; }
+  .rec-btn.stop { background:#111827; box-shadow:0 8px 24px rgba(17,24,39,.25); }
+  .rec-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .timer { font-variant-numeric: tabular-nums; font-size:40px; font-weight:700; letter-spacing:-.02em; }
+  .levels { display:flex; align-items:flex-end; gap:3px; height:36px; }
+  .levels i { width:5px; background:var(--brand); border-radius:3px; opacity:.85; transition:height .08s linear; }
+  .drop { border:2px dashed var(--line); border-radius:var(--radius); padding:44px 20px; text-align:center;
+          transition:.15s; background:#fff; cursor:pointer; }
+  .drop.over { border-color:var(--brand); background:var(--brand-soft); }
+  .grid2 { display:grid; grid-template-columns:1.4fr 1fr; gap:18px; }
+  .kpi { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .kpi .card { padding:16px; }
+  .kpi b { font-size:22px; display:block; }
+  .progress { height:6px; background:#eef0f4; border-radius:999px; overflow:hidden; margin-top:8px; }
+  .progress i { display:block; height:100%; background:var(--brand); width:0; transition:width .2s; }
+  @media (max-width:860px){ .grid2{grid-template-columns:1fr} .kpi{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap inner">
+    <div class="logo">V2<em>TXT</em></div>
+    <div class="balance" id="balanceChip" title="剩余额度">0 分钟</div>
+    <div style="flex:1"></div>
+    <select id="orgSelect" class="small" style="width:auto;max-width:180px"></select>
+    <button class="btn small ghost" id="langBtn">EN</button>
+    <button class="btn small" id="logoutBtn">退出</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="tabs" id="tabs">
+    <a href="#record" data-tab="record">录音</a>
+    <a href="#upload" data-tab="upload">上传</a>
+    <a href="#records" data-tab="records">记录</a>
+    <a href="#billing" data-tab="billing">账单</a>
+    <a href="#team" data-tab="team">团队</a>
+    <a href="#settings" data-tab="settings">设置</a>
+    <a href="/admin" id="adminLink" class="hide">运营后台</a>
+  </div>
+
+  <!-- 录音 -->
+  <section id="view-record">
+    <div class="card center" style="padding:34px 20px">
+      <div class="row" style="justify-content:center;margin-bottom:14px">
+        <button class="rec-btn" id="recBtn">开始录音</button>
+      </div>
+      <div class="timer" id="timer">00:00</div>
+      <div class="levels" id="levels" style="justify-content:center;margin:14px auto 6px"></div>
+      <p class="muted small" id="recHint">点击开始录音，录音会每 5 分钟自动分段上传，中途断网也不丢。</p>
+      <div id="recActions" class="row hide" style="justify-content:center;margin-top:18px">
+        <button class="btn" id="finishBtn">结束生成纪要</button>
+        <button class="btn danger" id="abortBtn">放弃退出</button>
+      </div>
+      <div id="recQueue" class="tiny muted" style="margin-top:10px"></div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <div class="spread"><h3>最近录音</h3><a href="#records" class="small">全部记录</a></div>
+      <div class="list" id="recentList"><p class="muted small" style="padding:12px 0">还没有录音</p></div>
+    </div>
+  </section>
+
+  <!-- 上传 -->
+  <section id="view-upload" class="hide">
+    <div class="card">
+      <h3>上传音视频文件</h3>
+      <p class="muted small" style="margin:6px 0 16px" id="uploadHint">支持 wav / mp3 / m4a / mp4 / mov 等格式</p>
+      <div class="drop" id="drop">
+        <p style="font-size:15px;font-weight:600">点击选择文件，或拖到这里</p>
+        <p class="muted small" style="margin-top:6px" id="dropHint"></p>
+      </div>
+      <input type="file" id="fileInput" class="hide" accept="audio/*,video/*">
+      <div id="uploadStatus" style="margin-top:16px"></div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h3>处理中的任务</h3>
+      <div class="list" id="processingList"><p class="muted small" style="padding:12px 0">暂无</p></div>
+    </div>
+  </section>
+
+  <!-- 记录 -->
+  <section id="view-records" class="hide">
+    <div class="card">
+      <div class="spread" style="margin-bottom:14px">
+        <input type="text" id="searchInput" placeholder="搜索标题或内容…" style="max-width:320px">
+        <button class="btn small" id="refreshRecords">刷新</button>
+      </div>
+      <div class="list" id="recordsList"><p class="muted small" style="padding:12px 0">加载中…</p></div>
+    </div>
+  </section>
+
+  <!-- 账单 -->
+  <section id="view-billing" class="hide">
+    <div class="kpi" style="margin-bottom:18px">
+      <div class="card"><span class="muted small">剩余额度</span><b id="kpiMinutes">0</b><span class="tiny muted">分钟</span></div>
+      <div class="card"><span class="muted small">当前套餐</span><b id="kpiPlan">Free</b><span class="tiny muted" id="kpiPeriod"></span></div>
+      <div class="card"><span class="muted small">单价</span><b id="kpiPrice">$0.02</b><span class="tiny muted">/分钟</span></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>套餐</h3>
+        <div class="list" id="plansList" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h3>购买分钟包</h3>
+        <p class="muted small" style="margin:6px 0 14px">提交订单后联系客服对公转账，到账后人工开通。</p>
+        <label class="field"><span>购买分钟数</span><input type="number" id="topupMinutes" min="10" step="10" value="300"></label>
+        <p class="small muted" id="topupAmount">金额：$6.00</p>
+        <button class="btn primary block" style="margin-top:12px" id="topupBtn">提交充值单</button>
+        <div class="card tight" style="margin-top:16px;background:#fafafa" id="paymentInfo"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h3>我的订单</h3>
+      <div class="list" id="ordersList"><p class="muted small" style="padding:12px 0">暂无订单</p></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h3>额度流水</h3>
+      <div class="list" id="ledgerList"><p class="muted small" style="padding:12px 0">暂无记录</p></div>
+    </div>
+  </section>
+
+  <!-- 团队 -->
+  <section id="view-team" class="hide">
+    <div class="grid2">
+      <div class="card">
+        <h3>成员</h3>
+        <div class="list" id="memberList" style="margin-top:10px"></div>
+        <div class="stack" style="margin-top:18px">
+          <label class="field"><span>邀请邮箱</span><input type="email" id="inviteEmail" placeholder="teammate@example.com"></label>
+          <div class="row">
+            <select id="inviteRole" style="max-width:140px"><option value="member">成员</option><option value="admin">管理员</option></select>
+            <button class="btn primary" id="inviteBtn">发送邀请</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>我的空间</h3>
+        <div class="list" id="orgList" style="margin-top:10px"></div>
+        <div class="stack" style="margin-top:18px">
+          <label class="field"><span>新建团队空间</span><input type="text" id="newOrgName" placeholder="例如：产品部"></label>
+          <button class="btn" id="createOrgBtn">创建团队</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 设置 -->
+  <section id="view-settings" class="hide">
+    <div class="grid2">
+      <div class="card">
+        <h3>个人资料</h3>
+        <div class="stack" style="margin-top:14px">
+          <label class="field"><span>姓名</span><input type="text" id="setName"></label>
+          <label class="field"><span>邮箱</span><input type="text" id="setEmail" disabled></label>
+          <p class="small" id="verifyState"></p>
+          <div class="row">
+            <button class="btn primary" id="saveProfile">保存</button>
+            <button class="btn" id="resendVerify">重发验证邮件</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>修改密码</h3>
+        <div class="stack" style="margin-top:14px">
+          <label class="field"><span>原密码</span><input type="password" id="oldPass"></label>
+          <label class="field"><span>新密码</span><input type="password" id="newPass"></label>
+          <button class="btn primary" id="changePass">更新密码</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="/static/assets/api.js"></script>
+<script>
+const { Api, toast, needAuth, fmtDate, fmtMin } = UI;
+const zh = Api.lang === 'zh';
+const $ = (id) => document.getElementById(id);
+
+const T = zh ? {
+  start: '开始录音', stop: '结束生成纪要', abort: '放弃退出', recording: '录音中',
+  needLogin: '请先登录', micDenied: '无法获取麦克风，请在浏览器里允许录音权限',
+  uploading: '正在上传分段…', uploaded: '分段已上传', finishOk: '已提交，正在生成纪要',
+  noRecords: '还没有记录', minutes: '分钟', topup: '已提交充值单，等待对账开通',
+  inviteSent: '邀请已发送', copied: '已复制', deleted: '已删除', saved: '已保存',
+} : {
+  start: 'Start recording', stop: 'Finish & generate', abort: 'Discard', recording: 'Recording',
+  needLogin: 'Please sign in', micDenied: 'Microphone unavailable — allow mic access in your browser',
+  uploading: 'Uploading segment…', uploaded: 'Segment uploaded', finishOk: 'Submitted, generating minutes',
+  noRecords: 'No recordings yet', minutes: 'min', topup: 'Order submitted, waiting for confirmation',
+  inviteSent: 'Invitation sent', copied: 'Copied', deleted: 'Deleted', saved: 'Saved',
+};
+
+if (!needAuth()) throw new Error('redirecting');
+
+let ME = null, SUMMARY = null, REC = null;
+
+/* ------------------------------------------------ 头部/导航 */
+function setTab(name) {
+  document.querySelectorAll('#tabs a[data-tab]').forEach(a => a.classList.toggle('active', a.dataset.tab === name));
+  ['record', 'upload', 'records', 'billing', 'team', 'settings'].forEach(t => {
+    $('view-' + t).classList.toggle('hide', t !== name);
+  });
+  if (name === 'records') loadRecords();
+  if (name === 'billing') loadBilling();
+  if (name === 'team') loadTeam();
+  if (name === 'settings') loadSettings();
+  if (name === 'upload') loadProcessing();
+}
+window.addEventListener('hashchange', () => setTab((location.hash || '#record').slice(1)));
+
+async function loadMe() {
+  ME = await Api.req('/api/v1/me');
+  Api.setOrg(ME.current_org_id || '');
+  $('balanceChip').textContent = fmtMin(ME.balance) + ' ' + T.minutes;
+  const sel = $('orgSelect');
+  sel.innerHTML = (ME.orgs || []).map(o => `<option value="${o.id}" ${o.id === ME.current_org_id ? 'selected' : ''}>${o.name}</option>`).join('');
+  sel.onchange = async () => {
+    await Api.req('/api/v1/me/switch-org', { method: 'POST', body: { org_id: sel.value } });
+    Api.setOrg(sel.value);
+    location.reload();
+  };
+  const current = (ME.orgs || []).find(o => o.id === ME.current_org_id);
+  $('adminLink').classList.toggle('hide', false);
+  if (!ME.email_verified) toast(zh ? '邮箱未验证，点击设置里的重发验证' : 'Email not verified');
+  return current;
+}
+
+async function refreshSummary() {
+  SUMMARY = await Api.req('/api/v1/billing/summary');
+  $('balanceChip').textContent = fmtMin(SUMMARY.minutes) + ' ' + T.minutes;
+}
+
+/* ------------------------------------------------ 录音 */
+class Recorder {
+  constructor() {
+    this.ctx = null; this.stream = null; this.node = null; this.recordingId = null;
+    this.chunks = []; this.samples = 0; this.segIdx = 0; this.timer = null;
+    this.startedAt = 0; this.queue = []; this.busy = false; this.onLevel = null;
+  }
+  async start() {
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AC();
+    const src = this.ctx.createMediaStreamSource(this.stream);
+    this.node = this.ctx.createScriptProcessor(4096, 1, 1);
+    this.inRate = this.ctx.sampleRate;
+    this.node.onaudioprocess = (e) => {
+      const data = e.inputBuffer.getChannelData(0);
+      this.chunks.push(new Float32Array(data));
+      this.samples += data.length;
+      if (this.samples >= this.inRate * 300) this.rotate();
+      if (this.onLevel) this.onLevel(data);
+    };
+    src.connect(this.node);
+    this.node.connect(this.ctx.destination);
+    const rec = await Api.req('/api/v1/recordings', {
+      method: 'POST',
+      body: { title: (zh ? 'AI录音-' : 'Recording-') + new Date().toLocaleString(), scene: 'meeting' },
+    });
+    this.recordingId = rec.id;
+    this.startedAt = Date.now();
+  }
+  _wav(float32) {
+    const rate = this.inRate;
+    const outRate = 16000;
+    let data = float32;
+    if (rate !== outRate) {
+      const ratio = rate / outRate, len = Math.round(data.length / ratio), tmp = new Float32Array(len);
+      for (let i = 0; i < len; i++) {
+        const pos = i * ratio, i0 = Math.floor(pos), i1 = Math.min(i0 + 1, data.length - 1);
+        const f = pos - i0;
+        tmp[i] = data[i0] * (1 - f) + data[i1] * f;
+      }
+      data = tmp;
+    }
+    const buf = new ArrayBuffer(44 + data.length * 2), view = new DataView(buf);
+    const ws = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+    ws(0, 'RIFF'); view.setUint32(4, 36 + data.length * 2, true); ws(8, 'WAVE');
+    ws(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true); view.setUint32(24, outRate, true);
+    view.setUint32(28, outRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    ws(36, 'data'); view.setUint32(40, data.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < data.length; i++, off += 2) {
+      const s = Math.max(-1, Math.min(1, data[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+  _merge() {
+    const total = this.chunks.reduce((n, c) => n + c.length, 0);
+    const out = new Float32Array(total);
+    let off = 0;
+    for (const c of this.chunks) { out.set(c, off); off += c.length; }
+    this.chunks = []; this.samples = 0;
+    return out;
+  }
+  rotate() {
+    if (!this.chunks.length) return;
+    const blob = this._wav(this._merge());
+    this.enqueue(blob);
+  }
+  enqueue(blob) {
+    this.queue.push({ idx: this.segIdx++, blob, tries: 0 });
+    this.pump();
+  }
+  async pump() {
+    if (this.busy || !this.queue.length) return;
+    this.busy = true;
+    const job = this.queue[0];
+    try {
+      await this.upload(job.blob, job.idx);
+      this.queue.shift();
+      $('recQueue').textContent = this.queue.length ? T.uploading : '';
+    } catch (e) {
+      job.tries++;
+      if (job.tries >= 4) { this.queue.shift(); toast('分段上传失败：' + e.message, true); }
+      else await new Promise(r => setTimeout(r, 1500 * job.tries));
+    } finally {
+      this.busy = false;
+      if (this.queue.length) this.pump();
+    }
+  }
+  upload(blob, idx) {
+    const fd = new FormData();
+    fd.append('file', blob, 'seg_' + idx + '.wav');
+    return fetch(`/api/v1/recordings/${this.recordingId}/segments?idx=${idx}`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + Api.token, 'X-Org-Id': Api.org },
+      body: fd,
+    }).then(async (res) => {
+      if (!res.ok) {
+        let msg = 'HTTP ' + res.status;
+        try { const j = await res.json(); msg = j.detail || msg; } catch (e) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    });
+  }
+  elapsed() { return Math.floor((Date.now() - this.startedAt) / 1000); }
+  async stop() {
+    if (this.node) { this.node.disconnect(); this.node.onaudioprocess = null; }
+    if (this.stream) this.stream.getTracks().forEach(t => t.stop());
+    if (this.ctx) await this.ctx.close();
+    this.rotate();
+    while (this.queue.length || this.busy) await new Promise(r => setTimeout(r, 300));
+    const res = await Api.req(`/api/v1/recordings/${this.recordingId}/finish`, { method: 'POST' });
+    return res;
+  }
+  async abort() {
+    this.node && this.node.disconnect();
+    this.stream && this.stream.getTracks().forEach(t => t.stop());
+    if (this.ctx) await this.ctx.close();
+    try { await Api.req(`/api/v1/recordings/${this.recordingId}`, { method: 'DELETE' }); } catch (e) {}
+  }
+}
+
+const recorder = new Recorder();
+let tickTimer = null;
+const bars = [];
+for (let i = 0; i < 22; i++) { const b = document.createElement('i'); b.style.height = '4px'; $('levels').appendChild(b); bars.push(b); }
+
+$('recBtn').onclick = async () => {
+  if (recorder.recordingId) return;
+  $('recBtn').disabled = true;
+  try {
+    await recorder.start();
+    $('recBtn').textContent = T.recording;
+    $('recBtn').classList.add('stop');
+    $('recActions').classList.remove('hide');
+    $('recHint').textContent = zh ? '录音中，每 5 分钟自动上传一个分段。' : 'Recording. A segment is uploaded every 5 minutes.';
+    recorder.onLevel = (data) => {
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 16) sum += data[i] * data[i];
+      const rms = Math.sqrt(sum / (data.length / 16));
+      const h = Math.min(36, Math.max(4, rms * 320));
+      const b = bars[Math.floor(Math.random() * bars.length)];
+      b.style.height = h + 'px';
+      setTimeout(() => { b.style.height = '4px'; }, 120);
+    };
+    tickTimer = setInterval(() => {
+      const s = recorder.elapsed();
+      $('timer').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    }, 500);
+  } catch (e) {
+    toast(e.name === 'NotAllowedError' ? T.micDenied : e.message, true);
+  } finally { $('recBtn').disabled = false; }
+};
+
+$('finishBtn').onclick = async () => {
+  $('finishBtn').disabled = true; $('abortBtn').disabled = true;
+  $('recHint').textContent = T.uploading;
+  try {
+    clearInterval(tickTimer);
+    const res = await recorder.stop();
+    toast(T.finishOk);
+    recorder.recordingId = null;
+    $('recBtn').textContent = T.start; $('recBtn').classList.remove('stop');
+    $('recActions').classList.add('hide'); $('timer').textContent = '00:00'; $('recQueue').textContent = '';
+    $('recHint').textContent = zh ? '已提交，稍后在记录里查看结果。' : 'Submitted. Check your records.';
+    loadRecords(); refreshSummary();
+  } catch (e) { toast(e.message, true); }
+  finally { $('finishBtn').disabled = false; $('abortBtn').disabled = false; }
+};
+
+$('abortBtn').onclick = async () => {
+  if (!confirm(zh ? '确定放弃这段录音？已上传的内容会被删除。' : 'Discard this recording? Uploaded parts will be deleted.')) return;
+  clearInterval(tickTimer);
+  await recorder.abort();
+  recorder.recordingId = null;
+  $('recBtn').textContent = T.start; $('recBtn').classList.remove('stop');
+  $('recActions').classList.add('hide'); $('timer').textContent = '00:00';
+  toast(zh ? '已放弃' : 'Discarded');
+};
+
+/* ------------------------------------------------ 记录 */
+const STATUS_LABEL = {
+  created: ['已创建', 'gray'], recording: ['录音中', 'warn'], queued: ['排队中', 'warn'],
+  transcribing: ['转写中', 'warn'], transcribed: ['转写完成', 'warn'],
+  summarizing: ['生成纪要', 'warn'], done: ['已完成', 'ok'], failed: ['失败', 'err'],
+};
+
+async function openRecord(id) {
+  const { url } = await Api.req(`/api/v1/recordings/${id}/share`);
+  window.open(url, '_blank');
+}
+
+function recordRow(r) {
+  const [label, cls] = STATUS_LABEL[r.status] || [r.status, 'gray'];
+  const mins = r.duration_sec ? Math.round(r.duration_sec / 60 * 10) / 10 : 0;
+  return `<div class="item">
+    <div class="grow">
+      <div class="ellipsis" style="font-weight:600">${r.title || '未命名'}</div>
+      <div class="tiny muted">${fmtDate(r.created_at, true)} · ${mins} ${T.minutes}</div>
+    </div>
+    <span class="badge ${cls}">${label}</span>
+    <div class="row">
+      <button class="btn small" data-open="${r.id}" ${r.status === 'done' ? '' : 'disabled'}>查看</button>
+      <button class="btn small danger" data-del="${r.id}">删除</button>
+    </div>
+  </div>`;
+}
+
+function bindRows(box) {
+  box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openRecord(b.dataset.open));
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm(zh ? '删除这条记录？' : 'Delete this recording?')) return;
+    try { await Api.req('/api/v1/recordings/' + b.dataset.del, { method: 'DELETE' }); toast(T.deleted); loadRecords(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+async function loadRecords() {
+  const q = ($('searchInput').value || '').trim();
+  const box = $('recordsList');
+  try {
+    const rows = q ? await Api.req('/api/v1/search?q=' + encodeURIComponent(q)) : await Api.req('/api/v1/recordings');
+    if (!rows.length) { box.innerHTML = `<p class="muted small" style="padding:12px 0">${T.noRecords}</p>`; return; }
+    box.innerHTML = rows.map(recordRow).join('');
+    bindRows(box);
+    const recent = rows.slice(0, 3);
+    $('recentList').innerHTML = recent.length ? recent.map(recordRow).join('') : `<p class="muted small" style="padding:12px 0">${T.noRecords}</p>`;
+    bindRows($('recentList'));
+  } catch (e) { box.innerHTML = `<p class="err small">${e.message}</p>`; }
+}
+$('refreshRecords').onclick = loadRecords;
+$('searchInput').onkeydown = (e) => { if (e.key === 'Enter') loadRecords(); };
+
+/* ------------------------------------------------ 上传 */
+$('drop').onclick = () => $('fileInput').click();
+$('drop').ondragover = (e) => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = (e) => { e.preventDefault(); $('drop').classList.remove('over'); if (e.dataTransfer.files[0]) doUpload(e.dataTransfer.files[0]); };
+$('fileInput').onchange = (e) => { if (e.target.files[0]) doUpload(e.target.files[0]); };
+
+async function doUpload(file) {
+  const box = $('uploadStatus');
+  box.innerHTML = `<div class="card tight"><div class="spread"><span>${file.name}</span><span class="small muted" id="upPct">0%</span></div><div class="progress"><i id="upBar"></i></div></div>`;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('title', file.name.replace(/\.[^.]+$/, ''));
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/v1/uploads');
+      xhr.setRequestHeader('Authorization', 'Bearer ' + Api.token);
+      xhr.setRequestHeader('X-Org-Id', Api.org);
+      xhr.upload.onprogress = (ev) => {
+        if (!ev.lengthComputable) return;
+        const pct = Math.round(ev.loaded / ev.total * 100);
+        const bar = $('upBar'); const pctEl = $('upPct');
+        if (bar) bar.style.width = pct + '%';
+        if (pctEl) pctEl.textContent = pct + '%';
+      };
+      xhr.onload = () => {
+        let payload = null;
+        try { payload = JSON.parse(xhr.responseText); } catch (e) {}
+        if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+        else reject(new Error((payload && payload.detail) || ('HTTP ' + xhr.status)));
+      };
+      xhr.onerror = () => reject(new Error('network error'));
+      xhr.send(fd);
+    });
+    box.innerHTML = `<p class="small" style="color:var(--ok)">上传成功，${data.minutes} 分钟音频已进入处理队列。</p>`;
+    toast(zh ? '已提交转写' : 'Submitted');
+    loadProcessing(); refreshSummary();
+  } catch (e) {
+    box.innerHTML = `<p class="small" style="color:var(--danger)">上传失败：${e.message}</p>`;
+  }
+}
+
+async function loadProcessing() {
+  try {
+    const rows = await Api.req('/api/v1/recordings');
+    const active = rows.filter(r => ['queued', 'transcribing', 'summarizing', 'transcribed'].includes(r.status));
+    $('processingList').innerHTML = active.length
+      ? active.map(recordRow).join('')
+      : `<p class="muted small" style="padding:12px 0">暂无</p>`;
+    bindRows($('processingList'));
+  } catch (e) {}
+}
+
+/* ------------------------------------------------ 账单 */
+async function loadBilling() {
+  try {
+    const [sum, plans, orders, ledger, pay] = await Promise.all([
+      Api.req('/api/v1/billing/summary'),
+      Api.req('/api/v1/billing/plans'),
+      Api.req('/api/v1/billing/orders'),
+      Api.req('/api/v1/billing/ledger'),
+      Api.req('/api/v1/billing/payment-info'),
+    ]);
+    SUMMARY = sum;
+    $('kpiMinutes').textContent = fmtMin(sum.minutes);
+    $('kpiPlan').textContent = sum.plan ? sum.plan.name : 'Free';
+    $('kpiPeriod').textContent = sum.period_end ? (zh ? '有效期至 ' : 'until ') + fmtDate(sum.period_end) : '';
+    $('kpiPrice').textContent = '$' + sum.price_per_minute;
+
+    $('plansList').innerHTML = plans.items.map(p => `
+      <div class="item">
+        <div class="grow"><b>${p.name}</b><div class="tiny muted">${p.minutes_included} ${T.minutes} · $${p.price_usd}</div></div>
+        <button class="btn small" data-plan="${p.code}" ${p.price_usd > 0 && !(sum.plan && sum.plan.code === p.code) ? '' : 'disabled'}>
+          ${sum.plan && sum.plan.code === p.code ? (zh ? '当前' : 'Current') : (zh ? '开通' : 'Choose')}
+        </button>
+      </div>`).join('');
+    $('plansList').querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+      try {
+        await Api.req('/api/v1/billing/subscribe', { method: 'POST', body: { plan_code: b.dataset.plan } });
+        toast(T.topup); loadBilling();
+      } catch (e) { toast(e.message, true); }
+    });
+
+    $('ordersList').innerHTML = orders.items.length ? orders.items.map(o => {
+      const map = { pending: ['待确认', 'warn'], confirmed: ['已开通', 'ok'], canceled: ['已取消', 'gray'] };
+      const [label, cls] = map[o.status] || [o.status, 'gray'];
+      return `<div class="item">
+        <div class="grow"><b>${o.kind === 'subscription' ? '订阅 ' + o.plan_code : '充值'} ${o.minutes} ${T.minutes}</b>
+          <div class="tiny muted">${o.id} · ${fmtDate(o.created_at, true)} · ${o.amount} ${o.currency}</div></div>
+        <span class="badge ${cls}">${label}</span>
+        ${o.status === 'pending' ? `<button class="btn small" data-cancel="${o.id}">取消</button>` : ''}
+      </div>`;
+    }).join('') : `<p class="muted small" style="padding:12px 0">暂无订单</p>`;
+    $('ordersList').querySelectorAll('[data-cancel]').forEach(b => b.onclick = async () => {
+      try { await Api.req(`/api/v1/billing/orders/${b.dataset.cancel}/cancel`, { method: 'POST' }); loadBilling(); }
+      catch (e) { toast(e.message, true); }
+    });
+
+    const kindMap = { topup: '充值', grant: '赠送', consume: '扣费', refund: '退款', adjust: '调整' };
+    $('ledgerList').innerHTML = ledger.items.length ? ledger.items.map(e => `
+      <div class="item">
+        <div class="grow"><b>${kindMap[e.kind] || e.kind}</b> <span class="tiny muted">${e.note || ''}</span>
+          <div class="tiny muted">${fmtDate(e.created_at, true)}</div></div>
+        <div style="font-variant-numeric:tabular-nums;color:${e.minutes >= 0 ? 'var(--ok)' : 'var(--danger)'}">
+          ${e.minutes >= 0 ? '+' : ''}${e.minutes} → ${e.balance_after}
+        </div>
+      </div>`).join('') : `<p class="muted small" style="padding:12px 0">暂无记录</p>`;
+
+    $('paymentInfo').innerHTML = `<div class="tiny muted">对公账户</div>
+      <div class="small" style="margin-top:6px">${pay.bank}<br>${pay.account_name || ''}<br>${pay.account_no || ''}</div>
+      <div class="tiny muted" style="margin-top:8px">${pay.note}</div>`;
+
+    const price = sum.price_per_minute || 0.02;
+    const updateAmount = () => {
+      const m = Number($('topupMinutes').value || 0);
+      $('topupAmount').textContent = (zh ? '金额：$' : 'Amount: $') + (m * price).toFixed(2);
+    };
+    $('topupMinutes').oninput = updateAmount;
+    updateAmount();
+  } catch (e) { toast(e.message, true); }
+}
+
+$('topupBtn').onclick = async () => {
+  const m = Number($('topupMinutes').value || 0);
+  if (!m) return;
+  try {
+    await Api.req('/api/v1/billing/orders', {
+      method: 'POST',
+      body: { minutes: m, amount: +(m * (SUMMARY ? SUMMARY.price_per_minute : 0.02)).toFixed(2), currency: 'USD' },
+    });
+    toast(T.topup); loadBilling();
+  } catch (e) { toast(e.message, true); }
+};
+
+/* ------------------------------------------------ 团队 */
+async function loadTeam() {
+  try {
+    const [orgs, members] = await Promise.all([
+      Api.req('/api/v1/orgs'),
+      Api.req('/api/v1/orgs/' + Api.org + '/members'),
+    ]);
+    $('memberList').innerHTML = members.items.map(m => `
+      <div class="item">
+        <div class="grow"><b>${m.name || m.email}</b><div class="tiny muted">${m.email}</div></div>
+        <span class="badge gray">${m.role}</span>
+        ${m.role === 'owner' ? '' : `<button class="btn small danger" data-rm="${m.user_id}">移除</button>`}
+      </div>`).join('') + (members.invites || []).map(i => `
+      <div class="item"><div class="grow"><b>${i.email}</b><div class="tiny muted">${zh ? '邀请待接受' : 'Invite pending'}</div></div>
+      <span class="badge warn">${i.role}</span></div>`).join('');
+    $('memberList').querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => {
+      try { await Api.req(`/api/v1/orgs/${Api.org}/members/${b.dataset.rm}`, { method: 'DELETE' }); loadTeam(); }
+      catch (e) { toast(e.message, true); }
+    });
+
+    $('orgList').innerHTML = orgs.items.map(o => `
+      <div class="item">
+        <div class="grow"><b>${o.name}</b><div class="tiny muted">${o.kind} · ${o.member_count} ${zh ? '人' : 'members'} · ${fmtMin(o.minutes)} ${T.minutes}</div></div>
+        ${o.id === Api.org ? '<span class="badge ok">当前</span>' : `<button class="btn small" data-switch="${o.id}">${zh ? '切换' : 'Switch'}</button>`}
+      </div>`).join('');
+    $('orgList').querySelectorAll('[data-switch]').forEach(b => b.onclick = async () => {
+      await Api.req('/api/v1/me/switch-org', { method: 'POST', body: { org_id: b.dataset.switch } });
+      Api.setOrg(b.dataset.switch); location.reload();
+    });
+  } catch (e) { toast(e.message, true); }
+}
+
+$('inviteBtn').onclick = async () => {
+  const email = $('inviteEmail').value.trim();
+  if (!email) return;
+  try {
+    const res = await Api.req(`/api/v1/orgs/${Api.org}/invites`, {
+      method: 'POST', body: { email, role: $('inviteRole').value },
+    });
+    toast(T.inviteSent);
+    if (res.link) prompt(zh ? '邀请链接（本地环境直接复制）' : 'Invite link', res.link);
+    $('inviteEmail').value = '';
+    loadTeam();
+  } catch (e) { toast(e.message, true); }
+};
+
+$('createOrgBtn').onclick = async () => {
+  const name = $('newOrgName').value.trim();
+  if (!name) return;
+  try {
+    const org = await Api.req('/api/v1/orgs', { method: 'POST', body: { name } });
+    await Api.req('/api/v1/me/switch-org', { method: 'POST', body: { org_id: org.id } });
+    Api.setOrg(org.id); location.reload();
+  } catch (e) { toast(e.message, true); }
+};
+
+/* ------------------------------------------------ 设置 */
+async function loadSettings() {
+  $('setName').value = ME.name || '';
+  $('setEmail').value = ME.email || '';
+  $('verifyState').innerHTML = ME.email_verified
+    ? `<span class="badge ok">${zh ? '邮箱已验证' : 'Email verified'}</span>`
+    : `<span class="badge warn">${zh ? '邮箱未验证' : 'Email not verified'}</span>`;
+}
+$('saveProfile').onclick = async () => {
+  try {
+    ME = Object.assign(ME, await Api.req('/api/v1/me', { method: 'PATCH', body: { name: $('setName').value } }));
+    toast(T.saved);
+  } catch (e) { toast(e.message, true); }
+};
+$('resendVerify').onclick = async () => {
+  try { await Api.req('/api/v1/auth/resend-verify', { method: 'POST' }); toast(zh ? '验证邮件已发送' : 'Verification email sent'); }
+  catch (e) { toast(e.message, true); }
+};
+$('changePass').onclick = async () => {
+  try {
+    await Api.req('/api/v1/me/password', { method: 'POST', body: { old_password: $('oldPass').value, new_password: $('newPass').value } });
+    toast(zh ? '密码已更新，请重新登录' : 'Password updated, please sign in again');
+    setTimeout(() => { Api.setToken(''); location.href = '/login'; }, 1200);
+  } catch (e) { toast(e.message, true); }
+};
+
+/* ------------------------------------------------ 初始化 */
+$('langBtn').textContent = zh ? 'EN' : '中文';
+$('langBtn').onclick = () => Api.setLang(zh ? 'en' : 'zh');
+$('logoutBtn').onclick = async () => {
+  try { await Api.req('/api/v1/auth/logout', { method: 'POST' }); } catch (e) {}
+  Api.setToken(''); location.href = '/login';
+};
+
+(async () => {
+  try {
+    await loadMe();
+    await refreshSummary();
+    await loadRecords();
+    setTab((location.hash || '#record').slice(1));
+    setInterval(loadProcessing, 8000);
+  } catch (e) { toast(e.message, true); }
+})();
+</script>
+</body>
+</html>

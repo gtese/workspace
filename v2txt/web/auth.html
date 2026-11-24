@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>V2TXT</title>
+<link rel="stylesheet" href="/static/assets/style.css">
+<style>
+  body { display:flex; min-height:100vh; align-items:center; justify-content:center; padding:24px; }
+  .panel { width:100%; max-width:420px; }
+  .brand { font-weight:800; font-size:22px; letter-spacing:-.02em; margin-bottom:6px; }
+  .brand em { color:var(--brand); font-style:normal; }
+  .switch { margin-top:16px; text-align:center; font-size:14px; color:var(--muted); }
+  .err { color:var(--danger); font-size:13px; min-height:18px; margin-bottom:8px; }
+  .ok { color:var(--ok); font-size:14px; }
+  .toplink { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="toplink">
+    <div class="brand">V2<em>TXT</em></div>
+    <button class="btn small ghost" id="langBtn">EN</button>
+  </div>
+
+  <div class="card">
+    <h2 id="title">登录</h2>
+    <p class="muted small" id="subtitle" style="margin:6px 0 20px"></p>
+    <div class="err" id="err"></div>
+
+    <!-- 登录 -->
+    <form id="loginForm" class="hide">
+      <label class="field"><span id="lEmail">邮箱</span><input type="email" id="loginEmail" autocomplete="username" required></label>
+      <label class="field"><span id="lPass">密码</span><input type="password" id="loginPass" autocomplete="current-password" required></label>
+      <div class="spread" style="margin-bottom:14px">
+        <a href="/forgot" class="tiny" id="lForgot">忘记密码？</a>
+      </div>
+      <button class="btn primary block" id="loginBtn" type="submit">登录</button>
+    </form>
+
+    <!-- 注册 -->
+    <form id="registerForm" class="hide">
+      <label class="field"><span id="rName">姓名</span><input type="text" id="regName" autocomplete="name" placeholder="可选"></label>
+      <label class="field"><span id="rEmail">邮箱</span><input type="email" id="regEmail" autocomplete="email" required></label>
+      <label class="field"><span id="rPass">密码</span><input type="password" id="regPass" autocomplete="new-password" required></label>
+      <label class="field"><span id="rPass2">确认密码</span><input type="password" id="regPass2" autocomplete="new-password" required></label>
+      <button class="btn primary block" id="regBtn" type="submit">注册</button>
+      <p class="tiny muted" style="margin-top:12px" id="regHint"></p>
+    </form>
+
+    <!-- 忘记密码 -->
+    <form id="forgotForm" class="hide">
+      <label class="field"><span id="fEmail">注册邮箱</span><input type="email" id="forgotEmail" required></label>
+      <button class="btn primary block" id="forgotBtn" type="submit">发送重置邮件</button>
+      <p class="tiny muted" style="margin-top:12px" id="forgotHint"></p>
+    </form>
+
+    <!-- 重置密码 -->
+    <form id="resetForm" class="hide">
+      <label class="field"><span id="pNew">新密码</span><input type="password" id="resetPass" autocomplete="new-password" required></label>
+      <label class="field"><span id="pNew2">确认新密码</span><input type="password" id="resetPass2" autocomplete="new-password" required></label>
+      <button class="btn primary block" id="resetBtn" type="submit">重设密码</button>
+    </form>
+
+    <!-- 验证邮箱 -->
+    <div id="verifyBox" class="hide">
+      <p class="ok" id="verifyMsg">正在验证…</p>
+    </div>
+
+    <!-- 接受邀请 -->
+    <div id="joinBox" class="hide">
+      <p id="joinMsg" class="muted small"></p>
+      <button class="btn primary block" id="joinBtn" style="margin-top:12px">接受邀请</button>
+    </div>
+
+    <div class="switch" id="switchLine"></div>
+  </div>
+</div>
+
+<script src="/static/assets/api.js"></script>
+<script>
+const { Api, toast } = UI;
+const zh = Api.lang === 'zh';
+const path = location.pathname;
+const qs = new URLSearchParams(location.search);
+const tokenParam = qs.get('token') || '';
+
+document.getElementById('langBtn').textContent = zh ? 'EN' : '中文';
+document.getElementById('langBtn').onclick = () => Api.setLang(zh ? 'en' : 'zh');
+
+const T = zh ? {
+  signin: '登录', signup: '创建账号', forgot: '找回密码', reset: '重设密码', verify: '邮箱验证', join: '加入团队',
+  signinSub: '使用邮箱和密码登录', signupSub: '注册后立即获得免费试用额度',
+  forgotSub: '我们会发送一封重置邮件到你的邮箱', resetSub: '设置一个新密码',
+  email: '邮箱', password: '密码', name: '姓名', confirm: '确认密码', newPass: '新密码',
+  forgotLink: '忘记密码？', noAccount: '还没有账号？', hasAccount: '已有账号？',
+  regBtn: '注册', loginBtn: '登录', forgotBtn: '发送重置邮件', resetBtn: '重设密码',
+  forgotHint: '如果没有收到，请检查垃圾邮件目录。',
+  resetDone: '密码已更新，请用新密码登录。', verifyDone: '邮箱验证成功，可以开始使用了。',
+  verifyFail: '验证链接无效或已过期。', joinNeedLogin: '请先登录再接受邀请',
+  ok: '操作成功', mismatch: '两次输入的密码不一致', pwShort: '密码至少 8 位',
+} : {
+  signin: 'Sign in', signup: 'Create account', forgot: 'Reset password', reset: 'Set new password', verify: 'Verify email', join: 'Join team',
+  signinSub: 'Sign in with your email and password', signupSub: 'Get free trial minutes right after signing up',
+  forgotSub: "We'll email you a reset link", resetSub: 'Choose a new password',
+  email: 'Email', password: 'Password', name: 'Name', confirm: 'Confirm password', newPass: 'New password',
+  forgotLink: 'Forgot password?', noAccount: 'No account yet?', hasAccount: 'Already have an account?',
+  regBtn: 'Sign up', loginBtn: 'Sign in', forgotBtn: 'Send reset link', resetBtn: 'Reset password',
+  forgotHint: "Check your spam folder if you don't see it.",
+  resetDone: 'Password updated, please sign in.', verifyDone: 'Email verified. You are all set.',
+  verifyFail: 'This link is invalid or expired.', joinNeedLogin: 'Please sign in first',
+  ok: 'Done', mismatch: 'Passwords do not match', pwShort: 'Password must be at least 8 characters',
+};
+
+const $ = (id) => document.getElementById(id);
+const forms = ['loginForm', 'registerForm', 'forgotForm'];
+function showForm(name) {
+  forms.forEach(f => $(f).classList.add('hide'));
+  $('verifyBox').classList.add('hide');
+  $('joinBox').classList.add('hide');
+  if (name) $(name).classList.remove('hide');
+  $('err').textContent = '';
+}
+function err(msg) { $('err').textContent = msg; }
+
+function setHeader(title, sub) {
+  $('title').textContent = title;
+  $('subtitle').textContent = sub;
+}
+
+function switchLinks(loggedInMode) {
+  const line = $('switchLine');
+  if (loggedInMode === 'login') {
+    line.innerHTML = `${T.noAccount} <a href="/register">${T.signup}</a>`;
+  } else if (loggedInMode === 'register') {
+    line.innerHTML = `${T.hasAccount} <a href="/login">${T.signin}</a>`;
+  } else {
+    line.innerHTML = `<a href="/login">${T.signin}</a>`;
+  }
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  $('loginBtn').disabled = true;
+  try {
+    const data = await Api.req('/api/v1/auth/login', {
+      method: 'POST', body: { email: $('loginEmail').value, password: $('loginPass').value },
+    });
+    Api.setToken(data.token);
+    Api.setOrg(data.user.default_org_id || '');
+    const next = qs.get('next') || '/app';
+    location.href = next;
+  } catch (ex) { err(ex.message); }
+  finally { $('loginBtn').disabled = false; }
+}
+
+async function doRegister(e) {
+  e.preventDefault();
+  if ($('regPass').value !== $('regPass2').value) return err(T.mismatch);
+  if ($('regPass').value.length < 8) return err(T.pwShort);
+  $('regBtn').disabled = true;
+  try {
+    const data = await Api.req('/api/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: $('regEmail').value, password: $('regPass').value,
+        name: $('regName').value, locale: zh ? 'zh' : 'en',
+      },
+    });
+    Api.setToken(data.token);
+    Api.setOrg(data.user.default_org_id || '');
+    toast(zh ? '注册成功，验证邮件已发送' : 'Account created, verification email sent');
+    location.href = '/app';
+  } catch (ex) { err(ex.message); }
+  finally { $('regBtn').disabled = false; }
+}
+
+async function doForgot(e) {
+  e.preventDefault();
+  $('forgotBtn').disabled = true;
+  try {
+    const data = await Api.req('/api/v1/auth/forgot-password', {
+      method: 'POST', body: { email: $('forgotEmail').value },
+    });
+    $('forgotHint').textContent = data.message || T.forgotHint;
+  } catch (ex) { err(ex.message); }
+  finally { $('forgotBtn').disabled = false; }
+}
+
+async function doReset(e) {
+  e.preventDefault();
+  if ($('resetPass').value !== $('resetPass2').value) return err(T.mismatch);
+  $('resetBtn').disabled = true;
+  try {
+    await Api.req('/api/v1/auth/reset-password', {
+      method: 'POST', body: { token: tokenParam, password: $('resetPass').value },
+    });
+    toast(T.resetDone);
+    setTimeout(() => location.href = '/login', 900);
+  } catch (ex) { err(ex.message); }
+  finally { $('resetBtn').disabled = false; }
+}
+
+function init() {
+  if (path === '/register') {
+    setHeader(T.signup, T.signupSub); showForm('registerForm'); switchLinks('register');
+    $('lEmail').textContent = T.email;
+    $('rName').textContent = T.name; $('rEmail').textContent = T.email;
+    $('rPass').textContent = T.password; $('rPass2').textContent = T.confirm;
+    $('regBtn').textContent = T.regBtn;
+    $('regHint').textContent = zh ? '密码至少 8 位，需同时包含字母和数字。' : 'At least 8 characters with letters and numbers.';
+  } else if (path === '/forgot') {
+    setHeader(T.forgot, T.forgotSub); showForm('forgotForm'); switchLinks();
+    $('fEmail').textContent = T.email; $('forgotBtn').textContent = T.forgotBtn;
+  } else if (path === '/reset') {
+    setHeader(T.reset, T.resetSub); showForm(null); $('resetForm').classList.remove('hide'); switchLinks();
+    $('pNew').textContent = T.newPass; $('pNew2').textContent = T.confirm;
+    $('resetBtn').textContent = T.resetBtn;
+  } else if (path === '/verify') {
+    setHeader(T.verify, ''); showForm(null); $('verifyBox').classList.remove('hide'); switchLinks();
+    Api.req('/api/v1/auth/verify-email', { method: 'POST', body: { token: tokenParam } })
+      .then(() => { $('verifyMsg').textContent = T.verifyDone; })
+      .catch((ex) => { $('verifyMsg').textContent = ex.message || T.verifyFail; $('verifyMsg').className = 'err'; });
+  } else if (path === '/join') {
+    setHeader(T.join, ''); showForm(null); $('joinBox').classList.remove('hide'); switchLinks();
+    $('joinMsg').textContent = zh ? '邀请已确认，点击接受加入团队。' : 'Invitation found. Click to join.';
+    $('joinBtn').onclick = async () => {
+      if (!Api.token) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); return; }
+      try {
+        await Api.req('/api/v1/orgs/accept-invite', { method: 'POST', body: { token: tokenParam } });
+        toast(T.ok); location.href = '/app#team';
+      } catch (ex) { err(ex.message); }
+    };
+  } else {
+    setHeader(T.signin, T.signinSub); showForm('loginForm'); switchLinks('login');
+    $('lEmail').textContent = T.email; $('lPass').textContent = T.password;
+    $('lForgot').textContent = T.forgotLink; $('loginBtn').textContent = T.loginBtn;
+    if (qs.get('next')) { /* 登录后回跳 */ }
+  }
+  $('loginForm').onsubmit = doLogin;
+  $('registerForm').onsubmit = doRegister;
+  $('forgotForm').onsubmit = doForgot;
+  $('resetForm').onsubmit = doReset;
+}
+
+init();
+</script>
+</body>
+</html>

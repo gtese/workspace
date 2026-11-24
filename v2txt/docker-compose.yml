@@ -1,0 +1,57 @@
+name: v2txt
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple}
+    image: v2txt:${IMAGE_TAG:-latest}
+    # 以宿主机普通用户运行：凭据目录 700、数据目录归属一致，同时保留 cap_drop ALL
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    env_file: .env
+    environment:
+      HOME: /app
+      FM_DATA_DIR: /app/data
+    ports:
+      # 默认只监听回环，由 cloudflared 反代；要内网直连就把 BIND_ADDR 改成内网 IP
+      - "${BIND_ADDR:-127.0.0.1}:${PORT:-8080}:8000"
+    volumes:
+      - ./data:/app/data
+      - ${HOME}/.mm:/app/.mm:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 25s
+      retries: 3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  # 可选：换成 Postgres（默认用 SQLite）
+  db:
+    image: postgres:16-alpine
+    profiles: ["pg"]
+    environment:
+      POSTGRES_USER: v2txt
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-v2txt-dev-only}
+      POSTGRES_DB: v2txt
+    volumes:
+      - ./data/pg:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U v2txt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
