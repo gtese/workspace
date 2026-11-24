@@ -1,0 +1,8 @@
+- insert:
+    - id: dsh-security-scan
+      name: dsh-security-scan
+      config:
+        paths: ['.']
+        ignored: ['node_modules', '.git', 'dist', 'build']
+        maxFileSizeBytes: 1048576
+        maxMatchesPerFile: 10
