@@ -1,3 +1,5 @@
+import threading
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import get_settings
@@ -49,6 +51,11 @@ def feishu_login(body: FeishuLoginIn) -> FeishuLoginOut:
         raise HTTPException(status_code=401, detail=f"飞书登录失败: {exc}") from exc
     _upsert_employee(info["open_id"], info.get("name", ""), info.get("email", ""))
     put_user_token(info["open_id"], info.get("user_access_token", ""))
+    from ..feishu.folder_sync import sync_folder_from_user
+
+    threading.Thread(
+        target=sync_folder_from_user, args=(info["open_id"],), daemon=True
+    ).start()
     return FeishuLoginOut(
         open_id=info["open_id"],
         name=info.get("name", ""),

@@ -151,6 +151,11 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
             client = FeishuDocClient()
             folder_token = ""
             try:
+                from .feishu.folder_sync import sync_folder_from_user
+
+                synced = sync_folder_from_user(rec.owner_open_id)
+                if synced:
+                    folder_token = synced
                 row = db.get(DriveFolder, rec.owner_open_id)
                 if row and row.folder_token:
                     folder_token = row.folder_token
@@ -164,8 +169,10 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
             info = client.create_minutes_doc(
                 rec.title, summary, detail_url, rec.owner_open_id, folder_token
             )
-            if folder_token:
+            if info.get("folder_ok"):
                 doc_hint = "📁 已保存到飞书云盘「AI录音」目录"
+            elif doc_url:
+                doc_hint = "📁 已保存到你的飞书云盘"
             doc_url = info["url"]
             db.add(Document(recording_id=rec.id, doc_id=info["document_id"], url=doc_url))
             db.commit()

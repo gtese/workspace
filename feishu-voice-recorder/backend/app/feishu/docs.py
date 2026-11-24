@@ -134,6 +134,7 @@ class FeishuDocClient:
         if r.json().get("code") != 0:
             raise RuntimeError(f"写入文档失败: {r.json().get('msg')}")
 
+        moved = False
         # 先移动到员工云盘的「AI录音」目录（此时文档仍归应用，移动权限足够）
         if folder_token:
             m = httpx.post(
@@ -142,7 +143,8 @@ class FeishuDocClient:
                 json={"type": "docx", "folder_token": folder_token},
                 timeout=20,
             )
-            if m.json().get("code") != 0:
+            moved = m.json().get("code") == 0
+            if not moved:
                 log.warning("移动到 AI录音 目录失败: %s", m.text[:200])
 
         # 交给员工本人（失败不影响文档可用，只是仍在应用空间）
@@ -161,7 +163,7 @@ class FeishuDocClient:
                     "member_id": open_id,
                     "old_owner_perm": "full_access",
                     "remove_old_owner": False,
-                    "stay_put": True,
+                    "stay_put": moved or not folder_token,
                 },
                 timeout=20,
             )
@@ -180,4 +182,4 @@ class FeishuDocClient:
         except Exception:  # noqa: BLE001
             log.warning("取文档 URL 失败，使用默认链接")
 
-        return {"document_id": doc, "url": url}
+        return {"document_id": doc, "url": url, "folder_ok": moved}

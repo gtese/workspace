@@ -212,3 +212,9 @@ def test_ops_health_requires_token(client: TestClient, monkeypatch) -> None:
     body = r.json()
     assert body["db_ok"] is True
     assert "recordings" in body
+
+
+def test_folder_sync_without_token() -> None:
+    from app.feishu.folder_sync import sync_folder_from_user
+
+    assert sync_folder_from_user("ou_no_token") is None
