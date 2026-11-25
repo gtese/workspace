@@ -41,6 +41,12 @@
 
 升级后 `dsh` 包目录约 902MB。npm 11.16 的 allow-scripts 提示 koffi / node-pty / dsh-subprocess-local 等 install 脚本未执行，已实测原生模块与 pty 均正常。
 
+## 2026-11-25 变更
+
+- 新增共享模型目录 patch：`/eda/apps/deepseek/etc/models.patch.yml`（当前只暴露 `deepseek-flash`，启动器自动 `--patch`）
+- 新增 `/eda/apps/deepseek/bin/dsh-desktop.bak-20261125`（启动器备份）
+- Open WebUI 自 2026-11-25 起模型列表已不含 `deepseek-v4-pro`（此前存在但调用返回 400），dsh 侧已同步移除，避免"本轮运行失败 error 400"
+
 ## 存储与挂载
 
 ```

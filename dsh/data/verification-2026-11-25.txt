@@ -1,0 +1,33 @@
+# 2026-11-25 “本轮运行失败 error 400”排查与修复记录
+
+## 现象
+dsh Web UI 本轮回合失败，错误 code 400（命令行对应 INVALID_REQUEST）。
+
+## 定位
+- Open WebUI 返回体：{"detail":"Model not found"}
+- 复现：使用 deepseek-v4-pro 调用 OWUI Messages API → HTTP 400；deepseek-flash → 200 正常
+- dsh headless 指定 v4-pro 复现：
+  dsh --patch v4pro.patch.yml --profile headless "只回复：v4pro-ok"
+  => dsh: INVALID_REQUEST: DeepSeek Messages request failed (400)
+- 结论：deepseek-v4-pro 在 OWUI 侧已下架/不可用（且已从 /api/models 移除），
+  但 dsh 默认模型目录仍包含该 id，用户选中后每轮 400。
+
+## 修复
+- 新增 /eda/apps/deepseek/etc/models.patch.yml，统一模型目录只保留 deepseek-flash
+- 启动器 dsh-desktop 自动加 --patch（含参数顺序兼容：裸 dsh / dsh web / --profile 三种形式）
+- 备份：/eda/apps/deepseek/bin/dsh-desktop.bak-20261125
+- 新增 scripts/check-owui-models.sh 逐个探测 OWUI 模型可用性
+
+## 验证（trivm132，普通用户）
+- dsh --profile headless "只回复：fix-ok" => fix-ok
+- 裸 dsh => 正常打印 token URL，无 token 401
+- dsh web --no-open --port 0 => 正常
+- models.patch.yml 生效后组合配置中不再出现 deepseek-v4-pro
+- check-owui-models.sh 当前全部 OK（deepseek-flash、gpt-6.1-sol.*、cptr/workspace 等）
+
+## 当前 OWUI 模型列表（2026-11-25）
+deepseek-flash, gpt-6.1-sol.gpt-6.1-sol, gpt-6.1-sol.gpt-6-astra,
+gpt-6.1-sol.gpt-5.3-codex, cptr/workspace, -deepseek-v41-flash
+
+## 后续
+OWUI 若恢复 deepseek-v4-pro，把该 id 加回 models.patch.yml 并用 check-owui-models.sh 验证。

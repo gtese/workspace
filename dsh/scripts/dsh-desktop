@@ -117,6 +117,21 @@ case "${DEEPSEEK_BASE_URL:-}" in
     ;;
 esac
 
+# 统一模型目录 patch（管理员维护）：只暴露 Open WebUI 上确认可用的模型，
+# 避免用户选到 OWUI 已下架/失效的模型 id 导致 400。
+if [ -f "$PREFIX/etc/models.patch.yml" ]; then
+  case "${1:-}" in
+    --profile|-*)
+      set -- --patch "$PREFIX/etc/models.patch.yml" "$@"
+      ;;
+    *)
+      PROFILE_NAME="$1"
+      shift
+      set -- --patch "$PREFIX/etc/models.patch.yml" --profile "$PROFILE_NAME" "$@"
+      ;;
+  esac
+fi
+
 "$PREFIX/bin/node" "$PREFIX/lib/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@" &
 DSH_PID=$!
 wait "$DSH_PID"

@@ -161,3 +161,32 @@ dsh 启动失败时会在用户 home 写诊断日志：
 ```
 
 其中包含 `dshVersion`、`nodeVersion`、`profile`、失败插件、错误堆栈（如 `EADDRINUSE`）。个人 npm 安装的安装日志在 `~/.local/share/deepseek-harness/logs/npm-install.log`。
+
+## 15. Web UI 显示“本轮运行失败”，错误 `400` / `INVALID_REQUEST`
+
+**典型表现**：
+- dsh 界面：`本轮运行失败`，detail 里是 `error 400`
+- 命令行：`dsh: INVALID_REQUEST: DeepSeek Messages request failed (400)`
+- Open WebUI 实际返回：`{"detail":"Model not found"}`
+
+**原因**：会话里选中的模型 id 在 Open WebUI 上已下架或不可用。典型例子是 `deepseek-v4-pro`：OWUI 的 `/api/models` 列表里曾存在但调用返回 400，后来被移除；而 dsh 的默认模型目录仍包含它，用户选中就会每轮 400。
+
+**排查**：
+```bash
+set -a; . /eda/apps/deepseek/etc/dsh.env; set +a
+curl -s https://chat.tri.local/api/models -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+  | python3 -c 'import sys,json;print([m["id"] for m in json.load(sys.stdin)["data"]])'
+
+# 逐个模型探测真实可用性（OK / WARN / FAIL）
+/eda/apps/deepseek/bin/node --version >/dev/null 2>&1 || true
+bash scripts/check-owui-models.sh   # 在仓库目录执行；或 scp 到任意一台机器跑
+```
+
+**处理**：
+- 用户侧：新建会话，或在模型选择器里切换回 `deepseek-flash`（不要继续用已下架的 id）。
+- 管理员侧：
+  1. 要么在 Open WebUI 恢复该模型的上游连接/模型 id；
+  2. 要么更新共享模型目录 `/eda/apps/deepseek/etc/models.patch.yml`，把不可用模型去掉（启动器会随 `dsh` 自动 `--patch`，所有用户生效）；
+  3. 改完用 `scripts/check-owui-models.sh` + `scripts/verify.sh --tool --web` 验证。
+
+> 2026-11-25 已按此方案处理：`deepseek-v4-pro` 从共享模型目录移除，当前统一只暴露 `deepseek-flash`；以后 OWUI 恢复该模型时，把它加回 `models.patch.yml` 即可。

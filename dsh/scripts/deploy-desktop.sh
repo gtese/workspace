@@ -27,8 +27,9 @@ install -d -m 755 "$PREFIX/bin" "$PREFIX/etc" "$PREFIX/certs"
 install -m 755 "$SRC/dsh-desktop" "$PREFIX/bin/dsh-desktop"
 install -m 755 "$SRC/dsh-owui-shim.mjs" "$PREFIX/bin/dsh-owui-shim.mjs"
 
-echo "== 2/5 安装内部 CA（public cert）"
+echo "== 2/5 安装内部 CA（public cert）与共享模型目录 patch"
 install -m 644 "$SRC/../config/pki/tri-enterprise-root.pem" "$PREFIX/certs/tri-enterprise-root.pem"
+install -m 644 "$SRC/../config/models.patch.yml" "$PREFIX/etc/models.patch.yml"
 
 echo "== 3/5 写共享配置 $PREFIX/etc/dsh.env"
 umask 022

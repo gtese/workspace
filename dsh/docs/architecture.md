@@ -48,6 +48,13 @@ dsh 的 DeepSeek 适配器只走流式路径，所以加一个本地 shim 做协
 
 若 Open WebUI 后续修复流式转换，可评估移除 shim（把 `DEEPSEEK_BASE_URL` 指回 OWUI 即可）。
 
+## 模型目录控制
+
+- dsh 的可用模型列表由 profile 配置树里的 `llm-deepseek.models`（以及可选的 `llm-pi-ai.providers`）决定；
+- 管理员通过 `/eda/apps/deepseek/etc/models.patch.yml` 下发统一模型目录，启动器在每次 boot 时自动加 `--patch`，优先级最高，用户无法绕过；
+- Open WebUI 侧实际可用的模型 id 会随其上/下游连接变化，二者必须保持一致：OWUI 下架模型后要同步更新 `models.patch.yml`，否则用户选中失效 id 会得到 `400 Model not found`；
+- 用 `scripts/check-owui-models.sh` 周期性探测 `/api/models` 里每个模型是否真的可调用。
+
 ## 信任与证书
 
 - `chat.tri.local` 使用公司 `Enterprise Root CA` 签发的证书；

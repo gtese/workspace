@@ -1,0 +1,13 @@
+# 统一模型目录（由管理员维护，随 dsh 启动自动 --patch）
+# 只列出 Open WebUI 上确认可用的模型 id；OWUI 下架/新增模型后同步更新本文件，
+# 可用 scripts/check-owui-models.sh 探测各模型是否真的可调用。
+- id: llm-deepseek
+  config:
+    models:
+      - id: deepseek-flash
+        name: DeepSeek-V4.1-Flash
+        contextWindow: 1048576
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-flash
