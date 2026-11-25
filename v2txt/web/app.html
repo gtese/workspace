@@ -340,24 +340,25 @@ class Recorder {
   }
   /* ---------------- Opus 模式 ---------------- */
   startSegment() {
-    this.parts = [];
-    this.mr = new MediaRecorder(this.stream, { mimeType: this.mime, audioBitsPerSecond: 24000 });
-    this.mr.ondataavailable = (e) => { if (e.data && e.data.size) this.parts.push(e.data); };
-    this.mr.onerror = (e) => this.log('mr_error', (e && e.error && e.error.message) || 'unknown');
-    this.mr.start();
-  }
-  rotateSegment() {
-    if (!this.mr || this.mr.state !== 'recording') return;
-    const parts = this.parts;
-    this.parts = [];
-    this.mr.ondataavailable = null;
-    try { this.mr.stop(); } catch (e) { this.log('rotate_fail', e && e.message); }
-    if (parts.length) {
+    const mr = new MediaRecorder(this.stream, { mimeType: this.mime, audioBitsPerSecond: 24000 });
+    const parts = [];                 // 每段独立缓冲，避免切换时串数据
+    this.mr = mr;
+    this.parts = parts;
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
+    mr.onstop = () => {
+      if (!parts.length) return;
       const blob = new Blob(parts, { type: this.mime });
       this.log('rotate', `idx=${this.segIdx} bytes=${blob.size} mode=opus`);
       this.enqueue(blob);
+    };
+    mr.onerror = (e) => this.log('mr_error', (e && e.error && e.error.message) || 'unknown');
+    mr.start();
+  }
+  rotateSegment() {
+    if (this.mr && this.mr.state === 'recording') {
+      try { this.mr.stop(); } catch (e) { this.log('rotate_fail', e && e.message); }
     }
-    this.startSegment();      // 立刻接着录，缝隙只有几毫秒
+    this.startSegment();              // 立刻接着录，旧段在 onstop 里自行入队
   }
   /* ---------------- WAV 兜底 ---------------- */
   startWavCapture(src) {
@@ -470,17 +471,13 @@ class Recorder {
     clearInterval(this.segTimer); clearInterval(this.levelTimer);
     this.log('stop_begin', `mode=${this.mode} segs=${this.segIdx}`);
     if (this.mode === 'opus' && this.mr && this.mr.state === 'recording') {
-      const parts = this.parts;
-      this.parts = [];
+      const mr = this.mr;
       await new Promise((resolve) => {
-        this.mr.onstop = () => resolve();
-        try { this.mr.stop(); } catch (e) { resolve(); }
+        const prev = mr.onstop;
+        mr.onstop = (ev) => { if (prev) prev(ev); resolve(); };
+        try { mr.stop(); } catch (e) { resolve(); }
       });
-      if (parts.length) {
-        const blob = new Blob(parts, { type: this.mime });
-        this.log('rotate', `idx=${this.segIdx} bytes=${blob.size} mode=opus tail`);
-        this.enqueue(blob);
-      }
+      await sleep(200);               // 等最后一帧 ondataavailable 落袋
     } else if (this.mode === 'wav') {
       try { this.rotateWav(); } catch (e) { this.log('rotate_fail', e && e.message); }
     }

@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V2TXT</title>
+<script>
+// 极简跳板：不加载任何外部资源，有会话直接进控制台，否则去官网首页
+(function(){
+  var t = null;
+  try { t = localStorage.getItem('vt_token'); } catch (e) {}
+  location.replace(t ? '/app' : '/home');
+})();
+</script></head>
+<body style="font:14px system-ui;padding:24px;color:#666">正在进入 V2TXT…</body></html>

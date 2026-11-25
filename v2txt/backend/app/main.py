@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -59,6 +60,8 @@ async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
 
 
 app = FastAPI(title="v2txt", version=VERSION, lifespan=lifespan)
+# 隧道带宽窄，文本资源一律 gzip
+app.add_middleware(GZipMiddleware, minimum_size=400)
 app.include_router(auth_users.router)
 app.include_router(auth_feishu.router)
 app.include_router(orgs.router)
@@ -72,6 +75,15 @@ app.include_router(media.router)
 
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+
+@app.middleware("http")
+async def static_cache(request, call_next):  # noqa: ANN001, ANN201
+    """静态资源交给 Cloudflare 边缘长期缓存，回源次数越少越好。"""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
+    return response
 
 
 @app.get("/health", response_model=HealthOut)
@@ -134,6 +146,12 @@ def _page(name: str) -> FileResponse:
 
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
+    # 跳板页：不加载 CSS/JS，登录用户直进控制台
+    return _page("boot.html")
+
+
+@app.get("/home", include_in_schema=False)
+def home_page() -> FileResponse:
     return _page("index.html")
 
 
