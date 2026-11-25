@@ -71,7 +71,7 @@ def create_recording(
     rec = Recording(
         org_id=org.id,
         owner_user_id=user.id,
-        owner_open_id="",
+        owner_open_id=user.feishu_open_id or "",
         title=body.title,
         scene=body.scene,
         source="web",

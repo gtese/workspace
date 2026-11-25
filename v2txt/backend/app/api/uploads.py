@@ -72,6 +72,7 @@ async def upload_media(
     rec = Recording(
         org_id=org.id,
         owner_user_id=user.id,
+        owner_open_id=user.feishu_open_id or "",
         title=(title.strip() or Path(file.filename or "上传音频").stem)[:200],
         source="upload",
     )

@@ -85,3 +85,50 @@ def sync_folder_from_user(open_id: str) -> str | None:
     except Exception:  # noqa: BLE001
         log.exception("自动对齐 AI录音 目录失败")
         return None
+
+
+def ensure_folder_from_user(open_id: str) -> str | None:
+    """确保用户云盘根目录有「AI录音」目录：先找，找不到就用**用户身份**直接建。
+
+    用用户 token 建目录的好处：目录天生就在用户自己的「我的空间」里，名字不会
+    被飞书改成「Content transferred from voice」这种默认名。
+    """
+    token = get_user_token(open_id)
+    if not token:
+        return None
+    h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    try:
+        existing = next(
+            (f for f in _list(h) if f.get("type") == "folder" and f.get("name") == FOLDER_NAME),
+            None,
+        )
+        if existing:
+            folder = existing["token"]
+        else:
+            r = httpx.post(
+                f"{BASE}/drive/v1/files/create_folder",
+                headers=h,
+                json={"name": FOLDER_NAME, "folder_token": ""},
+                timeout=20,
+            )
+            data = r.json()
+            if data.get("code") != 0:
+                log.warning("创建 AI录音 目录失败: %s", data.get("msg"))
+                return None
+            folder = data["data"]["token"]
+            log.info("已在用户云盘创建「%s」目录: %s", FOLDER_NAME, folder)
+
+        db = SessionLocal()
+        try:
+            row = db.get(DriveFolder, open_id)
+            if row is None:
+                db.add(DriveFolder(open_id=open_id, folder_token=folder))
+            else:
+                row.folder_token = folder
+            db.commit()
+        finally:
+            db.close()
+        return folder
+    except Exception:  # noqa: BLE001
+        log.exception("准备 AI录音 目录失败")
+        return None

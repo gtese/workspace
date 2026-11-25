@@ -31,6 +31,7 @@ from .models import (
     DriveFolder,
     Recording,
     SpeakerName,
+    User,
 )
 from .security import hmac_sha256_hex, share_url, signed_url
 
@@ -197,32 +198,40 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
 
 def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  # noqa: ANN001
     detail_url = share_url(rec.id)
+    # 飞书通道：open_id 可能只存在 User 上（v2 账号体系）
+    open_id = rec.owner_open_id
+    if not open_id and rec.owner_user_id:
+        owner = db.get(User, rec.owner_user_id)
+        open_id = (owner.feishu_open_id or "") if owner is not None else ""
 
     # 1) 同步为飞书云文档（失败不阻塞卡片）
     doc_url = ""
     doc_hint = ""
-    if settings.feishu_mode == "real" and settings.feishu_doc_enabled and rec.owner_open_id:
+    if settings.feishu_mode == "real" and settings.feishu_doc_enabled and open_id:
         try:
             client = FeishuDocClient()
             folder_token = ""
             try:
-                from .feishu.folder_sync import sync_folder_from_user
+                from .feishu.folder_sync import ensure_folder_from_user, sync_folder_from_user
 
-                synced = sync_folder_from_user(rec.owner_open_id)
+                synced = sync_folder_from_user(open_id)
                 if synced:
                     folder_token = synced
-                row = db.get(DriveFolder, rec.owner_open_id)
+                row = db.get(DriveFolder, open_id)
                 if row and row.folder_token:
                     folder_token = row.folder_token
-                else:
-                    folder_token = client.create_user_folder(rec.owner_open_id)
-                    db.add(DriveFolder(open_id=rec.owner_open_id, folder_token=folder_token))
+                created = ensure_folder_from_user(open_id)
+                if created:
+                    folder_token = created
+                elif not folder_token:
+                    folder_token = client.create_user_folder(open_id)
+                    db.add(DriveFolder(open_id=open_id, folder_token=folder_token))
                     db.commit()
             except Exception:  # noqa: BLE001
                 log.exception("创建 AI录音 目录失败，文档将放在云盘根目录")
                 folder_token = ""
             info = client.create_minutes_doc(
-                rec.title, summary, detail_url, rec.owner_open_id, folder_token
+                rec.title, summary, detail_url, open_id, folder_token
             )
             doc_url = info["url"]
             if info.get("folder_ok"):
@@ -236,7 +245,7 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
             log.exception("同步飞书文档失败")
             db.add(
                 DeliveryLog(
-                    recording_id=rec.id, channel="feishu_doc", target=rec.owner_open_id,
+                    recording_id=rec.id, channel="feishu_doc", target=open_id,
                     status="failed", detail=str(exc)[:500],
                 )
             )
@@ -246,14 +255,14 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
     card = build_minutes_card(
         rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, detail_url, doc_url, doc_hint
     )
-    if rec.owner_open_id and settings.feishu_mode == "real" and settings.feishu_card_enabled:
+    if open_id and settings.feishu_mode == "real" and settings.feishu_card_enabled:
         try:
-            result = FeishuClient().send_card(rec.owner_open_id, card)
+            result = FeishuClient().send_card(open_id, card)
             db.add(
                 DeliveryLog(
                     recording_id=rec.id,
                     channel="feishu",
-                    target=rec.owner_open_id,
+                    target=open_id,
                     status="sent",
                     detail=json.dumps(result, ensure_ascii=False),
                 )
@@ -262,7 +271,7 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
             log.exception("飞书推送失败")
             db.add(
                 DeliveryLog(
-                    recording_id=rec.id, channel="feishu", target=rec.owner_open_id,
+                    recording_id=rec.id, channel="feishu", target=open_id,
                     status="failed", detail=str(exc)[:500],
                 )
             )
@@ -312,8 +321,6 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
         db.commit()
 
     # 4) 邮件（发给录音所属账号；未配置 SMTP 时 mock 落日志）
-    from .models import User
-
     owner = db.get(User, rec.owner_user_id) if rec.owner_user_id else None
     if owner is not None and owner.email and settings.email_minutes_auto:
         subject, html = build_minutes_email(rec.title, summary, detail_url)

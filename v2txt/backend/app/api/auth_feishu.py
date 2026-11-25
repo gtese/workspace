@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -151,6 +152,13 @@ def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(ge
     db.commit()
 
     put_user_token(open_id, token_data.get("access_token", ""))
+    # 后台对齐云盘「AI录音」目录，失败不影响登录
+    from ..feishu.folder_sync import ensure_folder_from_user
+
+    def _prepare_drive() -> None:
+        ensure_folder_from_user(open_id)
+
+    threading.Thread(target=_prepare_drive, daemon=True).start()
     session_token, expires = issue_login_session(db, user, ip=ip, ua=ua)
     payload = user_dict(db, user)
     payload["feishu"] = {"open_id": open_id, "tenant_key": tenant_key}
