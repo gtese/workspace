@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import mailer
+from .. import audit, mailer
+from ..audit import ACTIONS
 from ..billing import credit, org_summary
 from ..config import get_settings
 from ..db import get_db
 from ..models import (
+    AuditEvent,
     Membership,
     Order,
     Org,
@@ -125,6 +127,8 @@ def set_user_status(
         raise HTTPException(status_code=404, detail="用户不存在")
     user.status = body.status
     db.commit()
+    audit.record(db, "admin.user.status", user_id=admin.id, actor=admin.email, target=user.email,
+                 detail={"status": body.status, "reason": body.reason[:200]})
     return {"ok": True, "status": user.status}
 
 
@@ -214,6 +218,9 @@ def confirm_order(
     order.confirmed_at = utcnow()
     db.commit()
 
+    audit.record(db, "billing.order.confirm", org_id=order.org_id, user_id=admin.id,
+                 actor=admin.email, target=order.id,
+                 detail={"minutes": minutes, "kind": order.kind, "note": body.note[:200]})
     owner = db.get(User, order.user_id) if order.user_id else None
     if owner is not None:
         mailer.send_order_email(owner.email, order.id, minutes, order.amount, order.currency)
@@ -231,6 +238,8 @@ def grant_minutes(
     if org is None:
         raise HTTPException(status_code=404, detail="团队不存在")
     credit(db, org.id, body.minutes, kind="adjust", note=body.note, operator_id=admin.id)
+    audit.record(db, "billing.grant", org_id=org.id, user_id=admin.id, actor=admin.email,
+                 detail={"minutes": body.minutes, "note": body.note[:200]})
     return {"ok": True, "minutes": org_summary(db, org.id)["minutes"]}
 
 
@@ -268,6 +277,89 @@ def usage_report(
         )
     items.sort(key=lambda x: x["minutes"], reverse=True)
     return {"days": days, "items": items}
+
+
+@router.get("/events")
+def list_events(
+    action: str = "",
+    result: str = "",
+    q: str = "",
+    hours: int = 168,
+    limit: int = 100,
+    offset: int = 0,
+    admin: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """安全/用户事件查询（默认近 7 天）。"""
+    since = utcnow() - timedelta(hours=min(max(hours, 1), 24 * 365))
+    stmt = select(AuditEvent).where(AuditEvent.created_at >= since)
+    if action:
+        stmt = stmt.where(AuditEvent.action == action)
+    if result in ("ok", "fail", "denied"):
+        stmt = stmt.where(AuditEvent.result == result)
+    if q:
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(
+            AuditEvent.actor.like(like) | AuditEvent.ip.like(like)
+            | AuditEvent.target.like(like) | AuditEvent.detail.like(like)
+        )
+    rows = db.scalars(
+        stmt.order_by(AuditEvent.created_at.desc())
+        .limit(min(max(limit, 1), 500))
+        .offset(max(offset, 0))
+    ).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "created_at": r.created_at.isoformat(),
+                "action": r.action,
+                "action_label": ACTIONS.get(r.action, r.action),
+                "result": r.result,
+                "org_id": r.org_id,
+                "user_id": r.user_id,
+                "actor": r.actor,
+                "ip": r.ip,
+                "ua": r.ua,
+                "target": r.target,
+                "detail": r.detail,
+            }
+            for r in rows
+        ],
+        "actions": [{"value": k, "label": v} for k, v in ACTIONS.items()],
+    }
+
+
+@router.get("/events/summary")
+def events_summary(
+    days: int = 7,
+    admin: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    since = utcnow() - timedelta(days=min(max(days, 1), 365))
+    rows = db.scalars(select(AuditEvent).where(AuditEvent.created_at >= since)).all()
+    by_action: dict[str, int] = {}
+    by_result: dict[str, int] = {}
+    actors: set[str] = set()
+    ips: set[str] = set()
+    for row in rows:
+        by_action[row.action] = by_action.get(row.action, 0) + 1
+        by_result[row.result] = by_result.get(row.result, 0) + 1
+        if row.actor:
+            actors.add(row.actor)
+        if row.ip:
+            ips.add(row.ip)
+    top = sorted(by_action.items(), key=lambda x: x[1], reverse=True)[:12]
+    return {
+        "days": days,
+        "total": len(rows),
+        "by_result": by_result,
+        "unique_actors": len(actors),
+        "unique_ips": len(ips),
+        "top_actions": [
+            {"action": a, "label": ACTIONS.get(a, a), "count": c} for a, c in top
+        ],
+    }
 
 
 @router.get("/orgs/{org_id}/members")

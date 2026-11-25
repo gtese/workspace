@@ -30,6 +30,7 @@
     <a href="#" data-tab="orders" class="active">订单</a>
     <a href="#" data-tab="users">用户</a>
     <a href="#" data-tab="usage">用量与毛利</a>
+    <a href="#" data-tab="events">事件日志</a>
   </div>
 
   <section id="view-orders">
@@ -57,6 +58,32 @@
     </div>
   </section>
 
+  <section id="view-events" class="hide">
+    <div class="card" style="margin-bottom:18px">
+      <div class="spread" style="margin-bottom:10px">
+        <h3>安全与用户事件</h3>
+        <span class="tiny muted" id="eventSummary"></span>
+      </div>
+      <div class="row wrap" style="margin-bottom:12px">
+        <select id="eventAction" style="max-width:220px"><option value="">全部动作</option></select>
+        <select id="eventResult" style="max-width:140px">
+          <option value="">全部结果</option>
+          <option value="ok">ok</option>
+          <option value="fail">fail</option>
+          <option value="denied">denied</option>
+        </select>
+        <select id="eventHours" style="max-width:140px">
+          <option value="24">近 24 小时</option>
+          <option value="168" selected>近 7 天</option>
+          <option value="720">近 30 天</option>
+        </select>
+        <input type="text" id="eventSearch" placeholder="邮箱 / IP / 目标 / 详情" style="max-width:260px">
+        <button class="btn small" id="eventRefresh">查询</button>
+      </div>
+      <div id="eventBox"><p class="muted small">加载中…</p></div>
+    </div>
+  </section>
+
   <section id="view-usage" class="hide">
     <div class="card">
       <div class="spread" style="margin-bottom:12px"><h3>近 30 天用量与毛利</h3><button class="btn small" id="refreshUsage">刷新</button></div>
@@ -74,10 +101,11 @@ if (!needAuth()) throw new Error('redirecting');
 
 function setTab(name) {
   document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === name));
-  ['orders', 'users', 'usage'].forEach(t => $('view-' + t).classList.toggle('hide', t !== name));
+  ['orders', 'users', 'usage', 'events'].forEach(t => $('view-' + t).classList.toggle('hide', t !== name));
   if (name === 'orders') loadOrders();
   if (name === 'users') loadUsers();
   if (name === 'usage') loadUsage();
+  if (name === 'events') loadEvents();
 }
 document.querySelectorAll('.tabs a').forEach(a => a.onclick = (e) => { e.preventDefault(); setTab(a.dataset.tab); });
 
@@ -172,6 +200,47 @@ async function loadUsage() {
   } catch (e) { toast(e.message, true); }
 }
 $('refreshUsage').onclick = loadUsage;
+
+async function loadEvents() {
+  const params = new URLSearchParams();
+  const a = $('eventAction').value; if (a) params.set('action', a);
+  const r = $('eventResult').value; if (r) params.set('result', r);
+  params.set('hours', $('eventHours').value);
+  const q = $('eventSearch').value.trim(); if (q) params.set('q', q);
+  params.set('limit', '200');
+  try {
+    const [d, sum] = await Promise.all([
+      Api.req('/api/v1/admin/events?' + params.toString()),
+      Api.req('/api/v1/admin/events/summary?days=7'),
+    ]);
+    $('eventSummary').textContent =
+      `近 7 天 ${sum.total} 条 · 失败 ${sum.by_result.fail || 0} · 拒绝 ${sum.by_result.denied || 0} · 用户 ${sum.unique_actors} · IP ${sum.unique_ips}`;
+    const sel = $('eventAction');
+    if (sel.options.length <= 1) {
+      sel.innerHTML = '<option value="">全部动作</option>' +
+        d.actions.map(x => `<option value="${x.value}">${x.label}（${x.value}）</option>`).join('');
+    }
+    if (!d.items.length) { $('eventBox').innerHTML = '<p class="muted small">没有匹配的事件</p>'; return; }
+    $('eventBox').innerHTML = `<table><thead><tr>
+      <th>时间</th><th>动作</th><th>结果</th><th>用户</th><th>IP</th><th>目标</th><th>详情</th></tr></thead><tbody>
+      ${d.items.map(e => {
+        const cls = e.result === 'ok' ? 'ok' : e.result === 'fail' ? 'err' : 'warn';
+        const detail = (e.detail || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])).slice(0, 90);
+        return `<tr>
+          <td class="tiny">${fmtDate(e.created_at, true)}</td>
+          <td>${e.action_label}<div class="tiny muted">${e.action}</div></td>
+          <td><span class="badge ${cls}">${e.result}</span></td>
+          <td class="tiny">${e.actor || e.user_id || '-'}</td>
+          <td class="tiny">${e.ip || '-'}</td>
+          <td class="tiny">${e.target || '-'}</td>
+          <td class="tiny muted">${detail}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>`;
+  } catch (e) { toast(e.message, true); }
+}
+$('eventRefresh').onclick = loadEvents;
+$('eventSearch').onkeydown = (e) => { if (e.key === 'Enter') loadEvents(); };
 
 $('logout').onclick = async () => {
   try { await Api.req('/api/v1/auth/logout', { method: 'POST' }); } catch (e) {}

@@ -69,11 +69,28 @@ def cleanup_empty_drafts(hours: int = 24) -> int:
         db.close()
 
 
+def cleanup_audit_events(days: int = 180) -> int:
+    """审计日志保留 180 天。"""
+    from .models import AuditEvent
+
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
+    db = SessionLocal()
+    try:
+        deleted = db.query(AuditEvent).filter(AuditEvent.created_at < cutoff).delete()
+        db.commit()
+        if deleted:
+            log.info("清理 %d 条过期审计事件（>%d 天）", deleted, days)
+        return int(deleted)
+    finally:
+        db.close()
+
+
 def _loop(interval_seconds: int) -> None:
     while not _stop.wait(interval_seconds):
         try:
             cleanup_expired()
             cleanup_empty_drafts()
+            cleanup_audit_events()
         except Exception:  # noqa: BLE001
             log.exception("音频清理失败")
 

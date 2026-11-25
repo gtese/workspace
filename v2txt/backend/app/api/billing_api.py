@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import audit
 from ..billing import TOPUP_PACKS, list_plans, org_summary
 from ..config import get_settings
 from ..db import get_db
@@ -130,6 +131,9 @@ def create_topup(
     )
     db.add(order)
     db.commit()
+    audit.record(db, "billing.order.create", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=order.id, detail={"minutes": order.minutes, "amount": order.amount,
+                                          "currency": order.currency})
     return _order_dict(order)
 
 
@@ -162,6 +166,9 @@ def subscribe(
     )
     db.add(order)
     db.commit()
+    audit.record(db, "billing.order.create", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=order.id, detail={"minutes": order.minutes, "amount": order.amount,
+                                          "currency": order.currency})
     return _order_dict(order)
 
 
@@ -183,6 +190,8 @@ def cancel_order(
             raise HTTPException(status_code=403, detail="只有管理员可以取消订单")
     order.status = "canceled"
     db.commit()
+    audit.record(db, "billing.order.cancel", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=order.id)
     return _order_dict(order)
 
 

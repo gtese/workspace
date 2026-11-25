@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import mailer
+from .. import audit, mailer
 from ..accounts import (
     consume_email_token,
     hash_password,
@@ -163,6 +163,8 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)) 
     mailer.send_verify_email(email, link)
 
     session_token, expires = issue_login_session(db, user, ip=ip, ua=ua)
+    audit.record(db, "auth.register", request=request, org_id=org.id, user_id=user.id,
+                 actor=user.email, target=user.email, detail={"locale": user.locale})
     log.info("新用户注册 user=%s org=%s", user.id, org.id)
     return _auth_payload(db, user, session_token, expires)
 
@@ -174,19 +176,33 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)) -> dic
     email = normalize_email(body.email)
     user = db.scalars(select(User).where(User.email == email)).first()
     if user is not None and not user.password_hash:
+        audit.record(db, "auth.login.failed", request=request, user_id=user.id, actor=email,
+                     result="fail", detail={"reason": "feishu_only"})
         raise HTTPException(status_code=400, detail="该账号使用飞书登录，请点「飞书登录」")
     if user is None or not verify_password(body.password, user.password_hash):
+        audit.record(db, "auth.login.failed", request=request,
+                     user_id=(user.id if user else ""), actor=email, result="fail",
+                     detail={"reason": "bad_credentials"})
         raise HTTPException(status_code=401, detail="邮箱或密码不正确")
     if user.status != "active":
+        audit.record(db, "auth.login.failed", request=request, user_id=user.id, actor=email,
+                     result="denied", detail={"reason": "disabled"})
         raise HTTPException(status_code=403, detail="账号已被停用，请联系客服")
     token, expires = issue_login_session(db, user, ip=ip, ua=ua)
+    audit.record(db, "auth.login", request=request, org_id=user.default_org_id, user_id=user.id,
+                 actor=user.email, detail={"method": "password"})
     return _auth_payload(db, user, token, expires)
 
 
 @router.post("/auth/logout")
-def logout(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> dict:
+def logout(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
     if authorization and authorization.lower().startswith("bearer "):
         revoke_login_session(db, authorization.split(" ", 1)[1].strip())
+        audit.record(db, "auth.logout", request=request)
     return {"ok": True}
 
 
@@ -203,6 +219,7 @@ def verify_email(body: TokenIn, db: Session = Depends(get_db)) -> dict:
     if user.email_verified_at is None:
         user.email_verified_at = utcnow()
         db.commit()
+    audit.record(db, "auth.email.verified", user_id=user.id, actor=user.email, target=user.email)
     return {"ok": True, "email": user.email}
 
 
@@ -227,6 +244,7 @@ def forgot_password(body: EmailOnlyIn, request: Request, db: Session = Depends(g
     if user is not None and user.status == "active":
         raw = issue_email_token(db, "reset", email, user_id=user.id)
         mailer.send_reset_email(email, f"{_base_url()}/reset?token={raw}")
+        audit.record(db, "auth.password.forgot", request=request, user_id=user.id, actor=email)
     return {"ok": True, "message": "如果该邮箱已注册，重置邮件会在几分钟内送达"}
 
 
@@ -246,6 +264,7 @@ def reset_password(body: ResetIn, db: Session = Depends(get_db)) -> dict:
     user.password_hash = hash_password(body.password)
     db.commit()
     revoke_all_sessions(db, user.id)
+    audit.record(db, "auth.password.reset", user_id=user.id, actor=user.email, result="ok")
     return {"ok": True}
 
 
@@ -288,4 +307,5 @@ def change_password(
     user.password_hash = hash_password(body.new_password)
     db.commit()
     revoke_all_sessions(db, user.id)
+    audit.record(db, "auth.password.changed", user_id=user.id, actor=user.email)
     return {"ok": True, "message": "密码已更新，请重新登录"}

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import mailer
+from .. import audit, mailer
 from ..accounts import consume_email_token, issue_email_token, normalize_email, valid_email
 from ..billing import balance
 from ..config import get_settings
@@ -76,6 +76,7 @@ def create_org(
     db.flush()
     db.add(Membership(org_id=org.id, user_id=user.id, role="owner"))
     db.commit()
+    audit.record(db, "org.create", org_id=org.id, user_id=user.id, actor=user.email, target=org.name)
     return _org_dict(db, org)
 
 
@@ -87,8 +88,11 @@ def rename_org(
     member = membership_of(db, user.id, org.id)
     if member is None or member.role != "owner":
         raise HTTPException(status_code=403, detail="只有空间所有者可以改名")
+    old = org.name
     org.name = body.name.strip()[:120]
     db.commit()
+    audit.record(db, "org.rename", org_id=org.id, user_id=user.id, actor=user.email,
+                 detail={"from": old, "to": org.name})
     return _org_dict(db, org)
 
 
@@ -142,6 +146,8 @@ def invite_member(
     raw = issue_email_token(db, "invite", email, payload=f"{org.id}|{body.role}", ttl_minutes=60 * 72)
     link = f"{get_settings().public_base_url.rstrip('/')}/join?token={raw}"
     mailer.send_invite_email(email, org.name, link)
+    audit.record(db, "org.invite", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=email, detail={"role": body.role})
     return {"ok": True, "invite_id": invite.id, "link": link if get_settings().app_env != "prod" else None}
 
 
@@ -168,6 +174,7 @@ def accept_invite(
     for item in invites:
         item.accepted_at = utcnow()
     db.commit()
+    audit.record(db, "org.accept", org_id=org.id, user_id=user.id, actor=user.email)
     return {"ok": True, "org": _org_dict(db, org)}
 
 
@@ -192,6 +199,8 @@ def set_role(
         raise HTTPException(status_code=400, detail="不能修改所有者角色")
     target.role = body.role
     db.commit()
+    audit.record(db, "org.role", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=user_id, detail={"role": body.role})
     return {"ok": True}
 
 
@@ -215,6 +224,7 @@ def remove_member(
         raise HTTPException(status_code=400, detail="请让所有者移除你")
     db.delete(target)
     db.commit()
+    audit.record(db, "org.member.remove", org_id=org.id, user_id=user.id, actor=user.email, target=user_id)
     return {"ok": True}
 
 
@@ -225,4 +235,5 @@ def switch_org(
     org = resolve_org(db, user, body.org_id)
     user.default_org_id = org.id
     db.commit()
+    audit.record(db, "org.switch", org_id=org.id, user_id=user.id, actor=user.email)
     return {"ok": True, "org_id": org.id}

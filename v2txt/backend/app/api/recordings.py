@@ -2,12 +2,12 @@ import json
 import logging
 import shutil
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .. import audio, mailer, storage
+from .. import audio, audit, mailer, storage
 from ..config import get_settings
 from ..db import get_db
 from ..feishu import FeishuClient, build_minutes_card
@@ -79,6 +79,7 @@ def client_log(
 @router.post("/recordings", response_model=RecordingOut)
 def create_recording(
     body: RecordingCreate,
+    request: Request,
     user: User = Depends(current_user),
     org: Org = Depends(current_org),
     db: Session = Depends(get_db),
@@ -99,6 +100,8 @@ def create_recording(
     db.add(rec)
     db.commit()
     db.refresh(rec)
+    audit.record(db, "recording.create", request=request, org_id=org.id, user_id=user.id,
+                 actor=user.email, target=rec.id, detail={"title": rec.title, "scene": rec.scene})
     return to_out(rec)
 
 
@@ -287,6 +290,8 @@ def delete_recording(
     shutil.rmtree(storage.recording_dir(rec.id), ignore_errors=True)
     db.delete(rec)
     db.commit()
+    audit.record(db, "recording.delete", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=recording_id)
 
 
 @router.get("/recordings/{recording_id}/share")
@@ -314,6 +319,8 @@ def revoke_share(
     if db.get(ShareRevocation, rec.id) is None:
         db.add(ShareRevocation(recording_id=rec.id))
         db.commit()
+    audit.record(db, "recording.share.revoke", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=rec.id)
     return {"revoked": True}
 
 
@@ -330,6 +337,8 @@ def unrevoke_share(
     if row is not None:
         db.delete(row)
         db.commit()
+    audit.record(db, "recording.share.restore", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=rec.id)
     return {"revoked": False}
 
 
@@ -409,6 +418,8 @@ def send_to_email(
     db.commit()
     if not ok:
         raise HTTPException(status_code=502, detail="邮件发送失败，请稍后重试")
+    audit.record(db, "recording.email", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=rec.id)
     return {"status": "sent", "email": user.email}
 
 
@@ -455,6 +466,8 @@ def rerun_recording(
     rec.status = STATUS_QUEUED
     rec.error = ""
     db.commit()
+    audit.record(db, "recording.rerun", org_id=org.id, user_id=user.id, actor=user.email,
+                 target=rec.id)
     if get_settings().sync_pipeline:
         process_recording(rec.id)
     return FinishOut(id=rec.id, status=rec.status, segment_count=len(rec.segments))

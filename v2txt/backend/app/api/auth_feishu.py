@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import feishu_oauth
+from .. import audit, feishu_oauth
 from ..accounts import issue_login_session, normalize_email
 from ..billing import grant_signup_bonus
 from ..config import get_settings
@@ -94,6 +94,8 @@ def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(ge
         token_data = feishu_oauth.exchange_code(body.code, body.redirect_uri)
         info = feishu_oauth.user_info(token_data["access_token"])
     except feishu_oauth.FeishuError as exc:
+        audit.record(db, "auth.feishu.failed", request=request, result="fail",
+                     detail={"reason": str(exc)[:300]})
         raise HTTPException(status_code=401, detail=f"飞书登录失败：{exc}") from exc
 
     open_id = info["open_id"]
@@ -160,6 +162,9 @@ def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(ge
 
     threading.Thread(target=_prepare_drive, daemon=True).start()
     session_token, expires = issue_login_session(db, user, ip=ip, ua=ua)
+    audit.record(db, "auth.feishu.login", request=request, org_id=user.default_org_id,
+                 user_id=user.id, actor=user.email,
+                 detail={"open_id": open_id, "tenant_key": tenant_key})
     payload = user_dict(db, user)
     payload["feishu"] = {"open_id": open_id, "tenant_key": tenant_key}
     return {

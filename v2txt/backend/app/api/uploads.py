@@ -6,10 +6,10 @@ import hashlib
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
-from .. import audio, storage
+from .. import audio, audit, storage
 from ..config import get_settings
 from ..db import get_db
 from ..models import STATUS_QUEUED, Org, Recording, Segment, User
@@ -47,6 +47,7 @@ def limits() -> dict:
 
 @router.post("/uploads")
 async def upload_media(
+    request: Request,
     file: UploadFile = File(...),
     title: str = Form(default=""),
     user: User = Depends(current_user),
@@ -122,6 +123,9 @@ async def upload_media(
     db.commit()
     db.refresh(rec)
 
+    audit.record(db, "recording.upload", request=request, org_id=org.id, user_id=user.id,
+                 actor=user.email, target=rec.id,
+                 detail={"filename": file.filename, "bytes": len(data), "minutes": round(minutes, 2)})
     if settings.sync_pipeline:  # 测试模式同步跑
         from ..pipeline import process_recording
 
