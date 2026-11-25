@@ -52,6 +52,10 @@ class User(Base):
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     default_org_id: Mapped[str] = mapped_column(String(32), default="")
+    # 飞书身份：同一租户（tenant_key）的用户自动归入同一个团队空间
+    feishu_open_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    feishu_union_id: Mapped[str] = mapped_column(String(64), default="")
+    feishu_tenant_key: Mapped[str] = mapped_column(String(64), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -97,6 +101,8 @@ class Org(Base):
     kind: Mapped[str] = mapped_column(String(20), default="personal")  # personal | team
     owner_id: Mapped[str] = mapped_column(String(32), index=True)
     status: Mapped[str] = mapped_column(String(20), default="active")
+    # 飞书企业租户：一个 tenant_key 对应一个团队空间
+    feishu_tenant_key: Mapped[str] = mapped_column(String(64), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

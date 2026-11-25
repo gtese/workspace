@@ -246,7 +246,7 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
     card = build_minutes_card(
         rec.title, SCENE_LABELS.get(rec.scene, "会议"), summary, detail_url, doc_url, doc_hint
     )
-    if rec.owner_open_id and settings.feishu_mode == "real":
+    if rec.owner_open_id and settings.feishu_mode == "real" and settings.feishu_card_enabled:
         try:
             result = FeishuClient().send_card(rec.owner_open_id, card)
             db.add(

@@ -28,6 +28,15 @@
     <p class="muted small" id="subtitle" style="margin:6px 0 20px"></p>
     <div class="err" id="err"></div>
 
+    <div id="feishuBox" class="hide" style="margin-bottom:18px">
+      <button class="btn block" id="feishuBtn" type="button">飞书登录</button>
+      <div class="row" style="margin:14px 0 4px;color:var(--muted);font-size:12px">
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+        <span>或使用邮箱</span>
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+      </div>
+    </div>
+
     <!-- 登录 -->
     <form id="loginForm" class="hide">
       <label class="field"><span id="lEmail">邮箱</span><input type="email" id="loginEmail" autocomplete="username" required></label>
@@ -201,6 +210,55 @@ async function doReset(e) {
   finally { $('resetBtn').disabled = false; }
 }
 
+/* ------------------------------------------------ 飞书登录 */
+let FEISHU = { enabled: false, app_id: '', redirect_uri: '' };
+
+async function loadFeishuConfig() {
+  try {
+    FEISHU = await fetch('/api/v1/auth/feishu/config').then(r => r.json());
+  } catch (e) { FEISHU = { enabled: false }; }
+  if (FEISHU.enabled && path !== '/verify' && path !== '/feishu-callback') {
+    $('feishuBox').classList.remove('hide');
+  }
+}
+
+function inFeishuClient() {
+  return /Lark|Feishu/i.test(navigator.userAgent) || !!(window.h5sdk && window.tt);
+}
+
+async function postFeishuCode(code, redirectUri) {
+  const data = await fetch('/api/v1/auth/feishu', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, redirect_uri: redirectUri || '' }),
+  }).then(async (r) => {
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
+    return j;
+  });
+  Api.setToken(data.token);
+  Api.setOrg(data.team_org_id || data.org_id || data.user.default_org_id || '');
+  location.href = qs.get('next') || '/app';
+}
+
+async function feishuLogin() {
+  const redirect = FEISHU.redirect_uri || (location.origin + '/feishu-callback');
+  if (inFeishuClient() && window.tt && window.tt.requestAuthCode) {
+    window.tt.requestAuthCode({
+      appId: FEISHU.app_id,
+      success: async (res) => {
+        try { await postFeishuCode(res.code, ''); }
+        catch (ex) { err(ex.message); }
+      },
+      fail: () => { location.href = '/api/v1/auth/feishu/authorize-url?redirect_uri=' + encodeURIComponent(redirect); },
+    });
+    return;
+  }
+  const r = await fetch('/api/v1/auth/feishu/authorize-url?redirect_uri=' + encodeURIComponent(redirect));
+  const data = await r.json();
+  if (!r.ok) { err(data.detail || '飞书登录不可用'); return; }
+  location.href = data.url;
+}
+
 function init() {
   if (path === '/register') {
     setHeader(T.signup, T.signupSub); showForm('registerForm'); switchLinks('register');
@@ -237,12 +295,21 @@ function init() {
     $('lForgot').textContent = T.forgotLink; $('loginBtn').textContent = T.loginBtn;
     if (qs.get('next')) { /* 登录后回跳 */ }
   }
+  if (path === '/feishu-callback') {
+    setHeader(zh ? '飞书登录中…' : 'Signing in with Feishu…', '');
+    showForm(null);
+    const code = qs.get('code') || '';
+    if (!code) err(zh ? '未取到授权码，请重新登录' : 'Missing authorization code');
+    else loadFeishuConfig().then(() => postFeishuCode(code, FEISHU.redirect_uri || (location.origin + '/feishu-callback'))).catch((ex) => err(ex.message));
+  }
+  $('feishuBtn').onclick = feishuLogin;
   $('loginForm').onsubmit = doLogin;
   $('registerForm').onsubmit = doRegister;
   $('forgotForm').onsubmit = doForgot;
   $('resetForm').onsubmit = doReset;
 }
 
+loadFeishuConfig();
 init();
 </script>
 </body>

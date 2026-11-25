@@ -173,6 +173,8 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)) -> dic
     enforce(ip or "anon", "auth_login")
     email = normalize_email(body.email)
     user = db.scalars(select(User).where(User.email == email)).first()
+    if user is not None and not user.password_hash:
+        raise HTTPException(status_code=400, detail="该账号使用飞书登录，请点「飞书登录」")
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="邮箱或密码不正确")
     if user.status != "active":

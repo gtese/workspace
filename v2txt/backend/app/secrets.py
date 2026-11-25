@@ -17,6 +17,10 @@ SECRET_FILES: dict[str, dict[str, str]] = {
         "FEISHU_APP_ID": "feishu_app_id",
         "FEISHU_APP_SECRET": "feishu_app_secret",
     },
+    "feishu-v2txt": {
+        "FEISHU_APP_ID": "feishu_app_id",
+        "FEISHU_APP_SECRET": "feishu_app_secret",
+    },
     "tencent-asr": {
         "TENCENT_SECRET_ID": "tencent_secret_id",
         "TENCENT_SECRET_KEY": "tencent_secret_key",

@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import admin as admin_api
-from .api import auth_users, billing_api, media, orgs, recordings, shared, uploads
+from .api import auth_feishu, auth_users, billing_api, media, orgs, recordings, shared, uploads
 from .billing import seed_plans
 from .config import REPO_ROOT, get_settings
 from .db import SessionLocal, init_db
@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
 
 app = FastAPI(title="v2txt", version=VERSION, lifespan=lifespan)
 app.include_router(auth_users.router)
+app.include_router(auth_feishu.router)
 app.include_router(orgs.router)
 app.include_router(billing_api.router)
 app.include_router(admin_api.router)
@@ -147,6 +148,11 @@ def reset_page() -> FileResponse:
 
 @app.get("/verify", include_in_schema=False)
 def verify_page() -> FileResponse:
+    return _page("auth.html")
+
+
+@app.get("/feishu-callback", include_in_schema=False)
+def feishu_callback_page() -> FileResponse:
     return _page("auth.html")
 
 
