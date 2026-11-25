@@ -41,10 +41,39 @@ def cleanup_expired(days: int | None = None) -> int:
         db.close()
 
 
+def cleanup_empty_drafts(hours: int = 24) -> int:
+    """清理「点了开始但一个分段都没收到」的空录音（前端异常/用户直接关页面留下的垃圾）。"""
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
+    db = SessionLocal()
+    removed = 0
+    try:
+        rows = (
+            db.query(Recording)
+            .filter(
+                Recording.created_at < cutoff,
+                Recording.status.in_(("created", "recording")),
+            )
+            .all()
+        )
+        for rec in rows:
+            if rec.segments:
+                continue
+            shutil.rmtree(storage.recording_dir(rec.id), ignore_errors=True)
+            db.delete(rec)
+            removed += 1
+        db.commit()
+        if removed:
+            log.info("清理 %d 条空录音草稿", removed)
+        return removed
+    finally:
+        db.close()
+
+
 def _loop(interval_seconds: int) -> None:
     while not _stop.wait(interval_seconds):
         try:
             cleanup_expired()
+            cleanup_empty_drafts()
         except Exception:  # noqa: BLE001
             log.exception("音频清理失败")
 

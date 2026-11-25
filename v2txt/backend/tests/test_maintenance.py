@@ -101,3 +101,37 @@ def test_backup_archive(tmp_path: Path) -> None:
 
     if (data_dir() / "recordings").exists():
         assert any("recordings" in n for n in names)
+
+
+def test_cleanup_empty_drafts_removes_only_empty() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.db import SessionLocal
+    from app.maintenance import cleanup_empty_drafts
+    from app.models import Recording, Segment
+
+    db = SessionLocal()
+    try:
+        old = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=30)
+        empty = Recording(title="空录音", status="created", org_id="org_x", created_at=old)
+        db.add(empty)
+        db.commit()
+        empty_id = empty.id
+
+        wav = Recording(title="有音频", status="recording", org_id="org_x", created_at=old)
+        db.add(wav)
+        db.commit()
+        db.add(Segment(recording_id=wav.id, idx=0, path="/tmp/x.wav", size=10))
+        db.commit()
+        wav_id = wav.id
+    finally:
+        db.close()
+
+    assert cleanup_empty_drafts(hours=24) >= 1
+
+    db = SessionLocal()
+    try:
+        assert db.get(Recording, empty_id) is None
+        assert db.get(Recording, wav_id) is not None
+    finally:
+        db.close()

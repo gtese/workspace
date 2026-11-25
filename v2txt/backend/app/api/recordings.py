@@ -1,7 +1,9 @@
 import json
+import logging
 import shutil
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -37,6 +39,7 @@ from ..security import share_url
 from .deps import current_org, current_user
 from .serializers import iso_utc, to_out
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["recordings"])
 
 MAX_SEGMENT_BYTES = 120 * 1024 * 1024
@@ -54,6 +57,23 @@ def _require_balance(org: Org, db: Session) -> None:
 
     if balance(db, org.id) <= 0:
         raise HTTPException(status_code=402, detail="额度不足，请先充值后再开始")
+
+
+class ClientLogIn(BaseModel):
+    event: str = Field(max_length=60)
+    detail: str = Field(default="", max_length=1000)
+
+
+@router.post("/recordings/{recording_id}/client-log", status_code=204)
+def client_log(
+    recording_id: str,
+    body: ClientLogIn,
+    org: Org = Depends(current_org),
+    db: Session = Depends(get_db),
+) -> None:
+    """前端录音过程埋点，用于排查「录了但没上传」这类问题。"""
+    rec = _owned(db, recording_id, org.id)
+    log.info("[client %s] %s | %s", rec.id, body.event, body.detail[:1000])
 
 
 @router.post("/recordings", response_model=RecordingOut)

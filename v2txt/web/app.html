@@ -253,11 +253,29 @@ async function refreshSummary() {
 }
 
 /* ------------------------------------------------ 录音 */
+const SEGMENT_SECONDS = 120;          // 分段更短，页面被切后台时丢的音频更少
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 class Recorder {
   constructor() {
     this.ctx = null; this.stream = null; this.node = null; this.recordingId = null;
-    this.chunks = []; this.samples = 0; this.segIdx = 0; this.timer = null;
+    this.chunks = []; this.samples = 0; this.segIdx = 0;
     this.startedAt = 0; this.queue = []; this.busy = false; this.onLevel = null;
+    this.inRate = 48000;
+  }
+  /* 录音过程埋点：出问题时服务端日志能直接看到停在哪一步 */
+  log(event, detail) {
+    if (!this.recordingId) return;
+    fetch(`/api/v1/recordings/${this.recordingId}/client-log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + Api.token,
+        'X-Org-Id': Api.org,
+      },
+      body: JSON.stringify({ event, detail: String(detail || '') }),
+      keepalive: true,
+    }).catch(() => {});
   }
   async start() {
     this.stream = await navigator.mediaDevices.getUserMedia({
@@ -265,14 +283,18 @@ class Recorder {
     });
     const AC = window.AudioContext || window.webkitAudioContext;
     this.ctx = new AC();
+    // 关键：部分 WebView（含飞书内置浏览器）创建出来是 suspended，不 resume 就永远收不到数据
+    if (this.ctx.state === 'suspended') {
+      try { await this.ctx.resume(); } catch (e) { /* 忽略 */ }
+    }
+    this.inRate = this.ctx.sampleRate || 48000;
     const src = this.ctx.createMediaStreamSource(this.stream);
     this.node = this.ctx.createScriptProcessor(4096, 1, 1);
-    this.inRate = this.ctx.sampleRate;
     this.node.onaudioprocess = (e) => {
       const data = e.inputBuffer.getChannelData(0);
       this.chunks.push(new Float32Array(data));
       this.samples += data.length;
-      if (this.samples >= this.inRate * 300) this.rotate();
+      if (this.samples >= this.inRate * SEGMENT_SECONDS) this.rotate();
       if (this.onLevel) this.onLevel(data);
     };
     src.connect(this.node);
@@ -283,6 +305,14 @@ class Recorder {
     });
     this.recordingId = rec.id;
     this.startedAt = Date.now();
+    this.log('start', `ctx=${this.ctx.state} rate=${this.inRate}`);
+    // 3 秒后仍无数据 → 说明麦克风/上下文有问题，提前提示，避免录完才发现是空录音
+    setTimeout(() => {
+      if (this.samples === 0) {
+        this.log('no_signal', `ctx=${this.ctx ? this.ctx.state : 'x'}`);
+        toast(zh ? '没有检测到麦克风音频，请检查权限或是否被其他应用占用' : 'No microphone audio detected', true);
+      }
+    }, 3000);
   }
   _wav(float32) {
     const rate = this.inRate;
@@ -322,6 +352,7 @@ class Recorder {
   rotate() {
     if (!this.chunks.length) return;
     const blob = this._wav(this._merge());
+    this.log('rotate', `idx=${this.segIdx} bytes=${blob.size}`);
     this.enqueue(blob);
   }
   enqueue(blob) {
@@ -335,11 +366,17 @@ class Recorder {
     try {
       await this.upload(job.blob, job.idx);
       this.queue.shift();
+      this.log('upload_ok', `idx=${job.idx}`);
       $('recQueue').textContent = this.queue.length ? T.uploading : '';
     } catch (e) {
       job.tries++;
-      if (job.tries >= 4) { this.queue.shift(); toast('分段上传失败：' + e.message, true); }
-      else await new Promise(r => setTimeout(r, 1500 * job.tries));
+      this.log('upload_fail', `idx=${job.idx} tries=${job.tries} err=${e.message}`);
+      if (job.tries >= 4) {
+        this.queue.shift();
+        toast((zh ? '分段上传失败：' : 'Upload failed: ') + e.message, true);
+      } else {
+        await sleep(1500 * job.tries);
+      }
     } finally {
       this.busy = false;
       if (this.queue.length) this.pump();
@@ -348,34 +385,56 @@ class Recorder {
   upload(blob, idx) {
     const fd = new FormData();
     fd.append('file', blob, 'seg_' + idx + '.wav');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 60000);
     return fetch(`/api/v1/recordings/${this.recordingId}/segments?idx=${idx}`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + Api.token, 'X-Org-Id': Api.org },
       body: fd,
+      signal: ctrl.signal,
     }).then(async (res) => {
+      clearTimeout(timer);
       if (!res.ok) {
         let msg = 'HTTP ' + res.status;
-        try { const j = await res.json(); msg = j.detail || msg; } catch (e) {}
+        try { const j = await res.json(); msg = j.detail || msg; } catch (e) { /* 非 JSON */ }
         throw new Error(msg);
       }
       return res.json();
+    }).catch((e) => {
+      clearTimeout(timer);
+      throw e.name === 'AbortError' ? new Error(zh ? '上传超时' : 'Upload timeout') : e;
     });
   }
   elapsed() { return Math.floor((Date.now() - this.startedAt) / 1000); }
   async stop() {
-    if (this.node) { this.node.disconnect(); this.node.onaudioprocess = null; }
-    if (this.stream) this.stream.getTracks().forEach(t => t.stop());
-    if (this.ctx) await this.ctx.close();
-    this.rotate();
-    while (this.queue.length || this.busy) await new Promise(r => setTimeout(r, 300));
+    this.log('stop_begin', `samples=${this.samples} chunks=${this.chunks.length} segs=${this.segIdx}`);
+    try { if (this.node) { this.node.onaudioprocess = null; this.node.disconnect(); } } catch (e) { /* 忽略 */ }
+    try { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* 忽略 */ }
+    try {
+      if (this.ctx && this.ctx.state !== 'closed') await this.ctx.close();
+    } catch (e) { this.log('close_fail', e && e.message); }
+    try { this.rotate(); } catch (e) { this.log('rotate_fail', e && e.message); }
+    const deadline = Date.now() + 90000;
+    while ((this.queue.length || this.busy) && Date.now() < deadline) await sleep(300);
+    if (this.queue.length || this.busy) {
+      this.log('drain_timeout', `left=${this.queue.length}`);
+      throw new Error(zh ? '音频上传超时，请检查网络后重试' : 'Upload timed out');
+    }
+    if (this.segIdx === 0) {
+      this.log('no_audio', 'segments=0');
+      throw new Error('NO_AUDIO');
+    }
     const res = await Api.req(`/api/v1/recordings/${this.recordingId}/finish`, { method: 'POST' });
+    this.log('finish_ok', res.status);
     return res;
   }
   async abort() {
-    this.node && this.node.disconnect();
-    this.stream && this.stream.getTracks().forEach(t => t.stop());
-    if (this.ctx) await this.ctx.close();
-    try { await Api.req(`/api/v1/recordings/${this.recordingId}`, { method: 'DELETE' }); } catch (e) {}
+    try { if (this.node) { this.node.onaudioprocess = null; this.node.disconnect(); } } catch (e) { /* 忽略 */ }
+    try { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* 忽略 */ }
+    try { if (this.ctx && this.ctx.state !== 'closed') await this.ctx.close(); } catch (e) { /* 忽略 */ }
+    if (this.recordingId) {
+      try { await Api.req(`/api/v1/recordings/${this.recordingId}`, { method: 'DELETE' }); } catch (e) { /* 忽略 */ }
+    }
   }
 }
 
@@ -411,31 +470,53 @@ $('recBtn').onclick = async () => {
   } finally { $('recBtn').disabled = false; }
 };
 
+function resetRecorderUI(hint) {
+  clearInterval(tickTimer);
+  recorder.recordingId = null;
+  $('recBtn').textContent = T.start;
+  $('recBtn').classList.remove('stop');
+  $('recActions').classList.add('hide');
+  $('timer').textContent = '00:00';
+  $('recQueue').textContent = '';
+  if (hint) $('recHint').textContent = hint;
+}
+
 $('finishBtn').onclick = async () => {
   $('finishBtn').disabled = true; $('abortBtn').disabled = true;
   $('recHint').textContent = T.uploading;
   try {
-    clearInterval(tickTimer);
-    const res = await recorder.stop();
+    await recorder.stop();
     toast(T.finishOk);
-    recorder.recordingId = null;
-    $('recBtn').textContent = T.start; $('recBtn').classList.remove('stop');
-    $('recActions').classList.add('hide'); $('timer').textContent = '00:00'; $('recQueue').textContent = '';
-    $('recHint').textContent = zh ? '已提交，稍后在记录里查看结果。' : 'Submitted. Check your records.';
+    resetRecorderUI(zh ? '已提交，稍后在记录里查看结果。' : 'Submitted. Check your records.');
     loadRecords(); refreshSummary();
-  } catch (e) { toast(e.message, true); }
-  finally { $('finishBtn').disabled = false; $('abortBtn').disabled = false; }
+  } catch (e) {
+    if (e.message === 'NO_AUDIO') {
+      await recorder.abort();
+      resetRecorderUI(zh ? '没有录到音频，请检查麦克风权限后重新录制。' : 'No audio was captured. Please check the microphone and try again.');
+      toast(zh ? '没有录到音频，已丢弃本次录音' : 'No audio captured, discarded', true);
+    } else {
+      $('recHint').textContent = (zh ? '上传/提交失败：' : 'Failed: ') + e.message;
+      toast(e.message, true);
+    }
+  } finally {
+    $('finishBtn').disabled = false; $('abortBtn').disabled = false;
+  }
 };
 
 $('abortBtn').onclick = async () => {
   if (!confirm(zh ? '确定放弃这段录音？已上传的内容会被删除。' : 'Discard this recording? Uploaded parts will be deleted.')) return;
-  clearInterval(tickTimer);
   await recorder.abort();
-  recorder.recordingId = null;
-  $('recBtn').textContent = T.start; $('recBtn').classList.remove('stop');
-  $('recActions').classList.add('hide'); $('timer').textContent = '00:00';
+  resetRecorderUI(zh ? '已放弃本次录音' : 'Discarded');
   toast(zh ? '已放弃' : 'Discarded');
 };
+
+/* 切到后台/锁屏时浏览器会暂停音频处理，提醒用户保持前台 */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && recorder.recordingId) {
+    recorder.log('visibility_hidden', `samples=${recorder.samples}`);
+    toast(zh ? '录音中请保持页面在前台，切后台会暂停收音' : 'Keep this page in foreground while recording', true);
+  }
+});
 
 /* ------------------------------------------------ 记录 */
 const STATUS_LABEL = {
