@@ -5,10 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# token 放在 700 目录、600 文件里，用 EnvironmentFile 注入
+# token 放在 700 目录、600 文件里，用 EnvironmentFile 注入（文件内含 TUNNEL_TOKEN=...）
 EnvironmentFile=/home/user/.mm/cloudflared-v2txt
-# TUNNEL_TOKEN=... 由 cloudflared 读取的环境变量名为 TUNNEL_TOKEN
-ExecStart=/usr/local/bin/cloudflared --no-autoupdate tunnel run
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate tunnel run --token ${TUNNEL_TOKEN}
 Restart=always
 RestartSec=5
 User=user
