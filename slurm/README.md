@@ -49,7 +49,21 @@ config/job_submit.lua
 - `job_submit.lua`：提交到 `eda15x` 必须显式指定 `--mem` 或 `--mem-per-cpu`
 - `srun --x11` / OOD Desktop 图形方案见 OOD 项目资料
 
-## 5. 常用运维
+## 5. GUI 启动脚本（共享目录 `/eda/workspace/share/`）
+
+把 EDA 工具的图形界面通过 Slurm + `ssh -Y` 投到用户自己的 RDP 桌面：
+
+| 脚本 | 用途 |
+|---|---|
+| `innovus-gui-15x.sh` | 申请 1 个 eda15x 节点并打开 Innovus GUI（注解见 [docs/08](docs/08-Innovus图形界面脚本注释指南.md)） |
+| `verdi-gui-15x.sh` | 申请 1 个 eda15x 节点并打开 Verdi GUI（看波形/调试） |
+
+两者用法一致：交互向导，或 `-n 154 -c 2 -m 32 -t 24 -y -- <工具参数>`；`--dry-run` 只预演；
+关闭工具或 Ctrl-C 会自动 `scancel` 释放节点。
+
+仓库内对应源码：[`scripts/verdi-gui-15x.sh`](scripts/verdi-gui-15x.sh)
+
+## 6. 常用运维
 
 ```bash
 sinfo
