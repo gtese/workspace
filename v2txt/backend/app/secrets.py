@@ -13,6 +13,13 @@ MM_DIR = Path.home() / ".mm"
 
 # 文件名 -> {环境变量式键: Settings 字段}
 SECRET_FILES: dict[str, dict[str, str]] = {
+    # OSS 专用 AK 优先（放在最前面，先匹配先填充）
+    "v2txt-oss": {
+        "OSS_ACCESS_KEY": "oss_access_key",
+        "OSS_SECRET_KEY": "oss_secret_key",
+        "OSS_BUCKET": "oss_bucket",
+        "OSS_REGION": "oss_region",
+    },
     "feishu-minutes": {
         "FEISHU_APP_ID": "feishu_app_id",
         "FEISHU_APP_SECRET": "feishu_app_secret",
@@ -26,10 +33,6 @@ SECRET_FILES: dict[str, dict[str, str]] = {
         "TENCENT_SECRET_KEY": "tencent_secret_key",
     },
     "deepseek": {"DEEPSEEK_API_KEY": "deepseek_api_key"},
-    "v2txt-aliyun": {
-        "ALIYUN_AK": "oss_access_key",
-        "ALIYUN_SK": "oss_secret_key",
-    },
     "aliyun": {
         "ALIYUN_API_KEY": "aliyun_api_key",
         "ALIYUN_BASE_URL": "aliyun_base_url",

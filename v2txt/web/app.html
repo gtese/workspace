@@ -689,7 +689,18 @@ async function doOssUpload(file) {
 }
 
 async function doUpload(file) {
-  if (OSS.enabled) return doOssUpload(file);
+  if (OSS.enabled) {
+    try { return await doOssUpload(file); }
+    catch (e) {
+      // CORS 未配置 / 签名过期等情况：自动回退到隧道直传，不让用户卡死
+      console.warn('OSS 直传失败，回退隧道上传', e);
+      toast(zh ? '直传失败，改用普通上传' : 'Direct upload failed, falling back', true);
+    }
+  }
+  return doTunnelUpload(file);
+}
+
+async function doTunnelUpload(file) {
   const box = $('uploadStatus');
   box.innerHTML = `<div class="card tight"><div class="spread"><span>${file.name}</span><span class="small muted" id="upPct">0%</span></div><div class="progress"><i id="upBar"></i></div></div>`;
   const fd = new FormData();
