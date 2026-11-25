@@ -99,9 +99,22 @@ class Settings(BaseSettings):
     pay_account_no: str = ""
     pay_swift: str = ""
 
+    # 对象存储（阿里云 OSS / 兼容 S3 的 MinIO），用于浏览器直传
+    oss_access_key: str = ""
+    oss_secret_key: str = ""
+    oss_bucket: str = ""
+    oss_region: str = "cn-hangzhou"
+    oss_prefix: str = "v2txt"
+    oss_presign_ttl: int = 900
+    oss_upload_enabled: bool = False  # 权限与 CORS 就绪后再打开
+
     # 上传
     upload_max_mb: int = 500
     upload_max_minutes: float = 300.0
+
+    @property
+    def oss_enabled(self) -> bool:
+        return bool(self.oss_bucket and self.oss_access_key and self.oss_secret_key)
 
     @property
     def db_url(self) -> str:

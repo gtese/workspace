@@ -6,7 +6,17 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import admin as admin_api
-from .api import auth_feishu, auth_users, billing_api, media, orgs, recordings, shared, uploads
+from .api import (
+    auth_feishu,
+    auth_users,
+    billing_api,
+    media,
+    orgs,
+    recordings,
+    shared,
+    uploads,
+    uploads_oss,
+)
 from .billing import seed_plans
 from .config import REPO_ROOT, get_settings
 from .db import SessionLocal, init_db
@@ -56,6 +66,7 @@ app.include_router(billing_api.router)
 app.include_router(admin_api.router)
 app.include_router(recordings.router)
 app.include_router(uploads.router)
+app.include_router(uploads_oss.router)
 app.include_router(shared.router)
 app.include_router(media.router)
 
