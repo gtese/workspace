@@ -154,6 +154,9 @@ def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(ge
     db.commit()
 
     put_user_token(open_id, token_data.get("access_token", ""))
+    if token_data.get("refresh_token"):
+        user.feishu_refresh_token = token_data["refresh_token"]
+        db.commit()
     # 后台对齐云盘「AI录音」目录，失败不影响登录
     from ..feishu.folder_sync import ensure_folder_from_user
 

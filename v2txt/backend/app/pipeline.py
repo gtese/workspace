@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy.orm import Session
 
-from . import audio, mailer, storage
+from . import audio, feishu_oauth, mailer, storage
 from .asr import get_asr_provider
 from .asr.base import AudioChunk
 from .config import get_settings
@@ -211,29 +211,30 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
         try:
             client = FeishuDocClient()
             folder_token = ""
+            owner = db.get(User, rec.owner_user_id) if rec.owner_user_id else None
             try:
-                from .feishu.folder_sync import ensure_folder_from_user, sync_folder_from_user
+                from .feishu.folder_sync import ensure_folder_from_user
 
-                synced = sync_folder_from_user(open_id)
-                if synced:
-                    folder_token = synced
                 row = db.get(DriveFolder, open_id)
                 if row and row.folder_token:
                     folder_token = row.folder_token
-                created = ensure_folder_from_user(open_id)
-                if created:
-                    folder_token = created
-                elif not folder_token:
-                    folder_token = client.create_user_folder(open_id)
-                    db.add(DriveFolder(open_id=open_id, folder_token=folder_token))
-                    db.commit()
+                if not folder_token:
+                    token = feishu_oauth.user_token_for(db, owner) if owner else ""
+                    folder_token = ensure_folder_from_user(open_id, token) or ""
+                if not folder_token:
+                    log.warning("拿不到「AI录音」目录（缺少用户授权），文档将留在应用空间")
             except Exception:  # noqa: BLE001
-                log.exception("创建 AI录音 目录失败，文档将放在云盘根目录")
+                log.exception("准备「AI录音」目录失败")
                 folder_token = ""
             info = client.create_minutes_doc(
                 rec.title, summary, detail_url, open_id, folder_token
             )
             doc_url = info["url"]
+            if not info.get("folder_ok") and folder_token:
+                stale = db.get(DriveFolder, open_id)
+                if stale is not None:
+                    db.delete(stale)
+                    db.commit()
             if info.get("folder_ok"):
                 doc_hint = "📁 已保存到飞书云盘「AI录音」目录"
             else:

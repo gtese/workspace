@@ -98,6 +98,8 @@ def _enable_docs(monkeypatch) -> None:
     monkeypatch.setattr(pipeline, "get_settings", lambda: settings)
     monkeypatch.setattr(pipeline, "FeishuDocClient", FakeDocClient)
     monkeypatch.setattr(folder_sync, "sync_folder_from_user", lambda open_id: "")
+    monkeypatch.setattr(folder_sync, "ensure_folder_from_user", lambda open_id, token=None: "fld_new")
+    monkeypatch.setattr(pipeline.feishu_oauth, "user_token_for", lambda db, user: "user-token")
     FakeDocClient.created.clear()
     FakeDocClient.folders.clear()
 

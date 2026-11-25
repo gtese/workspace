@@ -126,3 +126,45 @@ def authorize_url(redirect_uri: str, state: str = "login") -> str:
         f"&redirect_uri={quote(redirect_uri, safe='')}"
         f"&state={quote(state)}"
     )
+
+
+def refresh_user_token(refresh_token: str) -> dict[str, Any]:
+    """用 refresh_token 换新的 user_access_token（离线也能拿）。"""
+    s = get_settings()
+    return _post(
+        "/authen/v2/oauth/token",
+        {
+            "grant_type": "refresh_token",
+            "client_id": s.feishu_app_id,
+            "client_secret": s.feishu_app_secret,
+            "refresh_token": refresh_token,
+        },
+    )
+
+
+def user_token_for(db, user) -> str:  # noqa: ANN001
+    """拿到一个可用的 user_access_token：内存缓存 → 刷新令牌 → 空。"""
+    from .user_tokens import get as cache_get
+    from .user_tokens import put as cache_put
+
+    open_id = getattr(user, "feishu_open_id", "") or ""
+    if not open_id:
+        return ""
+    cached = cache_get(open_id)
+    if cached:
+        return cached
+    token = getattr(user, "feishu_refresh_token", "") or ""
+    if not token:
+        return ""
+    try:
+        data = refresh_user_token(token)
+    except FeishuError as exc:
+        log.warning("刷新飞书 user token 失败: %s", exc)
+        return ""
+    access = data.get("access_token", "")
+    if data.get("refresh_token"):
+        user.feishu_refresh_token = data["refresh_token"]
+        db.commit()
+    if access:
+        cache_put(open_id, access, int(data.get("expires_in") or 3600))
+    return access

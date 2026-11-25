@@ -87,13 +87,13 @@ def sync_folder_from_user(open_id: str) -> str | None:
         return None
 
 
-def ensure_folder_from_user(open_id: str) -> str | None:
+def ensure_folder_from_user(open_id: str, token: str | None = None) -> str | None:
     """确保用户云盘根目录有「AI录音」目录：先找，找不到就用**用户身份**直接建。
 
     用用户 token 建目录的好处：目录天生就在用户自己的「我的空间」里，名字不会
     被飞书改成「Content transferred from voice」这种默认名。
     """
-    token = get_user_token(open_id)
+    token = token or get_user_token(open_id)
     if not token:
         return None
     h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
