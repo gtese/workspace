@@ -253,17 +253,21 @@ async function refreshSummary() {
 }
 
 /* ------------------------------------------------ 录音 */
-const SEGMENT_SECONDS = 120;          // 分段更短，页面被切后台时丢的音频更少
+const SEGMENT_SECONDS = 60;           // 每 60 秒封一段，链路慢也能跟上
+const UPLOAD_TIMEOUT_MS = 180000;      // 单段上传超时（跨境链路很慢，给足时间）
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+/* 录音器：优先 MediaRecorder + Opus（~24kbps，比 16k WAV 小 8~10 倍），
+   不支持时退回 ScriptProcessor + WAV。跨境隧道带宽很窄，这一步是必须的。 */
 class Recorder {
   constructor() {
-    this.ctx = null; this.stream = null; this.node = null; this.recordingId = null;
-    this.chunks = []; this.samples = 0; this.segIdx = 0;
-    this.startedAt = 0; this.queue = []; this.busy = false; this.onLevel = null;
-    this.inRate = 48000;
+    this.stream = null; this.ctx = null; this.analyser = null; this.mr = null;
+    this.recordingId = null; this.segIdx = 0; this.startedAt = 0;
+    this.queue = []; this.busy = false; this.onLevel = null;
+    this.parts = []; this.mime = ''; this.mode = 'opus';
+    this.chunks = []; this.samples = 0; this.inRate = 48000;
+    this.segTimer = null; this.levelTimer = null;
   }
-  /* 录音过程埋点：出问题时服务端日志能直接看到停在哪一步 */
   log(event, detail) {
     if (!this.recordingId) return;
     fetch(`/api/v1/recordings/${this.recordingId}/client-log`, {
@@ -277,57 +281,120 @@ class Recorder {
       keepalive: true,
     }).catch(() => {});
   }
+  pickMime() {
+    if (!window.MediaRecorder) return '';
+    const cands = [
+      'audio/webm;codecs=opus', 'audio/ogg;codecs=opus',
+      'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4',
+    ];
+    for (const m of cands) {
+      try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { /* 忽略 */ }
+    }
+    return '';
+  }
   async start() {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-    const AC = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new AC();
-    // 关键：部分 WebView（含飞书内置浏览器）创建出来是 suspended，不 resume 就永远收不到数据
-    if (this.ctx.state === 'suspended') {
-      try { await this.ctx.resume(); } catch (e) { /* 忽略 */ }
-    }
-    this.inRate = this.ctx.sampleRate || 48000;
-    const src = this.ctx.createMediaStreamSource(this.stream);
-    this.node = this.ctx.createScriptProcessor(4096, 1, 1);
-    this.node.onaudioprocess = (e) => {
-      const data = e.inputBuffer.getChannelData(0);
-      this.chunks.push(new Float32Array(data));
-      this.samples += data.length;
-      if (this.samples >= this.inRate * SEGMENT_SECONDS) this.rotate();
-      if (this.onLevel) this.onLevel(data);
-    };
-    src.connect(this.node);
-    this.node.connect(this.ctx.destination);
     const rec = await Api.req('/api/v1/recordings', {
       method: 'POST',
       body: { title: (zh ? 'AI录音-' : 'Recording-') + new Date().toLocaleString(), scene: 'meeting' },
     });
     this.recordingId = rec.id;
     this.startedAt = Date.now();
-    this.log('start', `ctx=${this.ctx.state} rate=${this.inRate}`);
-    // 3 秒后仍无数据 → 说明麦克风/上下文有问题，提前提示，避免录完才发现是空录音
+
+    // 音量条：AnalyserNode 不依赖编码方式
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AC();
+    if (this.ctx.state === 'suspended') { try { await this.ctx.resume(); } catch (e) { /* 忽略 */ } }
+    const src = this.ctx.createMediaStreamSource(this.stream);
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 512;
+    src.connect(this.analyser);
+    const buf = new Uint8Array(this.analyser.frequencyBinCount);
+    this.levelTimer = setInterval(() => {
+      if (!this.analyser || !this.onLevel) return;
+      this.analyser.getByteTimeDomainData(buf);
+      let peak = 0;
+      for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128) / 128);
+      this.onLevel(peak);
+    }, 100);
+
+    this.mime = this.pickMime();
+    if (this.mime) {
+      this.mode = 'opus';
+      this.startSegment();
+      this.segTimer = setInterval(() => this.rotateSegment(), SEGMENT_SECONDS * 1000);
+      this.log('start', `mode=opus mime=${this.mime} ctx=${this.ctx.state}`);
+    } else {
+      this.mode = 'wav';
+      this.startWavCapture(src);
+      this.log('start', `mode=wav rate=${this.inRate} ctx=${this.ctx.state}`);
+    }
     setTimeout(() => {
-      if (this.samples === 0) {
-        this.log('no_signal', `ctx=${this.ctx ? this.ctx.state : 'x'}`);
-        toast(zh ? '没有检测到麦克风音频，请检查权限或是否被其他应用占用' : 'No microphone audio detected', true);
+      if (this.mode === 'wav' && this.samples === 0) {
+        this.log('no_signal', 'wav mode');
+        toast(zh ? '没有检测到麦克风音频，请检查权限' : 'No microphone audio detected', true);
       }
     }, 3000);
   }
-  _wav(float32) {
-    const rate = this.inRate;
-    const outRate = 16000;
-    let data = float32;
+  /* ---------------- Opus 模式 ---------------- */
+  startSegment() {
+    this.parts = [];
+    this.mr = new MediaRecorder(this.stream, { mimeType: this.mime, audioBitsPerSecond: 24000 });
+    this.mr.ondataavailable = (e) => { if (e.data && e.data.size) this.parts.push(e.data); };
+    this.mr.onerror = (e) => this.log('mr_error', (e && e.error && e.error.message) || 'unknown');
+    this.mr.start();
+  }
+  rotateSegment() {
+    if (!this.mr || this.mr.state !== 'recording') return;
+    const parts = this.parts;
+    this.parts = [];
+    this.mr.ondataavailable = null;
+    try { this.mr.stop(); } catch (e) { this.log('rotate_fail', e && e.message); }
+    if (parts.length) {
+      const blob = new Blob(parts, { type: this.mime });
+      this.log('rotate', `idx=${this.segIdx} bytes=${blob.size} mode=opus`);
+      this.enqueue(blob);
+    }
+    this.startSegment();      // 立刻接着录，缝隙只有几毫秒
+  }
+  /* ---------------- WAV 兜底 ---------------- */
+  startWavCapture(src) {
+    this.inRate = this.ctx.sampleRate || 48000;
+    const node = this.ctx.createScriptProcessor(4096, 1, 1);
+    node.onaudioprocess = (e) => {
+      const d = e.inputBuffer.getChannelData(0);
+      this.chunks.push(new Float32Array(d));
+      this.samples += d.length;
+      if (this.samples >= this.inRate * SEGMENT_SECONDS) this.rotateWav();
+    };
+    src.connect(node);
+    node.connect(this.ctx.destination);
+    this.wavNode = node;
+    this.segTimer = setInterval(() => this.rotateWav(), SEGMENT_SECONDS * 1000);
+  }
+  rotateWav() {
+    if (!this.chunks.length) return;
+    const total = this.chunks.reduce((n, c) => n + c.length, 0);
+    const merged = new Float32Array(total);
+    let off = 0;
+    for (const c of this.chunks) { merged.set(c, off); off += c.length; }
+    this.chunks = []; this.samples = 0;
+    const blob = this._wav(merged);
+    this.log('rotate', `idx=${this.segIdx} bytes=${blob.size} mode=wav`);
+    this.enqueue(blob);
+  }
+  _wav(data) {
+    const rate = this.inRate, outRate = 16000;
     if (rate !== outRate) {
-      const ratio = rate / outRate;                 // 48000/16000 = 3
-      const len = Math.floor(data.length / ratio);
+      const ratio = rate / outRate, len = Math.floor(data.length / ratio);
       const tmp = new Float32Array(len);
       for (let i = 0; i < len; i++) {
-        const from = Math.floor(i * ratio);
-        const to = Math.min(data.length, Math.floor((i + 1) * ratio));
+        const from = Math.floor(i * ratio), to = Math.min(data.length, Math.floor((i + 1) * ratio));
         let sum = 0;
         for (let j = from; j < to; j++) sum += data[j];
-        tmp[i] = sum / Math.max(1, to - from);      // 盒式平均，抑制混叠
+        tmp[i] = sum / Math.max(1, to - from);
       }
       data = tmp;
     }
@@ -345,30 +412,7 @@ class Recorder {
     }
     return new Blob([buf], { type: 'audio/wav' });
   }
-  _merge() {
-    const total = this.chunks.reduce((n, c) => n + c.length, 0);
-    const out = new Float32Array(total);
-    let off = 0;
-    for (const c of this.chunks) { out.set(c, off); off += c.length; }
-    this.chunks = []; this.samples = 0;
-    return out;
-  }
-  rotate() {
-    if (!this.chunks.length) return;
-    const merged = this._merge();
-    let peak = 0;
-    for (let i = 0; i < merged.length; i += 8) {
-      const v = Math.abs(merged[i]);
-      if (v > peak) peak = v;
-    }
-    const blob = this._wav(merged);
-    this.log('rotate', `idx=${this.segIdx} bytes=${blob.size} peak=${peak.toFixed(3)}`);
-    if (peak < 0.01) {
-      this.log('low_signal', `peak=${peak.toFixed(4)}`);
-      toast(zh ? '这一段几乎没有声音，请检查麦克风' : 'This segment is nearly silent', true);
-    }
-    this.enqueue(blob);
-  }
+  /* ---------------- 上传队列 ---------------- */
   enqueue(blob) {
     this.queue.push({ idx: this.segIdx++, blob, tries: 0 });
     this.pump();
@@ -385,11 +429,11 @@ class Recorder {
     } catch (e) {
       job.tries++;
       this.log('upload_fail', `idx=${job.idx} tries=${job.tries} err=${e.message}`);
-      if (job.tries >= 4) {
+      if (job.tries >= 5) {
         this.queue.shift();
         toast((zh ? '分段上传失败：' : 'Upload failed: ') + e.message, true);
       } else {
-        await sleep(1500 * job.tries);
+        await sleep(2000 * job.tries);
       }
     } finally {
       this.busy = false;
@@ -397,10 +441,12 @@ class Recorder {
     }
   }
   upload(blob, idx) {
+    const ext = this.mime.includes('mp4') ? 'm4a' : this.mime.includes('ogg') ? 'ogg' : 'webm';
+    const name = this.mode === 'wav' ? `seg_${idx}.wav` : `seg_${idx}.${ext}`;
     const fd = new FormData();
-    fd.append('file', blob, 'seg_' + idx + '.wav');
+    fd.append('file', blob, name);
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 60000);
+    const timer = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
     return fetch(`/api/v1/recordings/${this.recordingId}/segments?idx=${idx}`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + Api.token, 'X-Org-Id': Api.org },
@@ -421,29 +467,41 @@ class Recorder {
   }
   elapsed() { return Math.floor((Date.now() - this.startedAt) / 1000); }
   async stop() {
-    this.log('stop_begin', `samples=${this.samples} chunks=${this.chunks.length} segs=${this.segIdx}`);
-    try { if (this.node) { this.node.onaudioprocess = null; this.node.disconnect(); } } catch (e) { /* 忽略 */ }
+    clearInterval(this.segTimer); clearInterval(this.levelTimer);
+    this.log('stop_begin', `mode=${this.mode} segs=${this.segIdx}`);
+    if (this.mode === 'opus' && this.mr && this.mr.state === 'recording') {
+      const parts = this.parts;
+      this.parts = [];
+      await new Promise((resolve) => {
+        this.mr.onstop = () => resolve();
+        try { this.mr.stop(); } catch (e) { resolve(); }
+      });
+      if (parts.length) {
+        const blob = new Blob(parts, { type: this.mime });
+        this.log('rotate', `idx=${this.segIdx} bytes=${blob.size} mode=opus tail`);
+        this.enqueue(blob);
+      }
+    } else if (this.mode === 'wav') {
+      try { this.rotateWav(); } catch (e) { this.log('rotate_fail', e && e.message); }
+    }
+    try { if (this.wavNode) { this.wavNode.onaudioprocess = null; this.wavNode.disconnect(); } } catch (e) { /* 忽略 */ }
     try { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* 忽略 */ }
-    try {
-      if (this.ctx && this.ctx.state !== 'closed') await this.ctx.close();
-    } catch (e) { this.log('close_fail', e && e.message); }
-    try { this.rotate(); } catch (e) { this.log('rotate_fail', e && e.message); }
-    const deadline = Date.now() + 90000;
-    while ((this.queue.length || this.busy) && Date.now() < deadline) await sleep(300);
+    try { if (this.ctx && this.ctx.state !== 'closed') await this.ctx.close(); } catch (e) { /* 忽略 */ }
+    const deadline = Date.now() + 300000;   // 慢链路下等 5 分钟
+    while ((this.queue.length || this.busy) && Date.now() < deadline) await sleep(500);
     if (this.queue.length || this.busy) {
       this.log('drain_timeout', `left=${this.queue.length}`);
-      throw new Error(zh ? '音频上传超时，请检查网络后重试' : 'Upload timed out');
+      throw new Error(zh ? '音频还在上传，网络太慢；请保持页面开着，稍后在记录里查看' : 'Still uploading, network too slow');
     }
-    if (this.segIdx === 0) {
-      this.log('no_audio', 'segments=0');
-      throw new Error('NO_AUDIO');
-    }
+    if (this.segIdx === 0) { this.log('no_audio', 'segments=0'); throw new Error('NO_AUDIO'); }
     const res = await Api.req(`/api/v1/recordings/${this.recordingId}/finish`, { method: 'POST' });
     this.log('finish_ok', res.status);
     return res;
   }
   async abort() {
-    try { if (this.node) { this.node.onaudioprocess = null; this.node.disconnect(); } } catch (e) { /* 忽略 */ }
+    clearInterval(this.segTimer); clearInterval(this.levelTimer);
+    try { if (this.mr && this.mr.state === 'recording') { this.mr.ondataavailable = null; this.mr.stop(); } } catch (e) { /* 忽略 */ }
+    try { if (this.wavNode) { this.wavNode.onaudioprocess = null; this.wavNode.disconnect(); } } catch (e) { /* 忽略 */ }
     try { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* 忽略 */ }
     try { if (this.ctx && this.ctx.state !== 'closed') await this.ctx.close(); } catch (e) { /* 忽略 */ }
     if (this.recordingId) {
@@ -466,11 +524,8 @@ $('recBtn').onclick = async () => {
     $('recBtn').classList.add('stop');
     $('recActions').classList.remove('hide');
     $('recHint').textContent = zh ? '录音中，每 5 分钟自动上传一个分段。' : 'Recording. A segment is uploaded every 5 minutes.';
-    recorder.onLevel = (data) => {
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 16) sum += data[i] * data[i];
-      const rms = Math.sqrt(sum / (data.length / 16));
-      const h = Math.min(36, Math.max(4, rms * 320));
+    recorder.onLevel = (peak) => {
+      const h = Math.min(36, Math.max(4, peak * 150));
       const b = bars[Math.floor(Math.random() * bars.length)];
       b.style.height = h + 'px';
       setTimeout(() => { b.style.height = '4px'; }, 120);
