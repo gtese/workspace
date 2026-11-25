@@ -319,11 +319,15 @@ class Recorder {
     const outRate = 16000;
     let data = float32;
     if (rate !== outRate) {
-      const ratio = rate / outRate, len = Math.round(data.length / ratio), tmp = new Float32Array(len);
+      const ratio = rate / outRate;                 // 48000/16000 = 3
+      const len = Math.floor(data.length / ratio);
+      const tmp = new Float32Array(len);
       for (let i = 0; i < len; i++) {
-        const pos = i * ratio, i0 = Math.floor(pos), i1 = Math.min(i0 + 1, data.length - 1);
-        const f = pos - i0;
-        tmp[i] = data[i0] * (1 - f) + data[i1] * f;
+        const from = Math.floor(i * ratio);
+        const to = Math.min(data.length, Math.floor((i + 1) * ratio));
+        let sum = 0;
+        for (let j = from; j < to; j++) sum += data[j];
+        tmp[i] = sum / Math.max(1, to - from);      // 盒式平均，抑制混叠
       }
       data = tmp;
     }
@@ -351,8 +355,18 @@ class Recorder {
   }
   rotate() {
     if (!this.chunks.length) return;
-    const blob = this._wav(this._merge());
-    this.log('rotate', `idx=${this.segIdx} bytes=${blob.size}`);
+    const merged = this._merge();
+    let peak = 0;
+    for (let i = 0; i < merged.length; i += 8) {
+      const v = Math.abs(merged[i]);
+      if (v > peak) peak = v;
+    }
+    const blob = this._wav(merged);
+    this.log('rotate', `idx=${this.segIdx} bytes=${blob.size} peak=${peak.toFixed(3)}`);
+    if (peak < 0.01) {
+      this.log('low_signal', `peak=${peak.toFixed(4)}`);
+      toast(zh ? '这一段几乎没有声音，请检查麦克风' : 'This segment is nearly silent', true);
+    }
     this.enqueue(blob);
   }
   enqueue(blob) {
@@ -483,6 +497,7 @@ function resetRecorderUI(hint) {
 
 $('finishBtn').onclick = async () => {
   $('finishBtn').disabled = true; $('abortBtn').disabled = true;
+  clearInterval(tickTimer);          // 点下去就停表，不等上传完成
   $('recHint').textContent = T.uploading;
   try {
     await recorder.stop();

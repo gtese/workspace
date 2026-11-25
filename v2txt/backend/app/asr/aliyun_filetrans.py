@@ -20,6 +20,10 @@ from .base import ASRProvider, AudioChunk, Segment, Transcript
 log = logging.getLogger(__name__)
 
 
+class NoSpeechError(RuntimeError):
+    """音频里没有识别到语音（通常是静音、麦克风被占用或录音过短）。"""
+
+
 def _api_base(base: str) -> str:
     base = base.rstrip("/")
     if base.endswith("/compatible-mode/v1"):
@@ -82,6 +86,11 @@ class AliyunFiletransASR(ASRProvider):
                 transcription_url = results[0]["transcription_url"]
                 break
             if status in ("FAILED", "CANCELED"):
+                code = str(out.get("code") or "")
+                if code in ("ASR_RESPONSE_HAVE_NO_WORDS", "ASR_NO_WORDS"):
+                    raise NoSpeechError(
+                        "没有识别到语音内容：请确认麦克风有声音、说话时长足够后重新录制"
+                    )
                 raise RuntimeError(f"转写任务失败: {out}")
         if not transcription_url:
             raise RuntimeError("转写任务超时")
