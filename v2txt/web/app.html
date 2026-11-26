@@ -619,6 +619,7 @@ async function openRecord(id) {
     body.innerHTML = `
       <h2 style="margin:0 0 4px">${esc(d.title)}</h2>
       <p class="tiny muted">${fmtDate(d.created_at, true)} · ${mins} 分钟 · ${d.status}</p>
+      ${d.audio_url ? `<div style="margin:14px 0"><b class="small">录音回放</b><audio controls preload="none" src="${d.audio_url}" style="width:100%;margin-top:6px"></audio></div>` : ''}
       ${s.summary ? `<div class="card tight" style="margin:14px 0"><b class="small">摘要</b><p class="small" style="margin-top:6px">${esc(s.summary)}</p></div>` : ''}
       ${(s.decisions || []).length ? `<b class="small">决策</b><ul class="small">${list(s.decisions)}</ul>` : ''}
       ${(s.todos || []).length ? `<b class="small">待办</b><ul class="small">${list(s.todos)}</ul>` : ''}
