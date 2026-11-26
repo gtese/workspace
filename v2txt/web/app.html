@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>V2TXT · 控制台</title>
-<link rel="stylesheet" href="/static/assets/style.css?v=20261126a">
+<link rel="stylesheet" href="/static/assets/style.css?v=20261126b">
 <style>
   body { padding-bottom: 40px; }
   header.top { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
@@ -34,9 +34,10 @@
 </style>
 </head>
 <body>
-<div id="gate" class="hide" style="position:fixed;inset:0;z-index:9000;background:var(--bg,#f6f7f9);display:flex;align-items:center;justify-content:center;padding:24px">
+<div id="gate" style="position:fixed;inset:0;z-index:9000;background:var(--bg,#f6f7f9);display:flex;align-items:center;justify-content:center;padding:24px">
   <div style="width:100%;max-width:360px">
     <div style="font-weight:800;font-size:22px;letter-spacing:-.02em;margin-bottom:20px">V2<em style="color:var(--brand,#2b6cff);font-style:normal">TXT</em></div>
+    <div id="gateHint" style="font-size:13px;color:#8f959e;min-height:18px;margin-bottom:6px"></div>
     <div id="gateErr" style="color:var(--danger,#e5484d);font-size:13px;min-height:18px;margin-bottom:8px"></div>
     <form id="gateForm">
       <input id="gateEmail" type="email" required autocomplete="username" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:11px 13px;border:1px solid #dcdfe6;border-radius:10px;font-size:15px;background:#fff;color:#1f2329">
@@ -53,6 +54,10 @@
     </div>
   </div>
 </div>
+<script>
+/* 首帧前决定是否显示登录门：已登录直接进控制台，未登录立刻看到登录，不会闪控制台 */
+try { if (localStorage.getItem('vt_token')) { document.getElementById('gate').classList.add('hide'); } } catch (e) { /* 忽略 */ }
+</script>
 <header class="top">
   <div class="wrap inner">
     <div class="logo">V2<em>TXT</em></div>
@@ -223,12 +228,12 @@
 </div>
 
 <script src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.40.js"></script>
-<script src="/static/assets/api.js?v=20261126a"></script>
+<script src="/static/assets/api.js?v=20261126b"></script>
 <script>
 const { Api, toast, needAuth, fmtDate, fmtMin } = UI;
 const zh = Api.lang === 'zh';
-// 未登录时本页自己渲染登录门（不再跳 /login），避免飞书把跳转判成外链
-if (!Api.token) { window.__V2TXT_NO_REDIRECT__ = true; }
+// 本页自己渲染登录门，任何情况下都不再跳 /login（避免飞书把跳转判成外链）
+window.__V2TXT_NO_REDIRECT__ = true;
 // 多企业：把 ?app=xxx 记住，未登录跳登录页时带上，避免用错飞书应用授权
 try {
   const q = new URLSearchParams(location.search);
@@ -260,14 +265,14 @@ async function silentFeishuLogin() {
   try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
   const inFeishu = /Lark|Feishu/i.test(navigator.userAgent) || !!window.h5sdk;
   if (!inFeishu) return false;
-  const ready = (cb) => { if (window.h5sdk && window.h5sdk.ready) { try { window.h5sdk.ready(cb); return; } catch (e) { /* 忽略 */ } } setTimeout(cb, 500); };
+  const ready = (cb) => { if (window.h5sdk && window.h5sdk.ready) { try { window.h5sdk.ready(cb); return; } catch (e) { /* 忽略 */ } } setTimeout(cb, 400); };
   await new Promise((r) => ready(r));
   if (!(window.tt && window.tt.requestAuthCode)) return false;
   const cfg = await fetch('/api/v1/auth/feishu/config' + (app ? '?app=' + encodeURIComponent(app) : '')).then(r => r.json()).catch(() => null);
   if (!cfg || !cfg.enabled) return false;
   const code = await new Promise((resolve) => {
     window.tt.requestAuthCode({ appId: cfg.app_id, success: (res) => resolve(res.code), fail: () => resolve('') });
-    setTimeout(() => resolve(''), 8000);
+    setTimeout(() => resolve(''), 3500);
   });
   if (!code) return false;
   const data = await fetch('/api/v1/auth/feishu', {
@@ -278,6 +283,25 @@ async function silentFeishuLogin() {
   Api.setToken(data.token);
   Api.setOrg(data.team_org_id || data.org_id || data.user.default_org_id || '');
   return true;
+}
+
+function inFeishuClient() {
+  return /Lark|Feishu/i.test(navigator.userAgent) || !!(window.h5sdk && window.tt);
+}
+
+/* 走飞书网页授权（一次性跳转，目标仍是被信任的飞书域名，随后回 /feishu-callback） */
+async function startOAuth() {
+  let app = '';
+  try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
+  const cfg = await fetch('/api/v1/auth/feishu/config' + (app ? '?app=' + encodeURIComponent(app) : ''))
+    .then((r) => r.json()).catch(() => null);
+  if (!cfg || !cfg.enabled) throw new Error(zh ? '飞书登录不可用' : 'Feishu sign-in unavailable');
+  const redirect = cfg.redirect_uri || (location.origin + '/feishu-callback');
+  const r = await fetch('/api/v1/auth/feishu/authorize-url?redirect_uri=' + encodeURIComponent(redirect) +
+    (app ? '&app=' + encodeURIComponent(app) : ''));
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.url) throw new Error((data && data.detail) || (zh ? '飞书登录失败' : 'Feishu sign-in failed'));
+  location.href = data.url;
 }
 
 /* ------------------------------------------------ 登录门（零跳转） */
@@ -304,6 +328,7 @@ function showGate() {
       });
       Api.setToken(data.token);
       Api.setOrg(data.user.default_org_id || '');
+      try { sessionStorage.removeItem('feishu_auto_oauth'); } catch (e) { /* 忽略 */ }
       location.reload();
     } catch (ex) {
       errBox.textContent = ex.message || 'error';
@@ -317,21 +342,7 @@ function showGate() {
     errBox.textContent = '';
     try {
       if (await silentFeishuLogin()) { location.reload(); return; }
-      let app = '';
-      try { app = sessionStorage.getItem('feishu_app') || ''; } catch (x) { /* 忽略 */ }
-      const cfg = await fetch('/api/v1/auth/feishu/config' + (app ? '?app=' + encodeURIComponent(app) : ''))
-        .then((r) => r.json()).catch(() => null);
-      if (!cfg || !cfg.enabled) {
-        errBox.textContent = zh ? '飞书登录不可用' : 'Feishu sign-in unavailable';
-        btn.disabled = false;
-        return;
-      }
-      const redirect = cfg.redirect_uri || (location.origin + '/feishu-callback');
-      const r = await fetch('/api/v1/auth/feishu/authorize-url?redirect_uri=' + encodeURIComponent(redirect) +
-        (app ? '&app=' + encodeURIComponent(app) : ''));
-      const data = await r.json().catch(() => ({}));
-      if (r.ok && data.url) { location.href = data.url; return; }
-      errBox.textContent = (data && data.detail) || (zh ? '飞书登录失败' : 'Feishu sign-in failed');
+      await startOAuth();
     } catch (ex) {
       errBox.textContent = ex.message || 'error';
     }
@@ -349,11 +360,28 @@ function showGate() {
 }
 
 const authReady = (async () => {
-  if (!Api.token) {
-    try { await silentFeishuLogin(); } catch (e) { /* 忽略 */ }
-  }
-  if (!Api.token) { showGate(); }
+  if (Api.token) return;
+  showGate();                                  // 立即出登录门，控制台不会先闪一下
+  const hint = (t) => { $('gateHint').textContent = t || ''; };
+  if (!inFeishuClient()) return;
+
+  hint(zh ? '正在免登…' : 'Signing in…');
+  try { if (await silentFeishuLogin()) { location.reload(); return; } } catch (e) { /* 忽略 */ }
+
+  // 免登不可用 → 自动走飞书授权（同一个飞书容器内往返，不需要用户点）
+  let tried = '';
+  try { tried = sessionStorage.getItem('feishu_auto_oauth') || ''; } catch (e) { /* 忽略 */ }
+  if (tried === '1') { hint(''); return; }
+  try { sessionStorage.setItem('feishu_auto_oauth', '1'); } catch (e) { /* 忽略 */ }
+  hint(zh ? '正在通过飞书登录…' : 'Redirecting to Feishu sign-in…');
+  try { await startOAuth(); } catch (e) { hint(''); }
 })();
+
+// 会话失效时：清掉本地会话并原地 reload（回到登录门），绝不跳 /login
+window.__V2TXT_ON_401__ = function () {
+  try { Api.setToken(''); } catch (e) { /* 忽略 */ }
+  location.reload();
+};
 
 let ME = null, SUMMARY = null, REC = null;
 

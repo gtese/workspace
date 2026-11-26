@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>V2TXT</title>
-<link rel="stylesheet" href="/static/assets/style.css?v=20261126a">
+<link rel="stylesheet" href="/static/assets/style.css?v=20261126b">
 <style>
   body { display:flex; min-height:100vh; align-items:center; justify-content:center; padding:24px; }
   .panel { width:100%; max-width:420px; }
@@ -87,7 +87,7 @@
 </div>
 
 <script src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.40.js"></script>
-<script src="/static/assets/api.js?v=20261126a"></script>
+<script src="/static/assets/api.js?v=20261126b"></script>
 <script>
 const { Api, toast } = UI;
 const zh = Api.lang === 'zh';
@@ -164,7 +164,7 @@ async function doLogin(e) {
     });
     Api.setToken(data.token);
     Api.setOrg(data.user.default_org_id || '');
-    const next = qs.get('next') || '/app';
+    const next = qs.get('next') || (APP ? '/e/' + encodeURIComponent(APP) : '/app');
     location.href = next;
   } catch (ex) { err(ex.message); }
   finally { $('loginBtn').disabled = false; }
@@ -245,7 +245,9 @@ async function postFeishuCode(code, redirectUri) {
   Api.setToken(data.token);
   Api.setOrg(data.team_org_id || data.org_id || data.user.default_org_id || '');
   try { sessionStorage.removeItem('feishu_oauth_fallback'); } catch (x) { /* 忽略 */ }
-  location.href = qs.get('next') || '/app';
+  try { sessionStorage.removeItem('feishu_auto_oauth'); } catch (x) { /* 忽略 */ }
+  // 回到飞书后台登记的入口路径（/e/<slug>），不要跳 /app：保持"点开应用那条 URL"不变
+  location.href = qs.get('next') || (APP ? '/e/' + encodeURIComponent(APP) : '/app');
 }
 
 function h5Ready() {

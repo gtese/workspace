@@ -48,7 +48,10 @@
       const res = await fetch(path, Object.assign({}, opts, { headers }));
       if (res.status === 401) {
         this.setToken('');
-        // 页内登录门模式（app.html）：不跳转，交给页面自己渲染登录表单
+        // 会话失效：交给页面处理（控制台原地 reload 出登录门），绝不让飞书看见一次跳转
+        if (typeof window.__V2TXT_ON_401__ === 'function') {
+          try { window.__V2TXT_ON_401__(); } catch (e) { /* 忽略 */ }
+        }
         if (window.__V2TXT_NO_REDIRECT__) throw new Error('未登录');
         if (!location.pathname.startsWith('/login') && !location.pathname.startsWith('/register')) {
           let app = '';
