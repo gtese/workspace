@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>V2TXT 环境诊断</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; padding:18px; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",system-ui,sans-serif; background:#0b0d10; color:#e8eaed; }
+  h1 { font-size:17px; margin:0 0 14px; letter-spacing:.01em; color:#fff; }
+  .verdict { padding:14px 16px; border-radius:12px; font-size:17px; font-weight:700; margin-bottom:16px; line-height:1.45; }
+  .bad { background:#3a1213; color:#ff8f8a; border:1px solid #6d1f22; }
+  .good { background:#0f2a1a; color:#6ee7a0; border:1px solid #1d5c39; }
+  .warn { background:#2f2a10; color:#f0c95a; border:1px solid #6b5618; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td { padding:7px 6px; border-bottom:1px solid #1e2228; vertical-align:top; word-break:break-all; }
+  td.k { color:#8b949e; width:34%; white-space:nowrap; }
+  .hint { margin-top:16px; font-size:13px; color:#8b949e; line-height:1.7; }
+  .hint b { color:#e8eaed; }
+  code { background:#171a1f; padding:1px 5px; border-radius:4px; font-size:12px; color:#a5d6ff; }
+</style>
+</head>
+<body>
+<h1>V2TXT 环境诊断</h1>
+<div class="verdict warn" id="verdict">检测中…</div>
+<table id="rows"></table>
+<div class="hint" id="hint"></div>
+<script>
+(function () {
+  var ua = navigator.userAgent || '';
+  var low = ua.toLowerCase();
+  var inFeishuUA = low.indexOf('lark/') >= 0 || low.indexOf('feishu') >= 0 || low.indexOf('lark') >= 0;
+  var hasTT = (typeof window.tt !== 'undefined' && window.tt !== null);
+  var hasH5 = (typeof window.h5sdk !== 'undefined' && window.h5sdk !== null);
+  var href = location.href;
+  var jumpParam = /lk_jump_to_browser|lk_mobile_jump_to_browser/.test(href);
+
+  var verdict, cls;
+  if (jumpParam) {
+    cls = 'bad';
+    verdict = '❌ 当前 URL 带 lk_jump_to_browser 参数 —— 飞书会强制跳系统浏览器。请把主页地址里的该参数删掉。';
+  } else if (inFeishuUA) {
+    cls = 'good';
+    verdict = '✅ 当前运行在飞书客户端内（UA 含 Lark/Feishu）。浏览器跳转不是页面代码造成的。';
+  } else {
+    cls = 'bad';
+    verdict = '❌ 当前运行在普通浏览器（UA 里没有 Lark/Feishu）。说明飞书在打开页面之前就把链接交给了系统浏览器。';
+  }
+  document.getElementById('verdict').className = 'verdict ' + cls;
+  document.getElementById('verdict').textContent = verdict;
+
+  var rows = [
+    ['当前 URL', href],
+    ['入口路径', location.pathname + location.search],
+    ['运行环境', inFeishuUA ? '飞书客户端内' : '普通浏览器'],
+    ['User-Agent', ua],
+    ['window.tt 存在', hasTT ? '是' : '否'],
+    ['h5sdk 存在', hasH5 ? '是' : '否'],
+    ['来源页面', document.referrer || '(空)'],
+    ['屏幕 / 像素比', screen.width + '×' + screen.height + ' @' + (window.devicePixelRatio || 1)],
+    ['语言', navigator.language || ''],
+    ['时间', new Date().toISOString()]
+  ];
+  var html = '';
+  for (var i = 0; i < rows.length; i++) {
+    html += '<tr><td class="k">' + rows[i][0] + '</td><td>' + String(rows[i][1]).replace(/[<>&]/g, function (c) {
+      return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c];
+    }) + '</td></tr>';
+  }
+  document.getElementById('rows').innerHTML = html;
+
+  document.getElementById('hint').innerHTML =
+    '<b>怎么用：</b><br>' +
+    '1. 把飞书开发者后台 → 网页应用 → <b>桌面端主页</b> 临时改成 <code>https://app.v2txt.cn/diag</code>，保存并发布版本；<br>' +
+    '2. 回到飞书工作台点开应用；<br>' +
+    '3. 把本页截图发我。<br><br>' +
+    '<b>判读：</b>若显示"普通浏览器"，且地址栏 URL 不带 <code>lk_jump_to_browser</code>，' +
+    '说明工作台里的那个入口不是"网页应用"主页，而是管理后台添加的网页快捷方式（打开方式=系统浏览器），' +
+    '或客户端设置了链接用浏览器打开。若显示"飞书客户端内"，则问题在页面内跳转，我继续查代码。';
+
+  try {
+    var body = JSON.stringify({
+      ua: ua, href: href, path: location.pathname + location.search,
+      has_tt: hasTT, has_h5sdk: hasH5, verdict: verdict,
+      extra: { lang: navigator.language || '', ref: document.referrer || '', screen: screen.width + 'x' + screen.height }
+    });
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon('/api/v1/diag/report', new Blob([body], { type: 'application/json' }));
+    } else {
+      fetch('/api/v1/diag/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body });
+    }
+  } catch (e) { /* 上报失败不影响页面 */ }
+})();
+</script>
+</body>
+</html>

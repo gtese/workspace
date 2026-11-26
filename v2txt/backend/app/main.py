@@ -11,6 +11,7 @@ from .api import (
     auth_feishu,
     auth_users,
     billing_api,
+    diag,
     media,
     orgs,
     recordings,
@@ -78,6 +79,7 @@ app.include_router(uploads.router)
 app.include_router(uploads_oss.router)
 app.include_router(shared.router)
 app.include_router(media.router)
+app.include_router(diag.router)
 
 # 运营后台 /ops（会话鉴权 + 角色分级）
 try:
@@ -214,6 +216,12 @@ def join_page() -> FileResponse:
 @app.get("/app", include_in_schema=False)
 def console_page() -> FileResponse:
     return _page("app.html")
+
+
+@app.get("/diag", include_in_schema=False)
+def diag_page() -> FileResponse:
+    """飞书端环境诊断页（打印 UA / 运行环境，判定是否在飞书内打开）。"""
+    return _page("diag.html")
 
 
 @app.get("/billing", include_in_schema=False)
