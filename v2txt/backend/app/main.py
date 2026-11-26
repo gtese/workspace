@@ -170,6 +170,12 @@ def home_page() -> FileResponse:
     return _page("index.html")
 
 
+@app.get("/e/{slug}", include_in_schema=False)
+def enterprise_entry(slug: str) -> FileResponse:  # noqa: ARG001
+    """企业专属入口：路径里带企业标识，替代 ?app= 查询参数。"""
+    return _page("boot.html")
+
+
 @app.get("/login", include_in_schema=False)
 def login_page() -> FileResponse:
     return _page("auth.html")

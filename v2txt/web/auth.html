@@ -95,6 +95,10 @@ const path = location.pathname;
 const qs = new URLSearchParams(location.search);
 const tokenParam = qs.get('token') || '';
 let APP = qs.get('app') || '';
+try {
+  const m = location.pathname.match(/^\/e\/([^/]+)/);
+  if (!APP && m) APP = decodeURIComponent(m[1]);
+} catch (e) { /* 忽略 */ }
 try { if (APP) sessionStorage.setItem('feishu_app', APP); else APP = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
 
 document.getElementById('langBtn').textContent = zh ? 'EN' : '中文';
