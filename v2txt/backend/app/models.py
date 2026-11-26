@@ -59,6 +59,8 @@ class User(Base):
     # 长期保存刷新令牌：服务重启后仍能以用户身份操作云盘（建目录/移动）
     feishu_refresh_token: Mapped[str] = mapped_column(Text, default="")
     feishu_app_slug: Mapped[str] = mapped_column(String(40), default="")
+    # 运营后台角色：""（无）| viewer | support | finance | superadmin
+    ops_role: Mapped[str] = mapped_column(String(20), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -109,6 +111,8 @@ class Org(Base):
     # 长期保存刷新令牌：服务重启后仍能以用户身份操作云盘（建目录/移动）
     feishu_refresh_token: Mapped[str] = mapped_column(Text, default="")
     feishu_app_slug: Mapped[str] = mapped_column(String(40), default="")
+    # 运营后台角色：""（无）| viewer | support | finance | superadmin
+    ops_role: Mapped[str] = mapped_column(String(20), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

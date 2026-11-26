@@ -41,6 +41,9 @@ async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
         seed_plans(db)
     finally:
         db.close()
+    from .ops_admin import bootstrap_roles, mount_ops
+
+    bootstrap_roles()
     requeued = requeue_interrupted()
     cleaned = cleanup_expired()
     orphans = cleanup_orphan_files()
@@ -72,6 +75,15 @@ app.include_router(uploads.router)
 app.include_router(uploads_oss.router)
 app.include_router(shared.router)
 app.include_router(media.router)
+
+# 运营后台 /ops（会话鉴权 + 角色分级）
+try:
+    from .ops_admin import mount_ops
+
+    mount_ops(app)
+except Exception:  # noqa: BLE001  # 后台挂载失败不影响主站
+    logging.getLogger(__name__).exception("运营后台挂载失败")
+
 
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
