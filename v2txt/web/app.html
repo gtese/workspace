@@ -174,7 +174,7 @@
           <button class="btn small" id="detailClose">关闭</button>
         </div>
       </div>
-      <iframe id="detailFrame" style="flex:1;border:0;width:100%" title="纪要详情"></iframe>
+      <div id="detailBody" style="flex:1;overflow:auto;padding:16px 20px"></div>
     </div>
   </div>
 
@@ -603,16 +603,47 @@ const STATUS_LABEL = {
 };
 
 async function openRecord(id) {
-  const { url } = await Api.req(`/api/v1/recordings/${id}/share`);
-  // 不跳转：直接在弹层里用同源 iframe 渲染，飞书不会判定为"离开飞书"
-  $('detailFrame').src = url;
-  $('detailOpenNew').href = url;
-  $('detailOverlay').classList.remove('hide');
+  // 完全不加载外部页面：直接取数据在控制台内渲染，飞书 WebView 不会拦截
+  const overlay = $('detailOverlay');
+  const body = $('detailBody');
+  body.innerHTML = '<p class="muted small">加载中…</p>';
+  overlay.classList.remove('hide');
+  $('detailOpenNew').classList.add('hide');
+  try {
+    const d = await Api.req('/api/v1/recordings/' + id);
+    const s = d.summary || {};
+    const esc = (x) => String(x == null ? '' : x).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+    const mins = d.duration_sec ? Math.round(d.duration_sec / 60 * 10) / 10 : 0;
+    const list = (arr) => (arr || []).map((x) => `<li>${esc(typeof x === 'string' ? x : (x.item || JSON.stringify(x)))}${x && x.owner ? '（' + esc(x.owner) + '）' : ''}</li>`).join('');
+    const lines = (d.transcript || []).map((x) => `<div style="margin:6px 0"><b class="small">${esc(x.speaker || '')}</b> <span class="small">${esc(x.text || '')}</span></div>`).join('');
+    body.innerHTML = `
+      <h2 style="margin:0 0 4px">${esc(d.title)}</h2>
+      <p class="tiny muted">${fmtDate(d.created_at, true)} · ${mins} 分钟 · ${d.status}</p>
+      ${s.summary ? `<div class="card tight" style="margin:14px 0"><b class="small">摘要</b><p class="small" style="margin-top:6px">${esc(s.summary)}</p></div>` : ''}
+      ${(s.decisions || []).length ? `<b class="small">决策</b><ul class="small">${list(s.decisions)}</ul>` : ''}
+      ${(s.todos || []).length ? `<b class="small">待办</b><ul class="small">${list(s.todos)}</ul>` : ''}
+      ${(s.risks || []).length ? `<b class="small">风险</b><ul class="small">${list(s.risks)}</ul>` : ''}
+      ${lines ? `<b class="small">转写全文</b><div style="margin-top:6px">${lines}</div>` : ''}
+      <div class="row" style="margin-top:16px">
+        <button class="btn small" id="detailCopyShare">复制分享链接</button>
+        ${d.doc_url ? `<a class="btn small" href="${d.doc_url}" target="_blank" rel="noopener">飞书文档</a>` : ''}
+      </div>`;
+    const copyBtn = $('detailCopyShare');
+    copyBtn.onclick = async () => {
+      try {
+        const { url } = await Api.req('/api/v1/recordings/' + id + '/share');
+        await navigator.clipboard.writeText(url);
+        copyBtn.textContent = zh ? '已复制 ✓' : 'Copied ✓';
+      } catch (e) { toast(e.message, true); }
+    };
+  } catch (e) {
+    body.innerHTML = `<p class="small" style="color:var(--danger)">${e.message}</p>`;
+  }
 }
 
 function closeDetail() {
   $('detailOverlay').classList.add('hide');
-  $('detailFrame').src = 'about:blank';
+  $('detailBody').innerHTML = '';
 }
 
 function recordRow(r) {
