@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>V2TXT · 控制台</title>
-<link rel="stylesheet" href="/static/assets/style.css?v=20261126c">
+<link rel="preconnect" href="https://open.feishu.cn" crossorigin>
+<link rel="dns-prefetch" href="https://open.feishu.cn">
+<link rel="stylesheet" href="/static/assets/style.css?v=20261126d">
 <style>
   body { padding-bottom: 40px; }
   header.top { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
@@ -232,7 +234,7 @@ try { if (localStorage.getItem('vt_token')) { document.getElementById('gate').cl
 </div>
 
 <script src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.40.js"></script>
-<script src="/static/assets/api.js?v=20261126c"></script>
+<script src="/static/assets/api.js?v=20261126d"></script>
 <script>
 const { Api, toast, needAuth, fmtDate, fmtMin } = UI;
 const zh = Api.lang === 'zh';
@@ -247,6 +249,10 @@ try {
   const app = fromQuery || fromPath;
   if (app) sessionStorage.setItem('feishu_app', app);
 } catch (e) { /* 忽略 */ }
+const BOOT = window.__V2TXT_BOOT__ || null;
+if (BOOT && BOOT.slug) {
+  try { sessionStorage.setItem('feishu_app', BOOT.slug); } catch (e) { /* 忽略 */ }
+}
 const $ = (id) => document.getElementById(id);
 
 const T = zh ? {
@@ -272,7 +278,9 @@ async function silentFeishuLogin() {
   const ready = (cb) => { if (window.h5sdk && window.h5sdk.ready) { try { window.h5sdk.ready(cb); return; } catch (e) { /* 忽略 */ } } setTimeout(cb, 400); };
   await new Promise((r) => ready(r));
   if (!(window.tt && window.tt.requestAuthCode)) return false;
-  const cfg = await fetch('/api/v1/auth/feishu/config' + (app ? '?app=' + encodeURIComponent(app) : '')).then(r => r.json()).catch(() => null);
+  const cfg = (BOOT && BOOT.enabled)
+    ? { enabled: true, app_id: BOOT.app_id, redirect_uri: BOOT.redirect_uri }
+    : await fetch('/api/v1/auth/feishu/config' + (app ? '?app=' + encodeURIComponent(app) : '')).then(r => r.json()).catch(() => null);
   if (!cfg || !cfg.enabled) return false;
   const code = await new Promise((resolve) => {
     window.tt.requestAuthCode({ appId: cfg.app_id, success: (res) => resolve(res.code), fail: () => resolve('') });
@@ -295,6 +303,7 @@ function inFeishuClient() {
 
 /* 走飞书网页授权（一次性跳转，目标仍是被信任的飞书域名，随后回 /feishu-callback） */
 async function startOAuth() {
+  if (BOOT && BOOT.authorize_url) { location.href = BOOT.authorize_url; return; }
   let app = '';
   try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
   const cfg = await fetch('/api/v1/auth/feishu/config' + (app ? '?app=' + encodeURIComponent(app) : ''))
@@ -363,14 +372,18 @@ function showGate() {
     btn.disabled = false;
   };
 
-  fetch('/api/v1/auth/feishu/config' + (function () {
-    try {
-      const app = sessionStorage.getItem('feishu_app') || '';
-      return app ? '?app=' + encodeURIComponent(app) : '';
-    } catch (e) { return ''; }
-  })()).then((r) => r.json()).then((cfg) => {
-    if (cfg && cfg.enabled) { $('gateFeishuBox').classList.remove('hide'); }
-  }).catch(() => { /* 忽略 */ });
+  if (BOOT && BOOT.enabled) {
+    $('gateFeishuBox').classList.remove('hide');
+  } else {
+    fetch('/api/v1/auth/feishu/config' + (function () {
+      try {
+        const app = sessionStorage.getItem('feishu_app') || '';
+        return app ? '?app=' + encodeURIComponent(app) : '';
+      } catch (e) { return ''; }
+    })()).then((r) => r.json()).then((cfg) => {
+      if (cfg && cfg.enabled) { $('gateFeishuBox').classList.remove('hide'); }
+    }).catch(() => { /* 忽略 */ });
+  }
 }
 
 const authReady = (async () => {

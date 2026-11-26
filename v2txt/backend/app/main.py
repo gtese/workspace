@@ -1,9 +1,10 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import admin as admin_api
@@ -178,9 +179,61 @@ def ops_health(x_ops_token: str = Header(default="")) -> dict:
 
 NO_STORE = {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"}
 
+# 页面文件本身对所有用户一致：让 Cloudflare 边缘缓存，避免每次导航都回源（回源约 1.7s）
+PAGE_CACHE = {"Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"}
+
+_entry_cache: dict[str, tuple[float, str]] = {}
+_ENTRY_TTL = 300.0
+
 
 def _page(name: str) -> FileResponse:
-    return FileResponse(WEB_DIR / name, headers=NO_STORE)
+    return FileResponse(WEB_DIR / name, headers=PAGE_CACHE)
+
+
+def _entry_html(slug: str) -> str:
+    """企业入口页：把飞书应用配置和授权地址直接注入 HTML。
+
+    这样"点开应用 → 自动免登/自动授权"不需要任何额外的 API 往返
+    （每次往返都要穿过隧道，约 1.7 秒）。
+    """
+    now = time.time()
+    cached = _entry_cache.get(slug)
+    if cached and cached[0] > now:
+        return cached[1]
+
+    import json as _json
+
+    from .api.auth_feishu import _resolve_app
+    from .feishu_oauth import authorize_url
+
+    settings = get_settings()
+    base = settings.public_base_url.rstrip("/")
+    redirect = f"{base}/feishu-callback"
+    app_id = ""
+    if slug:
+        db = SessionLocal()
+        try:
+            app_id, _secret = _resolve_app(db, slug)
+        except Exception:  # noqa: BLE001  # 应用不存在时按未启用处理
+            app_id = ""
+        finally:
+            db.close()
+    else:
+        app_id = settings.feishu_app_id
+
+    boot = {
+        "slug": slug,
+        "app_id": app_id,
+        "enabled": bool(app_id),
+        "redirect_uri": redirect,
+        "authorize_url": authorize_url(redirect, app_id=app_id) if app_id else "",
+        "site_name": settings.site_name,
+    }
+    template = (WEB_DIR / "app.html").read_text(encoding="utf-8")
+    inject = "<script>window.__V2TXT_BOOT__=" + _json.dumps(boot, ensure_ascii=False) + ";</script>"
+    html = template.replace("</head>", inject + "</head>", 1)
+    _entry_cache[slug] = (now + _ENTRY_TTL, html)
+    return html
 
 
 @app.get("/", include_in_schema=False)
@@ -201,8 +254,9 @@ def enterprise_entry(slug: str) -> FileResponse:  # noqa: ARG001
     直接渲染控制台（app.html 内部自带登录门：未登录时在页面内展示登录表单，登录成功
     reload 同一个 URL），因此"点开应用 → 登录 → 进控制台"全程**同一个 URL、零跳转**，
     飞书不会把任何一步判成"离开飞书"的外链。
+    飞书应用配置与授权地址在服务端注入，免登/授权不需要额外的 API 往返。
     """
-    return _page("app.html")
+    return HTMLResponse(_entry_html(slug), headers=PAGE_CACHE)
 
 
 @app.get("/login", include_in_schema=False)
@@ -212,7 +266,7 @@ def login_page(app: str = "") -> FileResponse:
     带 app 参数时按"企业入口"处理，直接给控制台（页内登录门），
     保证老地址也能享受零跳转体验；不带参数才是普通登录页。
     """
-    return _page("app.html" if app else "auth.html")
+    return HTMLResponse(_entry_html(app), headers=PAGE_CACHE) if app else _page("auth.html")
 
 
 @app.get("/register", include_in_schema=False)
