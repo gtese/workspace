@@ -103,7 +103,7 @@ async def static_cache(request, call_next):  # noqa: ANN001, ANN201
     return response
 
 
-_PAGE_LOG_PREFIXES = ("/e/", "/app", "/login", "/diag", "/feishu-callback", "/home", "/register")
+_PAGE_LOG_PREFIXES = ("/e/", "/app", "/login", "/diag", "/feishu-callback", "/home", "/register", "/open")
 
 
 @app.middleware("http")
@@ -115,10 +115,11 @@ async def page_ua_log(request, call_next):  # noqa: ANN001, ANN201
         ua = request.headers.get("user-agent", "")
         in_feishu = any(k in ua for k in ("Lark", "Feishu", "feishu", "lark"))
         logging.getLogger(__name__).info(
-            "PAGE %s%s in_feishu=%s ua=%s",
+            "PAGE %s%s in_feishu=%s ref=%s ua=%s",
             path,
             ("?" + request.url.query) if request.url.query else "",
             in_feishu,
+            request.headers.get("referer", "-")[:120],
             ua[:140],
         )
     return response
@@ -242,6 +243,30 @@ def feishu_callback_page() -> FileResponse:
 @app.get("/join", include_in_schema=False)
 def join_page() -> FileResponse:
     return _page("auth.html")
+
+
+@app.get("/open", include_in_schema=False)
+def open_in_feishu(app: str = "") -> RedirectResponse:
+    """用飞书 AppLink 打开网页应用：即使当前在系统浏览器里，也能跳回飞书端内。
+
+    这是绕开"飞书把入口 URL 当外链丢给浏览器"的官方通道：
+    https://open.feishu.cn/document/uAjLw4CM/uYjL24iN/applink-protocol/supported-protocol/open-an-h5-app
+    """
+    app_id = ""
+    if app:
+        from .models import FeishuApp
+
+        db = SessionLocal()
+        try:
+            row = db.query(FeishuApp).filter(FeishuApp.slug == app, FeishuApp.enabled.is_(True)).first()
+            app_id = row.app_id if row else ""
+        finally:
+            db.close()
+    app_id = app_id or get_settings().feishu_app_id
+    if not app_id:
+        raise HTTPException(status_code=404, detail="Not Found")
+    url = f"https://applink.feishu.cn/client/web_app/open?appId={app_id}&mode=appCenter"
+    return RedirectResponse(url=url, status_code=302, headers=NO_STORE)
 
 
 @app.get("/app", include_in_schema=False)

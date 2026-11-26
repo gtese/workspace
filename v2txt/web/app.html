@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>V2TXT · 控制台</title>
-<link rel="stylesheet" href="/static/assets/style.css?v=20261126b">
+<link rel="stylesheet" href="/static/assets/style.css?v=20261126c">
 <style>
   body { padding-bottom: 40px; }
   header.top { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
@@ -44,6 +44,10 @@
       <input id="gatePass" type="password" required autocomplete="current-password" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:11px 13px;border:1px solid #dcdfe6;border-radius:10px;font-size:15px;background:#fff;color:#1f2329">
       <button class="btn block" id="gateBtn" type="submit">登录</button>
     </form>
+    <div id="gateOpenBox" class="hide" style="margin-bottom:14px">
+      <a class="btn block" id="gateOpen" href="/open">在飞书中打开</a>
+      <div style="font-size:12px;color:#8f959e;margin-top:6px;text-align:center" id="gateOpenHint"></div>
+    </div>
     <div id="gateFeishuBox" class="hide" style="margin-top:12px">
       <button class="btn block ghost" id="gateFeishu" type="button">飞书登录</button>
     </div>
@@ -228,7 +232,7 @@ try { if (localStorage.getItem('vt_token')) { document.getElementById('gate').cl
 </div>
 
 <script src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.40.js"></script>
-<script src="/static/assets/api.js?v=20261126b"></script>
+<script src="/static/assets/api.js?v=20261126c"></script>
 <script>
 const { Api, toast, needAuth, fmtDate, fmtMin } = UI;
 const zh = Api.lang === 'zh';
@@ -315,6 +319,16 @@ function showGate() {
   $('gateFeishu').textContent = zh ? '飞书登录' : 'Sign in with Feishu';
   $('gateReg').textContent = zh ? '注册账号' : 'Create account';
   $('gateForgot').textContent = zh ? '忘记密码' : 'Forgot password';
+
+  // 在系统浏览器里打开时（飞书把链接丢出来了）：给一个官方 AppLink 拉回飞书端内
+  if (!inFeishuClient()) {
+    let app = '';
+    try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
+    $('gateOpen').href = '/open' + (app ? '?app=' + encodeURIComponent(app) : '');
+    $('gateOpen').textContent = zh ? '在飞书中打开' : 'Open in Feishu';
+    $('gateOpenHint').textContent = zh ? '当前在浏览器中，点上面按钮回到飞书里使用' : 'You are in a browser — tap above to continue inside Feishu';
+    $('gateOpenBox').classList.remove('hide');
+  }
 
   $('gateForm').onsubmit = async (e) => {
     e.preventDefault();
