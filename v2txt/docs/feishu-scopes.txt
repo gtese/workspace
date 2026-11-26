@@ -1,0 +1,9 @@
+offline_access
+contact:user.base:readonly
+contact:user.email:readonly
+contact:user.employee_id:readonly
+tenant:tenant:readonly
+drive:drive
+docx:document
+im:message
+im:message:send_as_bot
