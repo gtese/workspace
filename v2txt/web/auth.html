@@ -240,6 +240,7 @@ async function postFeishuCode(code, redirectUri) {
   });
   Api.setToken(data.token);
   Api.setOrg(data.team_org_id || data.org_id || data.user.default_org_id || '');
+  try { sessionStorage.removeItem('feishu_oauth_fallback'); } catch (x) { /* 忽略 */ }
   location.href = qs.get('next') || '/app';
 }
 
@@ -262,7 +263,20 @@ async function feishuLogin() {
         try { await postFeishuCode(res.code, ''); }
         catch (ex) { err(ex.message); }
       },
-      fail: (e) => { err((zh ? '飞书授权失败：' : 'Feishu auth failed: ') + JSON.stringify(e || {}).slice(0, 200)); },
+      fail: async (e) => {
+        const msg = JSON.stringify(e || {}).slice(0, 300);
+        console.warn('requestAuthCode 失败，回退 OAuth', msg);
+        let already = '0';
+        try { already = sessionStorage.getItem('feishu_oauth_fallback') || '0'; } catch (x) { /* 忽略 */ }
+        if (already === '1') { err((zh ? '飞书授权失败：' : 'Feishu auth failed: ') + msg); return; }
+        try { sessionStorage.setItem('feishu_oauth_fallback', '1'); } catch (x) { /* 忽略 */ }
+        try {
+          const r = await fetch('/api/v1/auth/feishu/authorize-url?redirect_uri=' + encodeURIComponent(redirect) + (APP ? '&app=' + encodeURIComponent(APP) : ''));
+          const data = await r.json();
+          if (r.ok && data.url) { location.href = data.url; return; }
+        } catch (x) { /* 忽略 */ }
+        err((zh ? '飞书授权失败：' : 'Feishu auth failed: ') + msg);
+      },
     });
     return;
   }
