@@ -15,7 +15,7 @@ from ..accounts import issue_login_session, normalize_email
 from ..billing import grant_signup_bonus
 from ..config import get_settings
 from ..db import get_db
-from ..models import Membership, Org, User, utcnow
+from ..models import FeishuApp, Membership, Org, User, utcnow
 from ..ratelimit import enforce
 from ..user_tokens import put as put_user_token
 from .auth_users import _client, user_dict
@@ -28,6 +28,18 @@ router = APIRouter(prefix="/api/v1", tags=["feishu-auth"])
 class FeishuLoginIn(BaseModel):
     code: str = Field(max_length=500)
     redirect_uri: str = Field(default="", max_length=300)
+    app: str = Field(default="", max_length=40)
+
+
+def _resolve_app(db: Session, slug: str = "") -> tuple[str, str]:
+    """按 slug 找企业自己的飞书应用；为空则用平台默认应用。"""
+    if slug:
+        row = db.scalars(select(FeishuApp).where(FeishuApp.slug == slug, FeishuApp.enabled)).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="该企业的飞书应用不存在")
+        return row.app_id, row.app_secret
+    s = get_settings()
+    return s.feishu_app_id, s.feishu_app_secret
 
 
 def _feishu_enabled() -> bool:
@@ -39,13 +51,15 @@ def _placeholder_email(open_id: str) -> str:
     return f"{open_id}@feishu.local"
 
 
-def _team_for_tenant(db: Session, tenant_key: str, owner: User) -> Org:
+def _team_for_tenant(
+    db: Session, tenant_key: str, owner: User, app_id: str = "", app_secret: str = ""
+) -> Org:
     org = db.scalars(select(Org).where(Org.feishu_tenant_key == tenant_key)).first()
     if org is not None:
         return org
     name = ""
     if tenant_key:
-        info = feishu_oauth.tenant_info()
+        info = feishu_oauth.tenant_info(app_id, app_secret)
         name = (info.get("name") or info.get("display_name") or "").strip()
     org = Org(
         name=name or "飞书团队",
@@ -63,35 +77,52 @@ def _team_for_tenant(db: Session, tenant_key: str, owner: User) -> Org:
 
 
 @router.get("/auth/feishu/config")
-def feishu_config() -> dict:
+def feishu_config(app: str = "", db: Session = Depends(get_db)) -> dict:
     s = get_settings()
     base = s.public_base_url.rstrip("/")
+    if not app:
+        return {
+            "enabled": _feishu_enabled(),
+            "app_id": s.feishu_app_id if _feishu_enabled() else "",
+            "redirect_uri": f"{base}/feishu-callback",
+        }
+    try:
+        app_id, _ = _resolve_app(db, app)
+    except HTTPException:
+        return {"enabled": False, "app_id": "", "redirect_uri": f"{base}/feishu-callback", "app": app}
     return {
-        "enabled": _feishu_enabled(),
-        "app_id": s.feishu_app_id if _feishu_enabled() else "",
+        "enabled": bool(app_id),
+        "app_id": app_id,
+        "app": app,
         # 授权与换 token 必须使用同一个 redirect_uri，统一由服务端下发
         "redirect_uri": f"{base}/feishu-callback",
     }
 
 
 @router.get("/auth/feishu/authorize-url")
-def feishu_authorize_url(redirect_uri: str = "") -> dict:
-    if not _feishu_enabled():
+def feishu_authorize_url(
+    redirect_uri: str = "", app: str = "", db: Session = Depends(get_db)
+) -> dict:
+    if not app and not _feishu_enabled():
+        raise HTTPException(status_code=400, detail="飞书登录未启用")
+    app_id, _ = _resolve_app(db, app)
+    if not app_id:
         raise HTTPException(status_code=400, detail="飞书登录未启用")
     target = redirect_uri or f"{get_settings().public_base_url.rstrip('/')}/feishu-callback"
-    return {"url": feishu_oauth.authorize_url(target), "redirect_uri": target}
+    return {"url": feishu_oauth.authorize_url(target, app_id=app_id), "redirect_uri": target}
 
 
 @router.post("/auth/feishu")
 def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(get_db)) -> dict:
     settings = get_settings()
-    if not _feishu_enabled():
+    app_id, app_secret = _resolve_app(db, body.app)
+    if not (app_id and app_secret):
         raise HTTPException(status_code=400, detail="飞书登录未启用")
     ip, ua = _client(request)
     enforce(ip or "anon", "auth_login")
 
     try:
-        token_data = feishu_oauth.exchange_code(body.code, body.redirect_uri)
+        token_data = feishu_oauth.exchange_code(body.code, body.redirect_uri, app_id, app_secret)
         info = feishu_oauth.user_info(token_data["access_token"])
     except feishu_oauth.FeishuError as exc:
         audit.record(db, "auth.feishu.failed", request=request, result="fail",
@@ -109,6 +140,8 @@ def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(ge
         user = db.scalars(select(User).where(User.email == email)).first()
         if user is not None:
             user.feishu_open_id = open_id
+            if body.app:
+                user.feishu_app_slug = body.app
             user.feishu_union_id = union_id
             user.feishu_tenant_key = tenant_key
             db.commit()
@@ -132,7 +165,7 @@ def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(ge
         raise HTTPException(status_code=403, detail="账号已被停用，请联系客服")
 
     if tenant_key:
-        org = _team_for_tenant(db, tenant_key, user)
+        org = _team_for_tenant(db, tenant_key, user, app_id, app_secret)
         member = db.scalars(
             select(Membership).where(Membership.org_id == org.id, Membership.user_id == user.id)
         ).first()
@@ -143,10 +176,12 @@ def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(ge
     elif user.default_org_id:
         org = db.get(Org, user.default_org_id)
     else:
-        org = _team_for_tenant(db, "", user)
+        org = _team_for_tenant(db, "", user, app_id, app_secret)
         user.default_org_id = org.id
 
     user.feishu_open_id = open_id
+    if body.app:
+        user.feishu_app_slug = body.app
     user.feishu_union_id = union_id or user.feishu_union_id
     user.feishu_tenant_key = tenant_key or user.feishu_tenant_key
     if name and not user.name:

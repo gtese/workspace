@@ -16,10 +16,12 @@ ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("feishu_union_id", "VARCHAR(64) DEFAULT ''"),
         ("feishu_tenant_key", "VARCHAR(64) DEFAULT ''"),
         ("feishu_refresh_token", "TEXT DEFAULT ''"),
+        ("feishu_app_slug", "VARCHAR(40) DEFAULT ''"),
     ],
     "orgs": [
         ("feishu_tenant_key", "VARCHAR(64) DEFAULT ''"),
         ("feishu_refresh_token", "TEXT DEFAULT ''"),
+        ("feishu_app_slug", "VARCHAR(40) DEFAULT ''"),
     ],
     "recordings": [
         ("org_id", "VARCHAR(32) DEFAULT ''"),

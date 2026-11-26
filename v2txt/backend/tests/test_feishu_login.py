@@ -18,9 +18,17 @@ def _enable(monkeypatch, *, user: dict, tenant: str = "测试企业") -> None:
         update={"feishu_mode": "real", "feishu_app_id": "cli_test", "feishu_app_secret": "sec"}
     )
     monkeypatch.setattr(fs_mod, "get_settings", lambda: settings)
-    monkeypatch.setattr(fs_mod.feishu_oauth, "exchange_code", lambda code, redirect_uri="": {"access_token": "u-token"})
+    monkeypatch.setattr(
+        fs_mod.feishu_oauth,
+        "exchange_code",
+        lambda code, redirect_uri="", app_id="", app_secret="": {"access_token": "u-token"},
+    )
     monkeypatch.setattr(fs_mod.feishu_oauth, "user_info", lambda token: user)
-    monkeypatch.setattr(fs_mod.feishu_oauth, "tenant_info", lambda: {"name": tenant, "display_name": tenant})
+    monkeypatch.setattr(
+        fs_mod.feishu_oauth,
+        "tenant_info",
+        lambda app_id="", app_secret="": {"name": tenant, "display_name": tenant},
+    )
 
 
 def _login(client: TestClient) -> dict:

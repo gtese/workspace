@@ -58,6 +58,7 @@ class User(Base):
     feishu_tenant_key: Mapped[str] = mapped_column(String(64), default="", index=True)
     # 长期保存刷新令牌：服务重启后仍能以用户身份操作云盘（建目录/移动）
     feishu_refresh_token: Mapped[str] = mapped_column(Text, default="")
+    feishu_app_slug: Mapped[str] = mapped_column(String(40), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -107,6 +108,7 @@ class Org(Base):
     feishu_tenant_key: Mapped[str] = mapped_column(String(64), default="", index=True)
     # 长期保存刷新令牌：服务重启后仍能以用户身份操作云盘（建目录/移动）
     feishu_refresh_token: Mapped[str] = mapped_column(Text, default="")
+    feishu_app_slug: Mapped[str] = mapped_column(String(40), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -360,6 +362,20 @@ class SpeakerName(Base):
     )
     speaker: Mapped[str] = mapped_column(String(20))
     name: Mapped[str] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class FeishuApp(Base):
+    """每个企业客户一套飞书自建应用凭据；用 slug 区分登录入口。"""
+
+    __tablename__ = "feishu_apps"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: new_id("fap_"))
+    slug: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    app_id: Mapped[str] = mapped_column(String(64), default="")
+    app_secret: Mapped[str] = mapped_column(String(200), default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

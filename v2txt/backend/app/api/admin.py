@@ -32,6 +32,13 @@ from .deps import require_platform_admin
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 
+class FeishuAppIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    app_id: str = Field(min_length=5, max_length=64)
+    app_secret: str = Field(min_length=8, max_length=200)
+    slug: str = Field(default="", max_length=40)
+
+
 class StatusIn(BaseModel):
     status: str
     reason: str = ""
@@ -303,6 +310,48 @@ def usage_report(
         )
     items.sort(key=lambda x: x["minutes"], reverse=True)
     return {"days": days, "items": items}
+
+
+@router.post("/feishu-apps")
+def create_feishu_app(
+    body: FeishuAppIn,
+    admin: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """登记一个企业客户的飞书自建应用，返回该企业的专属登录地址。"""
+    from ..models import FeishuApp
+
+    slug = (body.slug or "").strip()
+    if not slug:
+        slug = body.app_id[-6:].lower()
+    if db.scalars(select(FeishuApp).where(FeishuApp.slug == slug)).first() is not None:
+        raise HTTPException(status_code=409, detail="slug 已存在")
+    row = FeishuApp(slug=slug, name=body.name.strip(), app_id=body.app_id.strip(),
+                    app_secret=body.app_secret.strip())
+    db.add(row)
+    db.commit()
+    audit.record(db, "admin.feishu_app.create", user_id=admin.id, actor=admin.email,
+                 target=slug, detail={"name": row.name, "app_id": row.app_id})
+    base = get_settings().public_base_url.rstrip("/")
+    return {"id": row.id, "slug": slug, "name": row.name,
+            "login_url": f"{base}/login?app={slug}"}
+
+
+@router.get("/feishu-apps")
+def list_feishu_apps(
+    admin: User = Depends(require_platform_admin), db: Session = Depends(get_db)
+) -> dict:
+    from ..models import FeishuApp
+
+    base = get_settings().public_base_url.rstrip("/")
+    rows = db.scalars(select(FeishuApp).order_by(FeishuApp.created_at.desc())).all()
+    return {
+        "items": [
+            {"slug": r.slug, "name": r.name, "app_id": r.app_id, "enabled": r.enabled,
+             "login_url": f"{base}/login?app={r.slug}"}
+            for r in rows
+        ]
+    }
 
 
 @router.get("/events")
