@@ -103,6 +103,27 @@ async def static_cache(request, call_next):  # noqa: ANN001, ANN201
     return response
 
 
+_PAGE_LOG_PREFIXES = ("/e/", "/app", "/login", "/diag", "/feishu-callback", "/home", "/register")
+
+
+@app.middleware("http")
+async def page_ua_log(request, call_next):  # noqa: ANN001, ANN201
+    """记录页面请求的 UA：排查"在飞书内还是在浏览器打开"时唯一可靠的证据。"""
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.startswith(_PAGE_LOG_PREFIXES):
+        ua = request.headers.get("user-agent", "")
+        in_feishu = any(k in ua for k in ("Lark", "Feishu", "feishu", "lark"))
+        logging.getLogger(__name__).info(
+            "PAGE %s%s in_feishu=%s ua=%s",
+            path,
+            ("?" + request.url.query) if request.url.query else "",
+            in_feishu,
+            ua[:140],
+        )
+    return response
+
+
 @app.get("/health", response_model=HealthOut)
 def health() -> HealthOut:
     s = get_settings()
@@ -184,8 +205,13 @@ def enterprise_entry(slug: str) -> FileResponse:  # noqa: ARG001
 
 
 @app.get("/login", include_in_schema=False)
-def login_page() -> FileResponse:
-    return _page("auth.html")
+def login_page(app: str = "") -> FileResponse:
+    """`/login?app=<slug>` 是历史入口地址（旧版本飞书应用主页用过它）。
+
+    带 app 参数时按"企业入口"处理，直接给控制台（页内登录门），
+    保证老地址也能享受零跳转体验；不带参数才是普通登录页。
+    """
+    return _page("app.html" if app else "auth.html")
 
 
 @app.get("/register", include_in_schema=False)
