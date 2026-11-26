@@ -165,6 +165,19 @@
     </div>
   </section>
 
+  <div id="detailOverlay" class="hide" style="position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:50;display:flex;align-items:center;justify-content:center;padding:12px">
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:920px;height:88vh;display:flex;flex-direction:column;overflow:hidden">
+      <div class="spread" style="padding:12px 16px;border-bottom:1px solid var(--line)">
+        <b id="detailTitle">纪要详情</b>
+        <div class="row">
+          <a class="btn small" id="detailOpenNew" target="_blank" rel="noopener">新窗口打开</a>
+          <button class="btn small" id="detailClose">关闭</button>
+        </div>
+      </div>
+      <iframe id="detailFrame" style="flex:1;border:0;width:100%" title="纪要详情"></iframe>
+    </div>
+  </div>
+
   <!-- 设置 -->
   <section id="view-settings" class="hide">
     <div class="grid2">
@@ -591,8 +604,15 @@ const STATUS_LABEL = {
 
 async function openRecord(id) {
   const { url } = await Api.req(`/api/v1/recordings/${id}/share`);
-  // 同窗口跳转：window.open 会被飞书 WebView 判定为"离开飞书"
-  location.assign(url);
+  // 不跳转：直接在弹层里用同源 iframe 渲染，飞书不会判定为"离开飞书"
+  $('detailFrame').src = url;
+  $('detailOpenNew').href = url;
+  $('detailOverlay').classList.remove('hide');
+}
+
+function closeDetail() {
+  $('detailOverlay').classList.add('hide');
+  $('detailFrame').src = 'about:blank';
 }
 
 function recordRow(r) {
@@ -900,6 +920,8 @@ $('changePass').onclick = async () => {
 };
 
 /* ------------------------------------------------ 初始化 */
+$('detailClose').onclick = closeDetail;
+$('detailOverlay').addEventListener('click', (e) => { if (e.target.id === 'detailOverlay') closeDetail(); });
 $('langBtn').textContent = zh ? 'EN' : '中文';
 $('langBtn').onclick = () => Api.setLang(zh ? 'en' : 'zh');
 $('logoutBtn').onclick = async () => {
