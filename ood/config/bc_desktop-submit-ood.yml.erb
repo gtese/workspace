@@ -4,7 +4,7 @@ batch_connect:
 cluster: "tricluster"
 <%
   node = bc_node.present? ? bc_node.to_s : "151"
-  partition = node == "150" ? "eda" : "eda15x"
+  partition = node == "154" ? "node154" : "eda15x"
 %>
 script:
   native:

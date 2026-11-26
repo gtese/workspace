@@ -1,0 +1,70 @@
+/* TRI EDA OOD 统一主题：字体、导航、表格与按钮保持一致 */
+:root {
+  --tri-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --tri-nav-bg: #4b5563;
+  --tri-nav-active: rgba(255, 255, 255, 0.14);
+  --tri-border: #e5e7eb;
+  --tri-muted: #6b7280;
+}
+
+html, body, button, input, select, textarea, .btn, .navbar, .table, .card, .dropdown-menu {
+  font-family: var(--tri-font) !important;
+}
+
+body {
+  color: #1f2937;
+}
+
+/* 顶部导航统一为同一深灰色，当前页/悬停高亮一致 */
+.navbar-dark,
+.navbar.bg-dark {
+  background-color: var(--tri-nav-bg) !important;
+}
+.navbar-dark .navbar-nav .nav-link {
+  color: rgba(255, 255, 255, 0.88) !important;
+  border-radius: 0.25rem;
+}
+.navbar-dark .navbar-nav .nav-link:hover,
+.navbar-dark .navbar-nav .nav-link:focus,
+.navbar-dark .navbar-nav .nav-item.show > .nav-link,
+.navbar-dark .navbar-nav .nav-link.active {
+  color: #fff !important;
+  background-color: var(--tri-nav-active) !important;
+}
+.navbar-brand {
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+}
+
+/* 表格/卡片/按钮统一 */
+.table thead th {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #4b5563;
+  border-bottom: 2px solid var(--tri-border);
+}
+.table td, .table th {
+  vertical-align: middle;
+}
+.card {
+  border: 1px solid var(--tri-border);
+  border-radius: 0.5rem;
+}
+.btn {
+  border-radius: 0.35rem;
+}
+.btn-primary {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+/* 页面主标题统一 */
+.content > h1, .content > h2 {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+footer {
+  color: var(--tri-muted);
+  font-size: 0.82rem;
+}

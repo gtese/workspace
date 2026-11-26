@@ -1,0 +1,6 @@
+# ============================================================================
+# OOD 节点隔离应用专用 sudo 规则（安装到 /etc/sudoers.d/ood-node-isolation）
+# 只允许管理员组通过固定的 root 执行器操作，参数由执行器二次校验
+# ============================================================================
+%group_support ALL=(root) NOPASSWD: /usr/local/sbin/node-isolationctl status, /usr/local/sbin/node-isolationctl audit *, /usr/local/sbin/node-isolationctl isolate *, /usr/local/sbin/node-isolationctl release *
+%group_roots   ALL=(root) NOPASSWD: /usr/local/sbin/node-isolationctl status, /usr/local/sbin/node-isolationctl audit *, /usr/local/sbin/node-isolationctl isolate *, /usr/local/sbin/node-isolationctl release *

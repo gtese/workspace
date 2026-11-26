@@ -1,21 +1,23 @@
 # Slurm 项目资料
 
-> 集群：tricluster ｜ 控制节点 trivm123 ｜ 计算节点 eda151-155
+> 集群：tricluster ｜ 控制节点 trivm123 ｜ 计算节点 eda150-155（131-133 已移除）
 
 ## 1. 当前架构
 
 | 角色 | 主机 | IP | 说明 |
 |---|---|---|---|
 | 控制/提交 | trivm123 | 172.16.50.123 | slurmctld / slurmdbd / OOD |
-| 计算节点 | eda151-155 | 172.16.50.151-155 | 112 核 / 1900 GB、单机 2 TB 级内存 |
+| 计算节点 | eda150 | 172.16.50.150 | 384 核 / 400 GB |
+| 计算节点 | eda151-155 | 172.16.50.151-155 | 112 核 / 1900 GB（154 为 group_dedv 独占）|
 
 分区：
 
 ```text
-eda15x  Default=YES  Nodes=172.16.50.[151-155]
+eda15x  Default=YES  Nodes=172.16.50.[150-153,155]
+node154             Nodes=172.16.50.154  AllowGroups=group_dedv
 ```
 
-> 老节点 131-133、150 仍保留在兼容分区 `eda`，但新作业默认进入 `eda15x`。
+> 131-133 已从 Slurm 移除，`eda` 分区已删除；150 已并入 `eda15x`。154 仅 `group_dedv` 可提交。
 
 ## 2. 手册
 
@@ -26,6 +28,7 @@ eda15x  Default=YES  Nodes=172.16.50.[151-155]
 | [提交作业指南](docs/06-提交作业指南.md) | EDA 作业示例与错误处理 |
 | [Innovus 图形界面脚本注释指南](docs/08-Innovus图形界面脚本注释指南.md) | `innovus-gui-15x.sh` 逐段注解、参数速查、排错、二次开发 |
 | [配置文件说明](docs/04-配置文件.md) | slurm.conf、cgroup、OOD、SELinux、防火墙 |
+| [2026-11-26 节点与分区调整](docs/2026-11-26-节点与分区调整.md) | 移除 131-133、删除 eda、150 并入 eda15x、作业影响说明 |
 | [Slurm 与 OOD 用户操作手册](../ood/docs/Slurm与OOD用户操作手册.md) | 登录、命令行作业、GUI 桌面、FAQ |
 
 根目录 [README](../README.md) 和 `docs/` 下还有安装、管理、故障案例等完整文档。
@@ -78,3 +81,5 @@ scontrol reconfigure
 - 2026-11-09：默认分区切换为 `eda15x`
 - 2026-11-09：分区合并为 `eda` 与 `eda15x`
 - 2026-11-11：OOD 桌面和节点选择完善
+- 2026-11-25：154 建立 `node154` 独占分区（仅 group_dedv）
+- 2026-11-26：移除 131-133、删除 `eda` 分区；150 并入 `eda15x`。变更期间原有运行作业被取消，后续须先排空队列并确认

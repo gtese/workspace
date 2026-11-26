@@ -1,0 +1,34 @@
+{
+  "admin_groups": [
+    "group_support",
+    "group_roots"
+  ],
+  "managed_nodes": [
+    "172.16.50.150",
+    "172.16.50.151",
+    "172.16.50.152",
+    "172.16.50.153",
+    "172.16.50.154",
+    "172.16.50.155"
+  ],
+  "home_partition": {
+    "172.16.50.150": "eda15x",
+    "172.16.50.151": "eda15x",
+    "172.16.50.152": "eda15x",
+    "172.16.50.153": "eda15x",
+    "172.16.50.154": "eda15x",
+    "172.16.50.155": "eda15x"
+  },
+  "isolation_partition_prefix": "iso_",
+  "max_time": "5-08:00:00",
+  "allowed_groups": [
+    "group_dedv",
+    "group_support",
+    "group_roots",
+    "group_allstaffs",
+    "group_be_all",
+    "group_de_all",
+    "group_dv_all",
+    "group_driver_all"
+  ]
+}

@@ -1,0 +1,2 @@
+# OOD job actions helper (helper performs ownership/admin checks itself)
+ALL ALL=(root) NOPASSWD: /usr/local/sbin/ood-jobctl

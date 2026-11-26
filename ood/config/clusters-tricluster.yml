@@ -35,4 +35,4 @@ v2:
     max_nodes: 4
     partitions:
       - eda15x
-      - eda
+      - node154

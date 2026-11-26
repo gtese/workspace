@@ -1,0 +1,8 @@
+---
+name: Node Isolation
+category: Apps
+icon: fa://lock
+description: |-
+  Isolate a compute node to a specific user group by moving it out of shared
+  partitions into a dedicated partition with AllowGroups. Running jobs are not
+  interrupted.

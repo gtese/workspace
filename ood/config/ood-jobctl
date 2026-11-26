@@ -1,0 +1,69 @@
+#!/bin/bash
+# OOD job action helper (root). Called by the dashboard via sudo -n.
+# Actions: stop (scancel job) | delete (remove finished job accounting record)
+set -u
+ACTION="${1:-}"
+JOB="${2:-}"
+
+if [[ ! "$JOB" =~ ^[0-9]+$ ]]; then
+  echo "invalid job id" >&2
+  exit 2
+fi
+
+CALLER="${SUDO_USER:-$(id -un)}"
+
+is_admin() {
+  id -nG "$CALLER" 2>/dev/null | tr ' ' '\n' | grep -qxE 'root|group_roots|group_support'
+}
+
+job_owner() {
+  local owner
+  owner=$(scontrol show job "$JOB" 2>/dev/null | sed -n 's/.*UserId=\([^ ]*\).*/\1/p' | cut -d'(' -f1)
+  if [[ -z "$owner" ]]; then
+    owner=$(sacct -n -X -j "$JOB" -o User 2>/dev/null | awk 'NF {print $1; exit}')
+  fi
+  printf '%s' "$owner"
+}
+
+job_state() {
+  local st
+  st=$(scontrol show job "$JOB" 2>/dev/null | sed -n 's/.*JobState=\([^ ]*\).*/\1/p')
+  [[ -z "$st" ]] && st=$(sacct -n -X -j "$JOB" -o State 2>/dev/null | awk 'NF {print $1; exit}')
+  printf '%s' "$st"
+}
+
+OWNER=$(job_owner)
+STATE=$(job_state)
+
+if ! is_admin && [[ "$OWNER" != "$CALLER" ]]; then
+  echo "permission denied: job $JOB belongs to ${OWNER:-unknown}, caller=$CALLER" >&2
+  exit 3
+fi
+
+case "$ACTION" in
+  stop)
+    if [[ -z "$OWNER" ]]; then
+      echo "job $JOB not found" >&2
+      exit 4
+    fi
+    exec scancel "$JOB"
+    ;;
+  delete)
+    if [[ -z "$OWNER" ]]; then
+      echo "job $JOB not found in accounting" >&2
+      exit 4
+    fi
+    # Delete = cancel if still active, then remove the accounting record.
+    case "${STATE^^}" in
+      RUNNING|PENDING|CONFIGURING|COMPLETING|SUSPENDED)
+        scancel "$JOB" || true
+        sleep 2
+        ;;
+    esac
+    exec sacctmgr -i delete job "$JOB"
+    ;;
+  *)
+    echo "usage: $0 stop|delete <jobid>" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,578 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+node-isolationctl — 节点隔离（把某个节点单独划成一个只对指定组开放的分区）
+
+部署位置: /usr/local/sbin/node-isolationctl   (root:root 0755)
+调用方式: OOD 图形界面 -> sudo -n node-isolationctl <action> ...
+         也可以直接在控制节点 root 下手动执行。
+
+机制（Slurm 20.11 没有节点级 ACL，只有分区级 AllowGroups）:
+  * 隔离  = 1) 把节点从所有“共享分区”的 Nodes 列表里摘掉
+            2) 单建一个只含该节点的分区，并加 AllowGroups=<组>
+  * 解除  = 反向：删除该独占分区，把节点加回 home 分区
+  * 只做 scontrol update/create/delete + reconfigure，不重启任何服务，
+    不 drain、不杀作业；正在运行的作业继续跑完。
+
+子命令:
+  status                                -> JSON，供 Web 界面展示
+  isolate <node> <group> [--dry-run]    -> 隔离（幂等）
+  release <node> [--dry-run]            -> 解除隔离（幂等）
+  groups                                -> JSON，可选的组列表
+  audit [N]                             -> JSON，最近 N 条操作审计
+
+通用参数:
+  --conf PATH       默认 /etc/slurm/slurm.conf
+  --config PATH     默认 /etc/node-isolation/config.json
+  --dry-run         只渲染改动并打印 diff / 将执行的命令，不做任何写入
+"""
+
+import difflib
+import grp
+import json
+import os
+import pwd
+import re
+import shutil
+import subprocess
+import sys
+import time
+import tempfile
+
+CONF_DEFAULT = "/etc/slurm/slurm.conf"
+CFG_DEFAULT = "/etc/node-isolation/config.json"
+AUDIT_LOG = "/var/log/node-isolation/audit.log"
+SCONTROL = "/usr/bin/scontrol"
+GROUP_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+
+
+# --------------------------------------------------------------------------
+# 小工具
+# --------------------------------------------------------------------------
+def die(msg, code=2):
+    print(json.dumps({"ok": False, "error": msg}, ensure_ascii=False))
+    sys.exit(code)
+
+
+def run(cmd, check=True):
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    if check and p.returncode != 0:
+        raise RuntimeError("命令失败: %s\n%s%s" % (" ".join(cmd), p.stdout, p.stderr))
+    return p
+
+
+def split_top(s):
+    out, cur, depth = [], "", 0
+    for ch in s:
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    out.append(cur)
+    return [x for x in out if x]
+
+
+def expand_nodes(token):
+    items = []
+    for piece in split_top(token):
+        m = re.match(r"^(.*)\[([0-9,\-]+)\]$", piece)
+        if not m:
+            items.append(piece)
+            continue
+        prefix, body = m.groups()
+        for chunk in body.split(","):
+            if "-" in chunk:
+                a, b = chunk.split("-", 1)
+                items += ["%s%0*d" % (prefix, len(a), i) for i in range(int(a), int(b) + 1)]
+            elif chunk:
+                items.append(prefix + chunk)
+    return items
+
+
+# --------------------------------------------------------------------------
+# 配置 / 状态
+# --------------------------------------------------------------------------
+class Config(object):
+    def __init__(self, path):
+        if not os.path.exists(path):
+            die("找不到配置文件 %s" % path)
+        with open(path, encoding="utf-8") as f:
+            self.data = json.load(f)
+        self.admin_groups = self.data.get("admin_groups", [])
+        self.managed_nodes = self.data.get("managed_nodes", [])
+        self.home_partition = self.data.get("home_partition", {})
+        self.allowed_groups = self.data.get("allowed_groups", [])
+        self.prefix = self.data.get("isolation_partition_prefix", "iso_")
+        self.max_time = self.data.get("max_time", "5-08:00:00")
+
+
+class SlurmConf(object):
+    """按行保存 slurm.conf，只改写 NodeName / PartitionName 行，其余原样保留。"""
+
+    def __init__(self, path):
+        self.path = path
+        with open(path, encoding="utf-8") as f:
+            self.text = f.read()
+        self.lines = self.text.splitlines()
+
+    def clone(self):
+        other = SlurmConf.__new__(SlurmConf)
+        other.path = self.path
+        other.text = self.text
+        other.lines = list(self.lines)
+        return other
+
+    def render(self):
+        return "\n".join(self.lines) + ("\n" if self.text.endswith("\n") else "")
+
+    # ---- 解析 ----
+    def node_entries(self):
+        """addr -> {'host':..., 'names':set(...), 'line':idx}"""
+        out = {}
+        for i, line in enumerate(self.lines):
+            s = line.strip()
+            if not s.startswith("NodeName="):
+                continue
+            toks = s.split()
+            kv = dict(t.split("=", 1) for t in toks if "=" in t)
+            addr = kv.get("NodeAddr") or kv.get("NodeName")
+            names = set([kv.get("NodeName", ""), kv.get("NodeHostname", ""), addr,
+                         (kv.get("NodeHostname", "") + ".tri.local") if kv.get("NodeHostname") else ""])
+            names.discard("")
+            out[addr] = {"host": kv.get("NodeHostname", addr), "names": names, "line": i}
+        return out
+
+    def partitions(self):
+        out = []
+        for i, line in enumerate(self.lines):
+            s = line.strip()
+            if not s.startswith("PartitionName="):
+                continue
+            toks = s.split()
+            kv = {}
+            for t in toks:
+                if "=" in t:
+                    k, v = t.split("=", 1)
+                    kv[k] = v
+            out.append({
+                "line": i,
+                "name": kv.get("PartitionName", ""),
+                "nodes": expand_nodes(kv.get("Nodes", "")),
+                "allow_groups": kv.get("AllowGroups"),
+                "default": kv.get("Default", "NO"),
+                "max_time": kv.get("MaxTime"),
+                "state": kv.get("State", "UP"),
+                "kv": kv,
+                "tokens": toks,
+            })
+        return out
+
+    # ---- 改写 ----
+    def set_partition_nodes(self, pname, nodes):
+        for p in self.partitions():
+            if p["name"] != pname:
+                continue
+            self.lines[p["line"]] = self._rebuild(p, nodes=nodes)
+            return True
+        return False
+
+    def set_partition_groups(self, pname, groups):
+        for p in self.partitions():
+            if p["name"] != pname:
+                continue
+            self.lines[p["line"]] = self._rebuild(p, groups=groups)
+            return True
+        return False
+
+    def _rebuild(self, p, nodes=None, groups=None):
+        toks = list(p["tokens"])
+        if nodes is not None:
+            toks = [("Nodes=" + ",".join(nodes)) if t.split("=", 1)[0] == "Nodes" else t for t in toks]
+        if groups is not None:
+            if any(t.split("=", 1)[0] == "AllowGroups" for t in toks):
+                toks = [("AllowGroups=" + groups) if t.split("=", 1)[0] == "AllowGroups" else t for t in toks]
+            else:
+                toks.append("AllowGroups=" + groups)
+        return " ".join(toks)
+
+    def append_partition(self, pname, node, group, max_time):
+        self.lines.append("PartitionName=%s Nodes=%s Default=NO MaxTime=%s State=UP AllowGroups=%s"
+                          % (pname, node, max_time, group))
+
+    def drop_partition(self, pname):
+        self.lines = [l for l in self.lines
+                      if not (l.strip().startswith("PartitionName=") and
+                              l.strip().split()[0].split("=", 1)[1] == pname)]
+
+
+# --------------------------------------------------------------------------
+# 运行时状态
+# --------------------------------------------------------------------------
+def live_nodes():
+    """addr -> 状态字符串，取自 sinfo；取不到时返回 {}"""
+    try:
+        # -a: 连被 AllowGroups 隐藏的隔离分区一起显示（否则非该组成员看不到节点状态）
+        p = run(["sinfo", "-N", "-a", "-h", "-o", "%N|%T"], check=False)
+        out = {}
+        for line in p.stdout.splitlines():
+            parts = line.split("|")
+            if len(parts) == 2:
+                out[parts[0].strip()] = parts[1].strip()
+        return out
+    except Exception:
+        return {}
+
+
+def live_partitions():
+    """name -> {'nodes':[...], 'allow_groups':str}，取自 scontrol；失败返回 {}"""
+    try:
+        p = run([SCONTROL, "show", "partition"], check=False)
+        out, cur = {}, None
+        for line in p.stdout.splitlines():
+            m = re.match(r"^PartitionName=(\S+)", line.strip())
+            if m:
+                cur = m.group(1)
+                out[cur] = {"nodes": [], "allow_groups": None}
+                continue
+            if cur and "AllowGroups=" in line:
+                out[cur]["allow_groups"] = line.split("AllowGroups=")[1].split()[0]
+            if cur and line.strip().startswith("Nodes="):
+                out[cur]["nodes"] = expand_nodes(line.strip().split("Nodes=", 1)[1].split()[0])
+        return out
+    except Exception:
+        return {}
+
+
+def running_jobs_by_node():
+    try:
+        p = run(["squeue", "-h", "-t", "RUNNING", "-o", "%N"], check=False)
+        counts = {}
+        for line in p.stdout.splitlines():
+            for n in line.replace(",", " ").split():
+                counts[n] = counts.get(n, 0) + 1
+        return counts
+    except Exception:
+        return {}
+
+
+def isolation_partition(conf_partitions, node):
+    """返回该节点的独占分区（单节点 + 有 AllowGroups）"""
+    for p in conf_partitions:
+        if len(p["nodes"]) == 1 and p["nodes"][0] == node and p["allow_groups"] not in (None, "", "ALL"):
+            return p
+    return None
+
+
+def is_admin(uid, allowed):
+    try:
+        pw = pwd.getpwuid(uid)
+    except KeyError:
+        return False, "?"
+    names = set()
+    try:
+        gids = os.getgrouplist(pw.pw_name, pw.pw_gid)
+    except Exception:
+        gids = [pw.pw_gid]
+    for gid in gids:
+        try:
+            names.add(grp.getgrgid(gid).gr_name)
+        except KeyError:
+            pass
+    return bool(names & set(allowed)), pw.pw_name
+
+
+# --------------------------------------------------------------------------
+# 子命令
+# --------------------------------------------------------------------------
+def cmd_status(conf_path, cfg_path):
+    cfg = Config(cfg_path)
+    conf = SlurmConf(conf_path)
+    nodes = conf.node_entries()
+    live = live_nodes()
+    jobs = running_jobs_by_node()
+    parts = conf.partitions()
+
+    uid = int(os.environ.get("SUDO_UID") or os.getuid())
+    admin, user = is_admin(uid, cfg.admin_groups)
+
+    items = []
+    for addr in cfg.managed_nodes:
+        info = nodes.get(addr)
+        if not info:
+            continue
+        iso = isolation_partition(parts, addr)
+        in_parts = [p["name"] for p in parts if addr in p["nodes"]]
+        items.append({
+            "addr": addr,
+            "host": info["host"],
+            "state": live.get(addr, "unknown"),
+            "partitions": in_parts,
+            "home_partition": cfg.home_partition.get(addr),
+            "isolation": {"partition": iso["name"], "group": iso["allow_groups"]} if iso else None,
+            "jobs": jobs.get(addr, 0),
+        })
+
+    groups = []
+    for g in cfg.allowed_groups:
+        try:
+            grp.getgrnam(g)
+            groups.append(g)
+        except KeyError:
+            pass
+    print(json.dumps({
+        "ok": True,
+        "me": {"uid": uid, "user": user, "is_admin": admin},
+        "nodes": items,
+        "groups": groups,
+        "partitions": [{"name": p["name"], "nodes": p["nodes"],
+                        "allow_groups": p["allow_groups"], "default": p["default"]} for p in parts],
+        "admin_groups": cfg.admin_groups,
+    }, ensure_ascii=False, indent=2))
+
+
+def cmd_groups(cfg_path):
+    groups = sorted(g.gr_name for g in grp.getgrall() if g.gr_name.startswith("group_"))
+    print(json.dumps({"ok": True, "groups": groups}, ensure_ascii=False, indent=2))
+
+
+def cmd_audit(limit):
+    entries = []
+    try:
+        with open(AUDIT_LOG, encoding="utf-8") as f:
+            lines = f.readlines()[-limit:]
+        for line in lines:
+            try:
+                entries.append(json.loads(line))
+            except ValueError:
+                pass
+    except IOError:
+        pass
+    entries.reverse()
+    print(json.dumps({"ok": True, "entries": entries}, ensure_ascii=False, indent=2))
+
+
+def resolve_node(conf, cfg, arg):
+    nodes = conf.node_entries()
+    for addr, info in nodes.items():
+        if arg == addr or arg in info["names"]:
+            if addr not in cfg.managed_nodes:
+                die("节点 %s 不在可管理列表 managed_nodes 中" % arg)
+            return addr
+    die("找不到节点 %s（可用: %s）" % (arg, ", ".join(cfg.managed_nodes)))
+
+
+def audit(actor, action, node, group, result, detail=""):
+    entry = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "actor": actor, "action": action, "node": node,
+        "group": group, "result": result, "detail": detail,
+    }
+    try:
+        os.makedirs(os.path.dirname(AUDIT_LOG), exist_ok=True)
+        with open(AUDIT_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def actor_name():
+    return os.environ.get("SUDO_USER") or (pwd.getpwuid(os.getuid()).pw_name if os.getuid() != 0 else "root")
+
+
+def check_expected(expect_nodes, expect_groups, removed):
+    """reconfigure 之后用 scontrol 实际状态校验，返回问题列表"""
+    live = live_partitions()
+    problems = []
+    for name, nodes in expect_nodes.items():
+        cur = live.get(name)
+        if not cur:
+            problems.append("分区 %s 未生效" % name)
+            continue
+        if sorted(cur["nodes"]) != sorted(nodes):
+            problems.append("分区 %s 节点不一致(期望 %s / 实际 %s)"
+                            % (name, ",".join(sorted(nodes)), ",".join(sorted(cur["nodes"]))))
+        want = expect_groups.get(name)
+        if want and (cur["allow_groups"] or "") != want:
+            problems.append("分区 %s AllowGroups 不一致(期望 %s / 实际 %s)"
+                            % (name, want, cur["allow_groups"]))
+    for name in removed:
+        if name in live:
+            problems.append("分区 %s 未删除" % name)
+    return problems
+
+
+def apply_conf(conf, new_conf, expect_nodes, expect_groups, removed, dry_run):
+    """以 slurm.conf 为准：备份 -> 原子写入 -> reconfigure -> 校验 -> 失败回滚"""
+    if dry_run:
+        print("[dry-run] 将执行: %s reconfigure（并校验分区状态）" % SCONTROL)
+        return None
+
+    backup = "%s.bak-nodeiso-%s" % (conf.path, time.strftime("%Y%m%d-%H%M%S"))
+    shutil.copy2(conf.path, backup)
+    tmp = conf.path + ".tmp-nodeiso"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(new_conf.render())
+    shutil.copystat(conf.path, tmp)
+    os.replace(tmp, conf.path)
+    print("[run] %s reconfigure" % SCONTROL)
+    run([SCONTROL, "reconfigure"], check=False)
+    time.sleep(2)
+
+    problems = check_expected(expect_nodes, expect_groups, removed)
+    if problems:
+        shutil.copy2(backup, conf.path)
+        run([SCONTROL, "reconfigure"], check=False)
+        die("应用失败已回滚到 %s: %s" % (backup, "; ".join(problems)))
+    return backup
+
+
+def cmd_isolate(conf_path, cfg_path, node_arg, group, dry_run):
+    cfg = Config(cfg_path)
+    if not GROUP_RE.match(group or ""):
+        die("组名非法: %r" % group)
+    try:
+        grp.getgrnam(group)
+    except KeyError:
+        die("组 %s 在本机不存在（slurmctld 用本机 NSS 判组）" % group)
+    if cfg.allowed_groups and group not in cfg.allowed_groups:
+        die("组 %s 不在允许列表 allowed_groups 内（可改 /etc/node-isolation/config.json）" % group)
+
+    conf = SlurmConf(conf_path)
+    node = resolve_node(conf, cfg, node_arg)
+    parts = conf.partitions()
+
+    current = isolation_partition(parts, node)
+    target = current["name"] if current else cfg.prefix + conf.node_entries()[node]["host"]
+
+    if current and current["allow_groups"] == group:
+        msg = "节点 %s 已经是隔离状态（分区 %s，组 %s），无需改动" % (node, target, group)
+        audit(actor_name(), "isolate", node, group, "noop", msg)
+        print(json.dumps({"ok": True, "noop": True, "message": msg}, ensure_ascii=False))
+        return
+
+    new = conf.clone()
+    expect, expect_groups = {}, {}
+    for p in parts:
+        if p["name"] == target or node not in p["nodes"]:
+            continue
+        rest = [n for n in p["nodes"] if n != node]
+        if not rest:
+            die("分区 %s 只包含 %s，无法摘除（请人工处理）" % (p["name"], node))
+        new.set_partition_nodes(p["name"], rest)
+        expect[p["name"]] = rest
+
+    if current:
+        new.set_partition_groups(target, group)
+    else:
+        new.append_partition(target, node, group, cfg.max_time)
+    expect[target] = [node]
+    expect_groups[target] = group
+
+    print("".join(difflib.unified_diff(conf.render().splitlines(True), new.render().splitlines(True),
+                                       fromfile=conf_path + " (current)", tofile=conf_path + " (target)")))
+    backup = apply_conf(conf, new, expect, expect_groups, [], dry_run)
+    msg = "节点 %s 已隔离：分区 %s 仅 %s 成员可提交" % (node, target, group)
+    if dry_run:
+        msg = "[dry-run] " + msg
+    audit(actor_name(), "isolate", node, group, "dry-run" if dry_run else "ok", msg)
+    print(json.dumps({"ok": True, "node": node, "partition": target, "group": group,
+                      "backup": backup, "message": msg}, ensure_ascii=False))
+
+
+def cmd_release(conf_path, cfg_path, node_arg, dry_run):
+    cfg = Config(cfg_path)
+    conf = SlurmConf(conf_path)
+    node = resolve_node(conf, cfg, node_arg)
+    parts = conf.partitions()
+
+    current = isolation_partition(parts, node)
+    if not current:
+        msg = "节点 %s 当前不是隔离状态，无需解除" % node
+        audit(actor_name(), "release", node, "", "noop", msg)
+        print(json.dumps({"ok": True, "noop": True, "message": msg}, ensure_ascii=False))
+        return
+
+    home = cfg.home_partition.get(node)
+    if not home:
+        cands = [p for p in parts if node not in p["nodes"] and p["allow_groups"] in (None, "ALL")
+                 and len(p["nodes"]) > 1]
+        if not cands:
+            die("节点 %s 没有配置 home_partition，且无法从配置推断归属分区" % node)
+        home = cands[0]["name"]
+
+    home_part = next((p for p in parts if p["name"] == home), None)
+    if home_part is None:
+        die("home 分区 %s 在 slurm.conf 中不存在" % home)
+
+    new = conf.clone()
+    rest = list(home_part["nodes"])
+    if node not in rest:
+        rest.append(node)
+    rest.sort(key=lambda s: [int(x) if x.isdigit() else x for x in re.split(r"(\d+)", s)])
+    new.set_partition_nodes(home, rest)
+    new.drop_partition(current["name"])
+
+    print("".join(difflib.unified_diff(conf.render().splitlines(True), new.render().splitlines(True),
+                                       fromfile=conf_path + " (current)", tofile=conf_path + " (target)")))
+    backup = apply_conf(conf, new, {home: rest}, {}, [current["name"]], dry_run)
+    msg = "节点 %s 已解除隔离：分区 %s 已删除，节点回到 %s" % (node, current["name"], home)
+    if dry_run:
+        msg = "[dry-run] " + msg
+    audit(actor_name(), "release", node, current["allow_groups"] or "", "dry-run" if dry_run else "ok", msg)
+    print(json.dumps({"ok": True, "node": node, "removed_partition": current["name"],
+                      "home_partition": home, "backup": backup, "message": msg}, ensure_ascii=False))
+
+
+# --------------------------------------------------------------------------
+def main(argv):
+    args = [a for a in argv[1:]]
+    conf_path, cfg_path, dry_run = CONF_DEFAULT, CFG_DEFAULT, False
+    overridden = False
+    rest = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--conf" and i + 1 < len(args):
+            conf_path = args[i + 1]; overridden = True; i += 2; continue
+        if a == "--config" and i + 1 < len(args):
+            cfg_path = args[i + 1]; overridden = True; i += 2; continue
+        if a == "--dry-run":
+            dry_run = True; i += 1; continue
+        if a in ("-h", "--help"):
+            print(__doc__); return
+        rest.append(a); i += 1
+
+    if not rest:
+        print(__doc__); sys.exit(2)
+
+    # 通过 sudo 调用时不允许改 --conf/--config，防止把渲染结果写到任意文件
+    if overridden and os.environ.get("SUDO_UID"):
+        die("通过 sudo 调用时不允许 --conf/--config 覆盖路径")
+
+    action = rest[0]
+
+    if action == "status":
+        cmd_status(conf_path, cfg_path)
+    elif action == "audit":
+        cmd_audit(int(rest[1]) if len(rest) > 1 else 20)
+    elif action == "groups":
+        cmd_groups(cfg_path)
+    elif action == "isolate":
+        if len(rest) != 3:
+            die("用法: isolate <node> <group> [--dry-run]")
+        cmd_isolate(conf_path, cfg_path, rest[1], rest[2], dry_run)
+    elif action == "release":
+        if len(rest) != 2:
+            die("用法: release <node> [--dry-run]")
+        cmd_release(conf_path, cfg_path, rest[1], dry_run)
+    else:
+        die("未知子命令: %s" % action)
+
+
+if __name__ == "__main__":
+    main(sys.argv)

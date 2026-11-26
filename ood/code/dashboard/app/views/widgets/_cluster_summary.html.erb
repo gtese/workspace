@@ -1,0 +1,126 @@
+<% summary = cluster_summary -%>
+<div class="row mb-2">
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Nodes</div>
+        <div class="h3 mb-0"><%= summary[:node_count] %></div>
+        <div class="small text-muted">idle <%= summary[:idle_nodes] %> / busy <%= summary[:allocated_nodes] %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Users</div>
+        <div class="h3 mb-0"><%= summary[:users] %></div>
+        <div class="small text-muted">with queued/running jobs</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Current Jobs</div>
+        <div class="h3 mb-0"><%= summary[:job_count] %></div>
+        <div class="small text-muted">running <%= summary[:running_jobs] %> / pending <%= summary[:pending_jobs] %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">CPUs</div>
+        <div class="h3 mb-0"><%= number_with_delimiter(summary[:cpu_count]) %></div>
+        <div class="small text-muted">available <%= number_with_delimiter(summary[:available_cpus]) %></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Available CPUs</div>
+        <div class="h3 mb-0"><%= number_with_delimiter(summary[:available_cpus]) %></div>
+        <div class="small text-muted">idle logical CPUs</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Available Memory</div>
+        <div class="h3 mb-0"><%= cluster_memory_text(summary[:available_memory_mb]) %></div>
+        <div class="small text-muted">free memory reported by Slurm</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Memory</div>
+        <div class="h3 mb-0"><%= cluster_memory_text(summary[:memory_mb]) %></div>
+        <div class="small text-muted">total cluster memory</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Historical Jobs</div>
+        <div class="h3 mb-0"><%= number_with_delimiter(summary[:historical_job_count]) %></div>
+        <div class="small text-muted">from Slurm accounting</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Cluster Nodes</span>
+    <span class="text-muted small">Updated <%= summary[:generated_at].strftime('%Y-%m-%d %H:%M:%S') %></span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Node</th>
+          <th>Partition</th>
+          <th>State</th>
+          <th class="text-right">CPUs</th>
+          <th class="text-right">Memory</th>
+          <th class="text-right">Users</th>
+          <th class="text-right">Avail CPUs</th>
+          <th class="text-right">Avail Mem</th>
+          <th class="text-right">Current Jobs</th>
+          <th class="text-right">Historical Jobs</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if summary[:nodes].empty? -%>
+          <tr><td colspan="10" class="text-muted">No node data available.</td></tr>
+        <% else -%>
+          <% summary[:nodes].each do |node| -%>
+            <tr>
+              <td><code><%= node[:name] %></code></td>
+              <td><%= node[:partitions].join(', ') %></td>
+              <td><span class="badge <%= cluster_node_state_class(node[:state], node[:restricted]) %>" title="<%= cluster_node_state_text(node[:state]) %><%= node[:restricted] ? ' This node is in a restricted partition (not available to all users).' : '' %>"><%= node[:state] %></span></td>
+              <td class="text-right"><%= number_with_delimiter(node[:cpus]) %></td>
+              <td class="text-right"><%= cluster_memory_text(node[:memory_mb]) %></td>
+              <td class="text-right"><%= node[:current_users] %></td>
+              <td class="text-right"><%= number_with_delimiter(node[:available_cpus]) %></td>
+              <td class="text-right"><%= cluster_memory_text(node[:available_memory_mb]) %></td>
+              <td class="text-right"><%= node[:current_jobs] %></td>
+              <td class="text-right"><%= node[:historical_jobs] %></td>
+            </tr>
+          <% end -%>
+        <% end -%>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer py-2">
+    <span class="text-muted small">State colors: green = idle/available; blue = mix/partially allocated; red = alloc/down/drain/unavailable; yellow = restricted partition (not available to all users). Hover a state badge for details.</span>
+  </div>
+</div>
