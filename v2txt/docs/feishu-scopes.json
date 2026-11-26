@@ -1,34 +1,17 @@
 {
-  "app_name": "V2TXT",
-  "note": "飞书开放平台 → 应用 → 权限管理 → 批量导入（或逐个搜索添加）。user = 用户身份，tenant = 应用身份",
-  "scopes_user": [
-    "offline_access",
-    "contact:user.base:readonly",
-    "contact:user.email:readonly",
-    "contact:user.employee_id:readonly"
-  ],
-  "scopes_tenant": [
-    "tenant:tenant:readonly",
-    "drive:drive",
-    "docx:document",
-    "im:message",
-    "im:message:send_as_bot"
-  ],
-  "scopes_flat": [
-    "offline_access",
-    "contact:user.base:readonly",
-    "contact:user.email:readonly",
-    "contact:user.employee_id:readonly",
-    "tenant:tenant:readonly",
-    "drive:drive",
-    "docx:document",
-    "im:message",
-    "im:message:send_as_bot"
-  ],
-  "web_app": {
-    "h5_trusted_domain": "https://app.v2txt.cn",
-    "desktop_home": "https://app.v2txt.cn/app",
-    "mobile_home": "https://app.v2txt.cn/app",
-    "redirect_url": "https://app.v2txt.cn/feishu-callback"
+  "scopes": {
+    "tenant": [
+      "tenant:tenant:readonly",
+      "drive:drive",
+      "docx:document",
+      "im:message",
+      "im:message:send_as_bot"
+    ],
+    "user": [
+      "offline_access",
+      "contact:user.base:readonly",
+      "contact:user.email:readonly",
+      "contact:user.employee_id:readonly"
+    ]
   }
 }
