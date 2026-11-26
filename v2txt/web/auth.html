@@ -86,6 +86,7 @@
   </div>
 </div>
 
+<script src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.40.js"></script>
 <script src="/static/assets/api.js"></script>
 <script>
 const { Api, toast } = UI;
@@ -240,8 +241,18 @@ async function postFeishuCode(code, redirectUri) {
   location.href = qs.get('next') || '/app';
 }
 
+function h5Ready() {
+  return new Promise((resolve) => {
+    if (window.h5sdk && window.h5sdk.ready) {
+      try { window.h5sdk.ready(resolve); return; } catch (e) { /* 继续兜底 */ }
+    }
+    setTimeout(resolve, 600);   // 非飞书环境或 SDK 未加载
+  });
+}
+
 async function feishuLogin() {
   const redirect = FEISHU.redirect_uri || (location.origin + '/feishu-callback');
+  await h5Ready();
   if (inFeishuClient() && window.tt && window.tt.requestAuthCode) {
     window.tt.requestAuthCode({
       appId: FEISHU.app_id,
@@ -249,7 +260,7 @@ async function feishuLogin() {
         try { await postFeishuCode(res.code, ''); }
         catch (ex) { err(ex.message); }
       },
-      fail: () => { location.href = '/api/v1/auth/feishu/authorize-url?redirect_uri=' + encodeURIComponent(redirect); },
+      fail: (e) => { err((zh ? '飞书授权失败：' : 'Feishu auth failed: ') + JSON.stringify(e || {}).slice(0, 200)); },
     });
     return;
   }
