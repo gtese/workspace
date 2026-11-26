@@ -207,6 +207,12 @@
 <script>
 const { Api, toast, needAuth, fmtDate, fmtMin } = UI;
 const zh = Api.lang === 'zh';
+// 多企业：把 ?app=xxx 记住，未登录跳登录页时带上，避免用错飞书应用授权
+try {
+  const q = new URLSearchParams(location.search);
+  const app = q.get('app');
+  if (app) sessionStorage.setItem('feishu_app', app);
+} catch (e) { /* 忽略 */ }
 const $ = (id) => document.getElementById(id);
 
 const T = zh ? {

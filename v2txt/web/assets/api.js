@@ -49,7 +49,10 @@
       if (res.status === 401) {
         this.setToken('');
         if (!location.pathname.startsWith('/login') && !location.pathname.startsWith('/register')) {
-          location.href = '/login?next=' + encodeURIComponent(location.pathname + location.hash);
+          let app = '';
+          try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
+          location.href = '/login?next=' + encodeURIComponent(location.pathname + location.hash) +
+            (app ? '&app=' + encodeURIComponent(app) : '');
         }
         throw new Error('未登录');
       }
