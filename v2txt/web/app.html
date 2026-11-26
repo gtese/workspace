@@ -173,10 +173,8 @@
         <div class="stack" style="margin-top:14px">
           <label class="field"><span>姓名</span><input type="text" id="setName"></label>
           <label class="field"><span>邮箱</span><input type="text" id="setEmail" disabled></label>
-          <p class="small" id="verifyState"></p>
           <div class="row">
             <button class="btn primary" id="saveProfile">保存</button>
-            <button class="btn" id="resendVerify">重发验证邮件</button>
           </div>
         </div>
       </div>
@@ -243,7 +241,6 @@ async function loadMe() {
   };
   const current = (ME.orgs || []).find(o => o.id === ME.current_org_id);
   $('adminLink').classList.toggle('hide', !ME.is_admin);
-  if (!ME.email_verified) toast(zh ? '邮箱未验证，点击设置里的重发验证' : 'Email not verified');
   return current;
 }
 
@@ -885,19 +882,13 @@ $('createOrgBtn').onclick = async () => {
 async function loadSettings() {
   $('setName').value = ME.name || '';
   $('setEmail').value = ME.email || '';
-  $('verifyState').innerHTML = ME.email_verified
-    ? `<span class="badge ok">${zh ? '邮箱已验证' : 'Email verified'}</span>`
-    : `<span class="badge warn">${zh ? '邮箱未验证' : 'Email not verified'}</span>`;
+
 }
 $('saveProfile').onclick = async () => {
   try {
     ME = Object.assign(ME, await Api.req('/api/v1/me', { method: 'PATCH', body: { name: $('setName').value } }));
     toast(T.saved);
   } catch (e) { toast(e.message, true); }
-};
-$('resendVerify').onclick = async () => {
-  try { await Api.req('/api/v1/auth/resend-verify', { method: 'POST' }); toast(zh ? '验证邮件已发送' : 'Verification email sent'); }
-  catch (e) { toast(e.message, true); }
 };
 $('changePass').onclick = async () => {
   try {

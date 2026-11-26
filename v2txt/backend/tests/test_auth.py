@@ -74,7 +74,8 @@ def test_requests_without_token_are_401(client: TestClient) -> None:
 
 def test_verify_email_token(client: TestClient) -> None:
     data = _register(client, "auth6@example.com")
-    assert data["user"]["email_verified"] is False
+    # 邮箱不再强制验证：注册即视为已确认，接口保留只为兼容旧链接
+    assert data["user"]["email_verified"] is True
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.email == "auth6@example.com").first()

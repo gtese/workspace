@@ -158,9 +158,9 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)) 
     db.commit()
     grant_signup_bonus(db, org, settings.signup_bonus_minutes)
 
-    token_raw = issue_email_token(db, "verify", email, user_id=user.id)
-    link = f"{_base_url()}/verify?token={token_raw}"
-    mailer.send_verify_email(email, link)
+    # 邮箱只作为联系方式，不做验证、不发提醒邮件
+    user.email_verified_at = utcnow()
+    db.commit()
 
     session_token, expires = issue_login_session(db, user, ip=ip, ua=ua)
     audit.record(db, "auth.register", request=request, org_id=org.id, user_id=user.id,

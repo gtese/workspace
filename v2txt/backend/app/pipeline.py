@@ -223,6 +223,9 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
                     folder_token = ensure_folder_from_user(open_id, token) or ""
                 if not folder_token:
                     log.warning("拿不到「AI录音」目录（缺少用户授权），文档将留在应用空间")
+                elif db.get(DriveFolder, open_id) is None:
+                    db.add(DriveFolder(open_id=open_id, folder_token=folder_token))
+                    db.commit()
             except Exception:  # noqa: BLE001
                 log.exception("准备「AI录音」目录失败")
                 folder_token = ""
