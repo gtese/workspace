@@ -77,6 +77,27 @@ def require_org_admin(
     return org
 
 
+def ops_role_of(user: User) -> str:
+    """运营角色：平台管理员邮箱优先 superadmin，其次 users.ops_role。"""
+    emails = {e.strip().lower() for e in get_settings().admin_emails.split(",") if e.strip()}
+    if (user.email or "").lower() in emails:
+        return "superadmin"
+    role = getattr(user, "ops_role", "") or ""
+    return role if role in ("viewer", "support", "finance", "superadmin") else ""
+
+
+def require_ops(*roles: str):
+    """用法：Depends(require_ops("support", "superadmin"))。"""
+
+    def _dep(user: User = Depends(current_user)) -> User:
+        role = ops_role_of(user)
+        if not role or (roles and role not in roles):
+            raise HTTPException(status_code=403, detail="需要运营权限")
+        return user
+
+    return _dep
+
+
 def is_platform_admin(user: User) -> bool:
     emails = {e.strip().lower() for e in get_settings().admin_emails.split(",") if e.strip()}
     return bool(emails) and user.email.lower() in emails

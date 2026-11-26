@@ -41,9 +41,12 @@ async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
         seed_plans(db)
     finally:
         db.close()
-    from .ops_admin import bootstrap_roles, mount_ops
+    try:  # 运营后台可选：sqladmin 未安装时不影响主站
+        from .ops_admin import bootstrap_roles
 
-    bootstrap_roles()
+        bootstrap_roles()
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).warning("运营后台 bootstrap 跳过")
     requeued = requeue_interrupted()
     cleaned = cleanup_expired()
     orphans = cleanup_orphan_files()

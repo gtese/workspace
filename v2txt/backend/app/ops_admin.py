@@ -16,8 +16,8 @@ from fastapi import FastAPI
 from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
 from sqlalchemy import select
-from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.requests import Request
 
 from .accounts import verify_password
 from .config import get_settings
@@ -33,11 +33,13 @@ from .models import (
     Plan,
     Recording,
     Segment,
-    Session as LoginSession,
     Subscription,
     UsageRecord,
     User,
     Wallet,
+)
+from .models import (
+    Session as LoginSession,
 )
 
 log = logging.getLogger(__name__)

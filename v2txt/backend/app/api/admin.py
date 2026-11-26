@@ -27,7 +27,7 @@ from ..models import (
     User,
     utcnow,
 )
-from .deps import require_platform_admin
+from .deps import require_ops, require_platform_admin
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -60,7 +60,7 @@ class ConfirmIn(BaseModel):
 
 @router.get("/overview")
 def overview(
-    admin: User = Depends(require_platform_admin), db: Session = Depends(get_db)
+    admin: User = Depends(require_ops()), db: Session = Depends(get_db)
 ) -> dict:
     since = utcnow() - timedelta(days=30)
     users = db.scalar(select(func.count()).select_from(User)) or 0
@@ -99,7 +99,7 @@ def overview(
 def list_users(
     q: str = "",
     limit: int = 50,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops()),
     db: Session = Depends(get_db),
 ) -> dict:
     stmt = select(User).order_by(User.created_at.desc()).limit(min(max(limit, 1), 200))
@@ -129,7 +129,7 @@ def list_users(
 def set_user_status(
     user_id: str,
     body: StatusIn,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops("support","superadmin")),
     db: Session = Depends(get_db),
 ) -> dict:
     if body.status not in ("active", "disabled"):
@@ -148,7 +148,7 @@ def set_user_status(
 def reset_user_password(
     user_id: str,
     body: PasswordIn,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops("support","superadmin")),
     db: Session = Depends(get_db),
 ) -> dict:
     """运营侧重置密码（邮件服务未开通时，用户忘记密码的唯一出路）。"""
@@ -168,7 +168,7 @@ def reset_user_password(
 @router.get("/orders")
 def list_orders(
     status: str = "",
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops()),
     db: Session = Depends(get_db),
 ) -> dict:
     stmt = select(Order).order_by(Order.created_at.desc()).limit(200)
@@ -203,7 +203,7 @@ def list_orders(
 def confirm_order(
     order_id: str,
     body: ConfirmIn,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops("finance","superadmin")),
     db: Session = Depends(get_db),
 ) -> dict:
     order = db.get(Order, order_id)
@@ -264,7 +264,7 @@ def confirm_order(
 def grant_minutes(
     org_id: str,
     body: GrantIn,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops("finance","superadmin")),
     db: Session = Depends(get_db),
 ) -> dict:
     org = db.get(Org, org_id)
@@ -279,7 +279,7 @@ def grant_minutes(
 @router.get("/usage")
 def usage_report(
     days: int = 30,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops()),
     db: Session = Depends(get_db),
 ) -> dict:
     since = utcnow() - timedelta(days=min(max(days, 1), 365))
@@ -337,9 +337,41 @@ def create_feishu_app(
             "login_url": f"{base}/login?app={slug}"}
 
 
+@router.get("/orgs")
+def list_orgs(
+    q: str = "",
+    limit: int = 100,
+    offset: int = 0,
+    admin: User = Depends(require_ops()),
+    db: Session = Depends(get_db),
+) -> dict:
+    """团队/租户列表（含成员数、余额、套餐）。"""
+    stmt = select(Org).order_by(Org.created_at.desc())
+    if q:
+        stmt = stmt.where(Org.name.like(f"%{q.strip()}%"))
+    rows = db.scalars(stmt.limit(min(max(limit, 1), 500)).offset(max(offset, 0))).all()
+    items = []
+    for org in rows:
+        members = db.scalars(select(Membership).where(Membership.org_id == org.id)).all()
+        summary = org_summary(db, org.id)
+        items.append(
+            {
+                "id": org.id,
+                "name": org.name,
+                "kind": org.kind,
+                "feishu_tenant_key": org.feishu_tenant_key,
+                "members": len(members),
+                "minutes": summary["minutes"],
+                "plan": (summary["plan"] or {}).get("name", "Free"),
+                "created_at": org.created_at.isoformat(),
+            }
+        )
+    return {"items": items}
+
+
 @router.get("/feishu-apps")
 def list_feishu_apps(
-    admin: User = Depends(require_platform_admin), db: Session = Depends(get_db)
+    admin: User = Depends(require_ops()), db: Session = Depends(get_db)
 ) -> dict:
     from ..models import FeishuApp
 
@@ -362,7 +394,7 @@ def list_events(
     hours: int = 168,
     limit: int = 100,
     offset: int = 0,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops()),
     db: Session = Depends(get_db),
 ) -> dict:
     """安全/用户事件查询（默认近 7 天）。"""
@@ -408,7 +440,7 @@ def list_events(
 @router.get("/events/summary")
 def events_summary(
     days: int = 7,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops()),
     db: Session = Depends(get_db),
 ) -> dict:
     since = utcnow() - timedelta(days=min(max(days, 1), 365))
@@ -440,7 +472,7 @@ def events_summary(
 @router.get("/orgs/{org_id}/members")
 def org_members(
     org_id: str,
-    admin: User = Depends(require_platform_admin),
+    admin: User = Depends(require_ops()),
     db: Session = Depends(get_db),
 ) -> dict:
     rows = db.scalars(select(Membership).where(Membership.org_id == org_id)).all()

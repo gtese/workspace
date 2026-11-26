@@ -203,6 +203,7 @@
   </section>
 </div>
 
+<script src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.40.js"></script>
 <script src="/static/assets/api.js"></script>
 <script>
 const { Api, toast, needAuth, fmtDate, fmtMin } = UI;
@@ -229,7 +230,43 @@ const T = zh ? {
   inviteSent: 'Invitation sent', copied: 'Copied', deleted: 'Deleted', saved: 'Saved',
 };
 
-if (!needAuth()) throw new Error('redirecting');
+/* 无会话时先尝试飞书静默免登（在飞书客户端内无需用户点击） */
+async function silentFeishuLogin() {
+  let app = '';
+  try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
+  const inFeishu = /Lark|Feishu/i.test(navigator.userAgent) || !!window.h5sdk;
+  if (!inFeishu) return false;
+  const ready = (cb) => { if (window.h5sdk && window.h5sdk.ready) { try { window.h5sdk.ready(cb); return; } catch (e) { /* 忽略 */ } } setTimeout(cb, 500); };
+  await new Promise((r) => ready(r));
+  if (!(window.tt && window.tt.requestAuthCode)) return false;
+  const cfg = await fetch('/api/v1/auth/feishu/config' + (app ? '?app=' + encodeURIComponent(app) : '')).then(r => r.json()).catch(() => null);
+  if (!cfg || !cfg.enabled) return false;
+  const code = await new Promise((resolve) => {
+    window.tt.requestAuthCode({ appId: cfg.app_id, success: (res) => resolve(res.code), fail: () => resolve('') });
+    setTimeout(() => resolve(''), 8000);
+  });
+  if (!code) return false;
+  const data = await fetch('/api/v1/auth/feishu', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, redirect_uri: cfg.redirect_uri || '', app }),
+  }).then(async (r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (!data || !data.token) return false;
+  Api.setToken(data.token);
+  Api.setOrg(data.team_org_id || data.org_id || data.user.default_org_id || '');
+  return true;
+}
+
+(async () => {
+  if (!Api.token) {
+    try { await silentFeishuLogin(); } catch (e) { /* 忽略 */ }
+  }
+  if (!Api.token) {
+    let app = '';
+    try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
+    location.replace('/login' + (app ? '?app=' + encodeURIComponent(app) : ''));
+    throw new Error('redirecting');
+  }
+})();
 
 let ME = null, SUMMARY = null, REC = null;
 

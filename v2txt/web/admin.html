@@ -6,111 +6,86 @@
 <title>V2TXT · 运营后台</title>
 <link rel="stylesheet" href="/static/assets/style.css">
 <style>
-  .kpi { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
-  .kpi .card { padding:16px; }
-  .kpi b { font-size:22px; display:block; }
-  @media (max-width:900px){ .kpi{grid-template-columns:1fr 1fr} }
+  .layout{display:flex;min-height:100vh}
+  .side{width:200px;background:#fff;border-right:1px solid var(--line);padding:16px 10px;position:sticky;top:0;height:100vh}
+  .side .brand{font-weight:800;font-size:17px;padding:0 8px 14px}
+  .side .brand em{color:var(--brand);font-style:normal}
+  .side a{display:block;padding:9px 10px;border-radius:8px;color:#374151;font-size:14px;margin-bottom:2px}
+  .side a:hover{background:#f3f4f6;text-decoration:none}
+  .side a.active{background:var(--brand-soft);color:var(--brand);font-weight:600}
+  .main{flex:1;padding:20px 24px;min-width:0}
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .toolbar input{max-width:260px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{position:sticky;top:0;background:#fafafa;cursor:pointer;white-space:nowrap}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+  .pager{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px}
+  .badge.ok{background:#ecfdf5;color:#059669}.badge.err{background:#fef2f2;color:#dc2626}
 </style>
 </head>
 <body>
-<div class="wrap" style="padding-top:24px">
-  <div class="spread" style="margin-bottom:18px">
-    <div class="row"><b style="font-size:18px">V2TXT 运营后台</b><span class="badge gray" id="adminEmail"></span></div>
-    <div class="row"><a class="btn small" href="/app">返回控制台</a><button class="btn small" id="logout">退出</button></div>
-  </div>
+<div class="layout">
+  <aside class="side">
+    <div class="brand">V2<em>TXT</em> 运营</div>
+    <a href="#overview" data-nav="overview">概览</a>
+    <a href="#users" data-nav="users">用户</a>
+    <a href="#orgs" data-nav="orgs">团队</a>
+    <a href="#orders" data-nav="orders">订单</a>
+    <a href="#events" data-nav="events">审计事件</a>
+    <a href="#apps" data-nav="apps">企业应用</a>
+    <div style="margin-top:18px;padding:0 8px" class="tiny muted" id="roleBox"></div>
+    <div style="margin-top:8px;padding:0 8px"><a href="/app" class="tiny">← 返回控制台</a></div>
+  </aside>
 
-  <div class="kpi" style="margin-bottom:18px">
-    <div class="card"><span class="muted small">用户 / 空间</span><b id="kUsers">-</b><span class="tiny muted" id="kOrgs"></span></div>
-    <div class="card"><span class="muted small">录音总数（30天）</span><b id="kRecs">-</b><span class="tiny muted" id="kRecs30"></span></div>
-    <div class="card"><span class="muted small">30 天收入 / 成本</span><b id="kRevenue">-</b><span class="tiny muted" id="kCost"></span></div>
-    <div class="card"><span class="muted small">待确认订单</span><b id="kPending">-</b><span class="tiny muted">点击下方处理</span></div>
-  </div>
+  <main class="main">
+    <div class="spread" style="margin-bottom:14px">
+      <h2 id="pageTitle">概览</h2>
+      <div class="row"><span class="tiny muted" id="meMail"></span><button class="btn small" id="logout">退出</button></div>
+    </div>
 
-  <div class="tabs">
-    <a href="#" data-tab="orders" class="active">订单</a>
-    <a href="#" data-tab="users">用户</a>
-    <a href="#" data-tab="usage">用量与毛利</a>
-    <a href="#" data-tab="events">事件日志</a>
-    <a href="#" data-tab="apps">企业应用</a>
-  </div>
-
-  <section id="view-orders">
-    <div class="card">
-      <div class="spread" style="margin-bottom:12px">
-        <h3>订单</h3>
-        <select id="orderFilter" style="max-width:160px">
-          <option value="pending">待确认</option>
-          <option value="">全部</option>
-          <option value="confirmed">已开通</option>
-          <option value="canceled">已取消</option>
-        </select>
+    <section id="view-overview">
+      <div class="kpi" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+        <div class="card"><span class="muted small">用户</span><b id="kUsers">-</b></div>
+        <div class="card"><span class="muted small">团队</span><b id="kOrgs">-</b></div>
+        <div class="card"><span class="muted small">录音（30天）</span><b id="kRecs">-</b></div>
+        <div class="card"><span class="muted small">待确认订单</span><b id="kPending">-</b></div>
       </div>
-      <div class="list" id="orderList"><p class="muted small">加载中…</p></div>
-    </div>
-  </section>
+    </section>
 
-  <section id="view-users" class="hide">
-    <div class="card">
-      <div class="spread" style="margin-bottom:12px">
-        <h3>用户</h3>
-        <input type="text" id="userSearch" placeholder="搜索邮箱或姓名" style="max-width:260px">
+    <section id="view-table" class="hide">
+      <div class="toolbar">
+        <input type="text" id="q" placeholder="搜索…">
+        <button class="btn small" id="doSearch">搜索</button>
+        <select id="pageSize" style="max-width:110px"><option>25</option><option selected>50</option><option>100</option><option>200</option></select>
+        <button class="btn small" id="exportCsv">导出 CSV</button>
+        <span class="tiny muted" id="tableHint"></span>
       </div>
-      <div class="list" id="userList"><p class="muted small">加载中…</p></div>
-    </div>
-  </section>
+      <div style="overflow:auto;max-height:calc(100vh - 190px)"><table id="grid"></table></div>
+      <div class="pager">
+        <button class="btn small" id="prevPage">上一页</button>
+        <span id="pageInfo">1</span>
+        <button class="btn small" id="nextPage">下一页</button>
+      </div>
+    </section>
 
-  <section id="view-apps" class="hide">
-    <div class="card" style="margin-bottom:18px">
-      <h3>已接入企业</h3>
-      <p class="tiny muted" style="margin:6px 0 12px">每个企业一套飞书自建应用；把「登录地址」发给该企业用户即可。</p>
-      <div class="list" id="appList"><p class="muted small">加载中…</p></div>
-    </div>
-    <div class="card">
-      <h3>新增企业应用</h3>
-      <p class="tiny muted" style="margin:6px 0 12px">在**该企业自己的**飞书开放平台创建自建应用后，把凭据填这里。</p>
-      <div class="grid2" style="gap:12px">
-        <label class="field"><span>企业名称</span><input type="text" id="faName" placeholder="例如：XX 科技"></label>
-        <label class="field"><span>标识 slug（可空，自动生成）</span><input type="text" id="faSlug" placeholder="例如：ent3"></label>
-        <label class="field"><span>App ID</span><input type="text" id="faAppId" placeholder="cli_xxx"></label>
-        <label class="field"><span>App Secret</span><input type="text" id="faSecret" placeholder="应用密钥"></label>
+    <section id="view-apps" class="hide">
+      <div class="card" style="margin-bottom:16px">
+        <h3>已接入企业</h3>
+        <div class="list" id="appList" style="margin-top:8px"><p class="muted small">加载中…</p></div>
       </div>
-      <button class="btn primary" id="faCreate">创建并生成登录地址</button>
-      <p class="small" id="faResult" style="margin-top:10px"></p>
-    </div>
-  </section>
-
-  <section id="view-events" class="hide">
-    <div class="card" style="margin-bottom:18px">
-      <div class="spread" style="margin-bottom:10px">
-        <h3>安全与用户事件</h3>
-        <span class="tiny muted" id="eventSummary"></span>
+      <div class="card">
+        <h3>新增企业应用</h3>
+        <div class="stack" style="margin-top:10px">
+          <label class="field"><span>企业名称</span><input type="text" id="faName"></label>
+          <label class="field"><span>slug（可空）</span><input type="text" id="faSlug" placeholder="ent3"></label>
+          <label class="field"><span>App ID</span><input type="text" id="faAppId"></label>
+          <label class="field"><span>App Secret</span><input type="text" id="faSecret"></label>
+          <button class="btn primary" id="faCreate">创建并生成登录地址</button>
+          <p class="small" id="faResult"></p>
+        </div>
       </div>
-      <div class="row wrap" style="margin-bottom:12px">
-        <select id="eventAction" style="max-width:220px"><option value="">全部动作</option></select>
-        <select id="eventResult" style="max-width:140px">
-          <option value="">全部结果</option>
-          <option value="ok">ok</option>
-          <option value="fail">fail</option>
-          <option value="denied">denied</option>
-        </select>
-        <select id="eventHours" style="max-width:140px">
-          <option value="24">近 24 小时</option>
-          <option value="168" selected>近 7 天</option>
-          <option value="720">近 30 天</option>
-        </select>
-        <input type="text" id="eventSearch" placeholder="邮箱 / IP / 目标 / 详情" style="max-width:260px">
-        <button class="btn small" id="eventRefresh">查询</button>
-      </div>
-      <div id="eventBox"><p class="muted small">加载中…</p></div>
-    </div>
-  </section>
-
-  <section id="view-usage" class="hide">
-    <div class="card">
-      <div class="spread" style="margin-bottom:12px"><h3>近 30 天用量与毛利</h3><button class="btn small" id="refreshUsage">刷新</button></div>
-      <div id="usageBox"><p class="muted small">加载中…</p></div>
-    </div>
-  </section>
+    </section>
+  </main>
 </div>
 
 <script src="/static/assets/api.js"></script>
@@ -120,193 +95,172 @@ const $ = (id) => document.getElementById(id);
 const zh = Api.lang === 'zh';
 if (!needAuth()) throw new Error('redirecting');
 
-function setTab(name) {
-  document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === name));
-  ['orders', 'users', 'usage', 'events', 'apps'].forEach(t => $('view-' + t).classList.toggle('hide', t !== name));
-  if (name === 'orders') loadOrders();
-  if (name === 'users') loadUsers();
-  if (name === 'usage') loadUsage();
-  if (name === 'events') loadEvents();
-  if (name === 'apps') loadApps();
+const STATE = { view: 'overview', page: 0, size: 50, q: '', sortKey: '', sortAsc: false, rows: [], cols: [] };
+
+const SCHEMAS = {
+  users: {
+    title: '用户', url: '/api/v1/admin/users',
+    cols: [
+      ['email', '邮箱'], ['name', '姓名'], ['ops_role', '角色'], ['status', '状态'],
+      ['minutes', '剩余分钟'], ['email_verified', '邮箱确认'], ['created_at', '创建时间'],
+    ],
+  },
+  orgs: {
+    title: '团队', url: '/api/v1/admin/orgs',
+    cols: [
+      ['name', '名称'], ['kind', '类型'], ['feishu_tenant_key', '飞书租户'], ['members', '成员'],
+      ['minutes', '余额'], ['plan', '套餐'], ['created_at', '创建时间'],
+    ],
+  },
+  orders: {
+    title: '订单', url: '/api/v1/admin/orders',
+    cols: [
+      ['id', '订单号'], ['org_name', '团队'], ['user_email', '提交人'], ['kind', '类型'],
+      ['minutes', '分钟'], ['amount', '金额'], ['currency', '币种'], ['status', '状态'], ['created_at', '时间'],
+    ],
+  },
+  events: {
+    title: '审计事件', url: '/api/v1/admin/events',
+    cols: [
+      ['created_at', '时间'], ['action', '动作'], ['result', '结果'], ['actor', '用户'],
+      ['ip', 'IP'], ['target', '目标'], ['detail', '详情'],
+    ],
+  },
+};
+
+function setView(v) {
+  STATE.view = v;
+  document.querySelectorAll('.side a[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === v));
+  const isTable = !!SCHEMAS[v];
+  $('view-overview').classList.toggle('hide', v !== 'overview');
+  $('view-table').classList.toggle('hide', !isTable);
+  $('view-apps').classList.toggle('hide', v !== 'apps');
+  if (v === 'overview') { $('pageTitle').textContent = '概览'; loadOverview(); }
+  else if (v === 'apps') { $('pageTitle').textContent = '企业应用'; loadApps(); }
+  else { $('pageTitle').textContent = SCHEMAS[v].title; STATE.page = 0; loadTable(); }
 }
-document.querySelectorAll('.tabs a').forEach(a => a.onclick = (e) => { e.preventDefault(); setTab(a.dataset.tab); });
+window.addEventListener('hashchange', () => setView((location.hash || '#overview').slice(1)));
+document.querySelectorAll('.side a[data-nav]').forEach(a => a.onclick = (e) => { e.preventDefault(); location.hash = '#' + a.dataset.nav; });
+
+async function loadMe() {
+  try {
+    const me = await Api.req('/api/v1/me');
+    $('meMail').textContent = me.email;
+    const role = me.ops_role || (me.is_admin ? 'superadmin' : '');
+    $('roleBox').textContent = role ? ('角色：' + role) : '无运营权限';
+    if (!role) document.body.innerHTML = '<p style="padding:40px;text-align:center">无运营权限，请联系管理员</p>';
+  } catch (e) { toast(e.message, true); }
+}
 
 async function loadOverview() {
   try {
     const d = await Api.req('/api/v1/admin/overview');
-    $('adminEmail').textContent = d.admin;
-    $('kUsers').textContent = d.users;
-    $('kOrgs').textContent = d.orgs + (zh ? ' 个空间' : ' workspaces');
-    $('kRecs').textContent = d.recordings;
-    $('kRecs30').textContent = (zh ? '30 天新增 ' : 'new in 30d ') + d.recordings_30d;
-    $('kRevenue').textContent = '$' + d.revenue_usd;
-    $('kCost').textContent = (zh ? '成本 ¥' : 'cost ¥') + d.cost_cny_30d + ' · ' + (zh ? '毛利 $' : 'margin $') + d.gross_margin_usd;
-    $('kPending').textContent = d.pending_orders;
-  } catch (e) {
-    if (e.status === 403) { document.body.innerHTML = '<p style="padding:40px;text-align:center">无运营权限</p>'; return; }
-    toast(e.message, true);
-  }
-}
-
-async function loadOrders() {
-  const status = $('orderFilter').value;
-  try {
-    const d = await Api.req('/api/v1/admin/orders' + (status ? '?status=' + status : ''));
-    if (!d.items.length) { $('orderList').innerHTML = '<p class="muted small" style="padding:12px 0">没有订单</p>'; return; }
-    $('orderList').innerHTML = d.items.map(o => `
-      <div class="item">
-        <div class="grow">
-          <b>${o.kind === 'subscription' ? '订阅 ' + o.plan_code : '充值'} · ${o.minutes} 分钟 · ${o.amount} ${o.currency}</b>
-          <div class="tiny muted">${o.org_name} · ${o.user_email || '-'} · ${o.id} · ${fmtDate(o.created_at, true)}</div>
-          ${o.payer_name ? `<div class="tiny muted">付款方：${o.payer_name}</div>` : ''}
-        </div>
-        <span class="badge ${o.status === 'pending' ? 'warn' : o.status === 'confirmed' ? 'ok' : 'gray'}">${o.status}</span>
-        ${o.status === 'pending' ? `<div class="row">
-          <input type="number" value="${o.minutes}" style="width:90px" data-min="${o.id}">
-          <button class="btn small primary" data-confirm="${o.id}">确认到账</button></div>` : ''}
-      </div>`).join('');
-    $('orderList').querySelectorAll('[data-confirm]').forEach(b => b.onclick = async () => {
-      const id = b.dataset.confirm;
-      const minutes = Number(document.querySelector(`[data-min="${id}"]`).value || 0);
-      b.disabled = true;
-      try {
-        await Api.req(`/api/v1/admin/orders/${id}/confirm`, { method: 'POST', body: { minutes } });
-        toast(zh ? '已确认开通' : 'Confirmed'); loadOrders(); loadOverview();
-      } catch (e) { toast(e.message, true); b.disabled = false; }
-    });
+    $('kUsers').textContent = d.users; $('kOrgs').textContent = d.orgs;
+    $('kRecs').textContent = d.recordings_30d; $('kPending').textContent = d.pending_orders;
   } catch (e) { toast(e.message, true); }
 }
-$('orderFilter').onchange = loadOrders;
 
-async function loadUsers() {
-  const q = $('userSearch').value.trim();
+function cell(row, key) {
+  let v = row[key];
+  if (key === 'created_at' && v) return fmtDate(v, true);
+  if (typeof v === 'boolean') return v ? '<span class="badge ok">是</span>' : '<span class="badge err">否</span>';
+  if (v === null || v === undefined) return '';
+  if (key === 'result') { const cls = v === 'ok' ? 'ok' : v === 'fail' ? 'err' : 'warn'; return `<span class="badge ${cls}">${v}</span>`; }
+  const s = String(v);
+  return s.length > 60 ? s.slice(0, 60) + '…' : s;
+}
+
+async function loadTable() {
+  const sc = SCHEMAS[STATE.view];
+  const p = new URLSearchParams();
+  p.set('limit', STATE.size); p.set('offset', STATE.page * STATE.size);
+  if (STATE.q) p.set('q', STATE.q);
+  if (STATE.view === 'events') p.set('hours', '720');
   try {
-    const d = await Api.req('/api/v1/admin/users' + (q ? '?q=' + encodeURIComponent(q) : ''));
-    $('userList').innerHTML = d.items.map(u => `
-      <div class="item">
-        <div class="grow">
-          <b>${u.name || u.email}</b>
-          <div class="tiny muted">${u.email} · ${fmtDate(u.created_at)} · ${u.minutes} 分钟 ${u.email_verified ? '' : '· 未验证'}</div>
-        </div>
-        <span class="badge ${u.status === 'active' ? 'ok' : 'err'}">${u.status}</span>
-        <div class="row">
-          <button class="btn small" data-grant="${u.org_id}">加额度</button>
-          <button class="btn small ${u.status === 'active' ? 'danger' : ''}" data-status="${u.id}" data-next="${u.status === 'active' ? 'disabled' : 'active'}">
-            ${u.status === 'active' ? '停用' : '启用'}
-          </button>
-        </div>
-      </div>`).join('') || '<p class="muted small" style="padding:12px 0">没有匹配用户</p>';
-    $('userList').querySelectorAll('[data-status]').forEach(b => b.onclick = async () => {
-      try { await Api.req(`/api/v1/admin/users/${b.dataset.status}/status`, { method: 'POST', body: { status: b.dataset.next } }); loadUsers(); }
-      catch (e) { toast(e.message, true); }
-    });
-    $('userList').querySelectorAll('[data-grant]').forEach(b => b.onclick = async () => {
-      const v = prompt(zh ? '增加多少分钟？' : 'Minutes to grant?', '100');
-      if (!v) return;
-      try { await Api.req(`/api/v1/admin/orgs/${b.dataset.grant}/grant`, { method: 'POST', body: { minutes: Number(v), note: '后台手工赠送' } }); toast('OK'); loadUsers(); }
-      catch (e) { toast(e.message, true); }
-    });
+    const d = await Api.req(sc.url + '?' + p.toString());
+    let rows = d.items || [];
+    if (STATE.sortKey) {
+      rows = rows.slice().sort((a, b) => {
+        const x = a[STATE.sortKey], y = b[STATE.sortKey];
+        const r = (x === y) ? 0 : (x > y ? 1 : -1);
+        return STATE.sortAsc ? r : -r;
+      });
+    }
+    STATE.rows = rows;
+    STATE.cols = sc.cols;
+    renderTable();
   } catch (e) { toast(e.message, true); }
 }
-$('userSearch').onkeydown = (e) => { if (e.key === 'Enter') loadUsers(); };
 
-async function loadUsage() {
-  try {
-    const d = await Api.req('/api/v1/admin/usage?days=30');
-    if (!d.items.length) { $('usageBox').innerHTML = '<p class="muted small">暂无数据</p>'; return; }
-    $('usageBox').innerHTML = `<table><thead><tr>
-      <th>空间</th><th>任务</th><th>分钟</th><th>成本 ¥</th><th>收入 $</th><th>毛利 $</th></tr></thead><tbody>
-      ${d.items.map(i => `<tr><td>${i.org_name || i.org_id}</td><td>${i.tasks}</td><td>${i.minutes}</td>
-        <td>${i.cost_cny}</td><td>${i.revenue_usd}</td><td>${i.margin_usd}</td></tr>`).join('')}
-      </tbody></table>`;
-  } catch (e) { toast(e.message, true); }
+function renderTable() {
+  const head = STATE.cols.map(([k, label]) =>
+    `<th data-k="${k}">${label}${STATE.sortKey === k ? (STATE.sortAsc ? ' ▲' : ' ▼') : ''}</th>`).join('');
+  const body = STATE.rows.map(r => '<tr>' + STATE.cols.map(([k]) => `<td>${cell(r, k)}</td>`).join('') + '</tr>').join('')
+    || `<tr><td colspan="${STATE.cols.length}" class="muted small">没有数据</td></tr>`;
+  $('grid').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  $('grid').querySelectorAll('th').forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    if (STATE.sortKey === k) STATE.sortAsc = !STATE.sortAsc;
+    else { STATE.sortKey = k; STATE.sortAsc = true; }
+    renderTable();
+  });
+  $('pageInfo').textContent = `第 ${STATE.page + 1} 页 · ${STATE.rows.length} 条`;
+  $('tableHint').textContent = STATE.q ? `搜索：${STATE.q}` : '';
 }
-$('refreshUsage').onclick = loadUsage;
+
+$('doSearch').onclick = () => { STATE.q = $('q').value.trim(); STATE.page = 0; loadTable(); };
+$('q').onkeydown = (e) => { if (e.key === 'Enter') $('doSearch').click(); };
+$('pageSize').onchange = () => { STATE.size = Number($('pageSize').value); STATE.page = 0; loadTable(); };
+$('prevPage').onclick = () => { if (STATE.page > 0) { STATE.page--; loadTable(); } };
+$('nextPage').onclick = () => { if (STATE.rows.length === STATE.size) { STATE.page++; loadTable(); } };
+
+$('exportCsv').onclick = () => {
+  if (!STATE.rows.length) return;
+  const cols = STATE.cols;
+  const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const csv = [cols.map(c => esc(c[1])).join(',')]
+    .concat(STATE.rows.map(r => cols.map(([k]) => esc(r[k])).join(','))).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${STATE.view}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+};
 
 async function loadApps() {
   try {
     const d = await Api.req('/api/v1/admin/feishu-apps');
     $('appList').innerHTML = d.items.length ? d.items.map(a => `
-      <div class="item">
-        <div class="grow">
-          <b>${a.name}</b>
-          <div class="tiny muted">slug=${a.slug} · ${a.app_id} ${a.enabled ? '' : '· 已停用'}</div>
-          <div class="tiny" style="word-break:break-all">${a.login_url}</div>
-        </div>
-        <button class="btn small" data-copy="${a.login_url}">复制登录地址</button>
-      </div>`).join('') : '<p class="muted small">还没有接入企业</p>';
+      <div class="item"><div class="grow"><b>${a.name}</b>
+        <div class="tiny muted">slug=${a.slug} · ${a.app_id}</div>
+        <div class="tiny" style="word-break:break-all">${a.login_url}</div></div>
+        <button class="btn small" data-copy="${a.login_url}">复制</button></div>`).join('')
+      : '<p class="muted small">还没有接入企业</p>';
     $('appList').querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
-      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = '已复制 ✓'; }
-      catch (e) { prompt('复制登录地址', b.dataset.copy); }
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = '已复制 ✓'; } catch (e) { prompt('复制', b.dataset.copy); }
     });
   } catch (e) { toast(e.message, true); }
 }
 
 $('faCreate').onclick = async () => {
-  const body = {
-    name: $('faName').value.trim(),
-    app_id: $('faAppId').value.trim(),
-    app_secret: $('faSecret').value.trim(),
-    slug: $('faSlug').value.trim(),
-  };
-  if (!body.name || !body.app_id || !body.app_secret) { toast('请填全企业名称/App ID/App Secret', true); return; }
-  $('faCreate').disabled = true;
+  const body = { name: $('faName').value.trim(), app_id: $('faAppId').value.trim(),
+                 app_secret: $('faSecret').value.trim(), slug: $('faSlug').value.trim() };
+  if (!body.name || !body.app_id || !body.app_secret) { toast('请填全', true); return; }
   try {
     const r = await Api.req('/api/v1/admin/feishu-apps', { method: 'POST', body });
     $('faResult').textContent = '已创建：' + r.login_url;
     $('faName').value = $('faSlug').value = $('faAppId').value = $('faSecret').value = '';
     loadApps();
   } catch (e) { toast(e.message, true); }
-  finally { $('faCreate').disabled = false; }
 };
 
-async function loadEvents() {
-  const params = new URLSearchParams();
-  const a = $('eventAction').value; if (a) params.set('action', a);
-  const r = $('eventResult').value; if (r) params.set('result', r);
-  params.set('hours', $('eventHours').value);
-  const q = $('eventSearch').value.trim(); if (q) params.set('q', q);
-  params.set('limit', '200');
-  try {
-    const [d, sum] = await Promise.all([
-      Api.req('/api/v1/admin/events?' + params.toString()),
-      Api.req('/api/v1/admin/events/summary?days=7'),
-    ]);
-    $('eventSummary').textContent =
-      `近 7 天 ${sum.total} 条 · 失败 ${sum.by_result.fail || 0} · 拒绝 ${sum.by_result.denied || 0} · 用户 ${sum.unique_actors} · IP ${sum.unique_ips}`;
-    const sel = $('eventAction');
-    if (sel.options.length <= 1) {
-      sel.innerHTML = '<option value="">全部动作</option>' +
-        d.actions.map(x => `<option value="${x.value}">${x.label}（${x.value}）</option>`).join('');
-    }
-    if (!d.items.length) { $('eventBox').innerHTML = '<p class="muted small">没有匹配的事件</p>'; return; }
-    $('eventBox').innerHTML = `<table><thead><tr>
-      <th>时间</th><th>动作</th><th>结果</th><th>用户</th><th>IP</th><th>目标</th><th>详情</th></tr></thead><tbody>
-      ${d.items.map(e => {
-        const cls = e.result === 'ok' ? 'ok' : e.result === 'fail' ? 'err' : 'warn';
-        const detail = (e.detail || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])).slice(0, 90);
-        return `<tr>
-          <td class="tiny">${fmtDate(e.created_at, true)}</td>
-          <td>${e.action_label}<div class="tiny muted">${e.action}</div></td>
-          <td><span class="badge ${cls}">${e.result}</span></td>
-          <td class="tiny">${e.actor || e.user_id || '-'}</td>
-          <td class="tiny">${e.ip || '-'}</td>
-          <td class="tiny">${e.target || '-'}</td>
-          <td class="tiny muted">${detail}</td>
-        </tr>`;
-      }).join('')}
-      </tbody></table>`;
-  } catch (e) { toast(e.message, true); }
-}
-$('eventRefresh').onclick = loadEvents;
-$('eventSearch').onkeydown = (e) => { if (e.key === 'Enter') loadEvents(); };
-
 $('logout').onclick = async () => {
-  try { await Api.req('/api/v1/auth/logout', { method: 'POST' }); } catch (e) {}
+  try { await Api.req('/api/v1/auth/logout', { method: 'POST' }); } catch (e) { /* 忽略 */ }
   Api.setToken(''); location.href = '/login';
 };
 
-loadOverview(); loadOrders(); loadUsers();
+loadMe();
+setView((location.hash || '#overview').slice(1));
 </script>
 </body>
 </html>

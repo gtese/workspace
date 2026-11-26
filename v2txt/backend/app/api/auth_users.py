@@ -91,6 +91,7 @@ def user_dict(db: Session, user: User) -> dict:
         "email_verified": user.email_verified_at is not None,
         "status": user.status,
         "is_admin": is_platform_admin(user),
+        "ops_role": (is_platform_admin(user) and "superadmin") or getattr(user, "ops_role", ""),
         "created_at": user.created_at.isoformat(),
         "default_org_id": user.default_org_id,
         "orgs": [
