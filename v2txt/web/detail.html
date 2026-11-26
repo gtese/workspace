@@ -42,6 +42,7 @@
 <script>
 const id = location.pathname.split('/').pop();
 const isShared = location.pathname.startsWith('/s/');
+if (isShared) { const b = document.getElementById('backBar'); if (b) b.style.display = 'none'; }
 const qs = new URLSearchParams(location.search);
 const token = localStorage.getItem('vt_token') || '';
 const org = localStorage.getItem('vt_org') || '';

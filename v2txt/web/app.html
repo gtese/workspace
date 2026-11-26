@@ -591,7 +591,8 @@ const STATUS_LABEL = {
 
 async function openRecord(id) {
   const { url } = await Api.req(`/api/v1/recordings/${id}/share`);
-  window.open(url, '_blank');
+  // 同窗口跳转：window.open 会被飞书 WebView 判定为"离开飞书"
+  location.assign(url);
 }
 
 function recordRow(r) {
