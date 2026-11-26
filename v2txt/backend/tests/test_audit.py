@@ -121,3 +121,28 @@ def test_audit_failure_does_not_break_request(client: TestClient, monkeypatch) -
         "/api/v1/auth/login", json={"email": "nobody@example.com", "password": "whatever123"}
     )
     assert r.status_code == 401  # 业务结果不受影响
+
+
+def test_admin_can_reset_password(client: TestClient, monkeypatch) -> None:
+    from app import ratelimit
+    from app.api import deps
+    from app.config import get_settings
+
+    settings = get_settings().model_copy(update={"admin_emails": "u_test@example.com"})
+    monkeypatch.setattr(deps, "get_settings", lambda: settings)
+    ratelimit.reset()
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"email": "resetpw@example.com", "password": "Goodpass123"},
+    ).json()
+    uid = reg["user"]["id"]
+    r = client.post(
+        f"/api/v1/admin/users/{uid}/password",
+        json={"password": "Newpass123"},
+        headers=headers_for("u_test"),
+    )
+    assert r.status_code == 200, r.text
+    ratelimit.reset()
+    assert client.post(
+        "/api/v1/auth/login", json={"email": "resetpw@example.com", "password": "Newpass123"}
+    ).status_code == 200

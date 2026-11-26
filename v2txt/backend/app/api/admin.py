@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import audit, mailer
+from ..accounts import hash_password, password_problem, revoke_all_sessions
 from ..audit import ACTIONS
 from ..billing import credit, org_summary
 from ..config import get_settings
@@ -39,6 +40,10 @@ class StatusIn(BaseModel):
 class GrantIn(BaseModel):
     minutes: float = Field(gt=0, le=100000)
     note: str = Field(default="运营调整", max_length=200)
+
+
+class PasswordIn(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
 
 
 class ConfirmIn(BaseModel):
@@ -130,6 +135,27 @@ def set_user_status(
     audit.record(db, "admin.user.status", user_id=admin.id, actor=admin.email, target=user.email,
                  detail={"status": body.status, "reason": body.reason[:200]})
     return {"ok": True, "status": user.status}
+
+
+@router.post("/users/{user_id}/password")
+def reset_user_password(
+    user_id: str,
+    body: PasswordIn,
+    admin: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """运营侧重置密码（邮件服务未开通时，用户忘记密码的唯一出路）。"""
+    problem = password_problem(body.password)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    user.password_hash = hash_password(body.password)
+    db.commit()
+    revoke_all_sessions(db, user.id)
+    audit.record(db, "admin.user.password", user_id=admin.id, actor=admin.email, target=user.email)
+    return {"ok": True, "email": user.email, "message": "密码已重置，该用户需重新登录"}
 
 
 @router.get("/orders")
