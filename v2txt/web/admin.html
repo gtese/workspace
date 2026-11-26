@@ -31,6 +31,7 @@
     <a href="#" data-tab="users">用户</a>
     <a href="#" data-tab="usage">用量与毛利</a>
     <a href="#" data-tab="events">事件日志</a>
+    <a href="#" data-tab="apps">企业应用</a>
   </div>
 
   <section id="view-orders">
@@ -55,6 +56,26 @@
         <input type="text" id="userSearch" placeholder="搜索邮箱或姓名" style="max-width:260px">
       </div>
       <div class="list" id="userList"><p class="muted small">加载中…</p></div>
+    </div>
+  </section>
+
+  <section id="view-apps" class="hide">
+    <div class="card" style="margin-bottom:18px">
+      <h3>已接入企业</h3>
+      <p class="tiny muted" style="margin:6px 0 12px">每个企业一套飞书自建应用；把「登录地址」发给该企业用户即可。</p>
+      <div class="list" id="appList"><p class="muted small">加载中…</p></div>
+    </div>
+    <div class="card">
+      <h3>新增企业应用</h3>
+      <p class="tiny muted" style="margin:6px 0 12px">在**该企业自己的**飞书开放平台创建自建应用后，把凭据填这里。</p>
+      <div class="grid2" style="gap:12px">
+        <label class="field"><span>企业名称</span><input type="text" id="faName" placeholder="例如：XX 科技"></label>
+        <label class="field"><span>标识 slug（可空，自动生成）</span><input type="text" id="faSlug" placeholder="例如：ent3"></label>
+        <label class="field"><span>App ID</span><input type="text" id="faAppId" placeholder="cli_xxx"></label>
+        <label class="field"><span>App Secret</span><input type="text" id="faSecret" placeholder="应用密钥"></label>
+      </div>
+      <button class="btn primary" id="faCreate">创建并生成登录地址</button>
+      <p class="small" id="faResult" style="margin-top:10px"></p>
     </div>
   </section>
 
@@ -101,11 +122,12 @@ if (!needAuth()) throw new Error('redirecting');
 
 function setTab(name) {
   document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === name));
-  ['orders', 'users', 'usage', 'events'].forEach(t => $('view-' + t).classList.toggle('hide', t !== name));
+  ['orders', 'users', 'usage', 'events', 'apps'].forEach(t => $('view-' + t).classList.toggle('hide', t !== name));
   if (name === 'orders') loadOrders();
   if (name === 'users') loadUsers();
   if (name === 'usage') loadUsage();
   if (name === 'events') loadEvents();
+  if (name === 'apps') loadApps();
 }
 document.querySelectorAll('.tabs a').forEach(a => a.onclick = (e) => { e.preventDefault(); setTab(a.dataset.tab); });
 
@@ -200,6 +222,43 @@ async function loadUsage() {
   } catch (e) { toast(e.message, true); }
 }
 $('refreshUsage').onclick = loadUsage;
+
+async function loadApps() {
+  try {
+    const d = await Api.req('/api/v1/admin/feishu-apps');
+    $('appList').innerHTML = d.items.length ? d.items.map(a => `
+      <div class="item">
+        <div class="grow">
+          <b>${a.name}</b>
+          <div class="tiny muted">slug=${a.slug} · ${a.app_id} ${a.enabled ? '' : '· 已停用'}</div>
+          <div class="tiny" style="word-break:break-all">${a.login_url}</div>
+        </div>
+        <button class="btn small" data-copy="${a.login_url}">复制登录地址</button>
+      </div>`).join('') : '<p class="muted small">还没有接入企业</p>';
+    $('appList').querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = '已复制 ✓'; }
+      catch (e) { prompt('复制登录地址', b.dataset.copy); }
+    });
+  } catch (e) { toast(e.message, true); }
+}
+
+$('faCreate').onclick = async () => {
+  const body = {
+    name: $('faName').value.trim(),
+    app_id: $('faAppId').value.trim(),
+    app_secret: $('faSecret').value.trim(),
+    slug: $('faSlug').value.trim(),
+  };
+  if (!body.name || !body.app_id || !body.app_secret) { toast('请填全企业名称/App ID/App Secret', true); return; }
+  $('faCreate').disabled = true;
+  try {
+    const r = await Api.req('/api/v1/admin/feishu-apps', { method: 'POST', body });
+    $('faResult').textContent = '已创建：' + r.login_url;
+    $('faName').value = $('faSlug').value = $('faAppId').value = $('faSecret').value = '';
+    loadApps();
+  } catch (e) { toast(e.message, true); }
+  finally { $('faCreate').disabled = false; }
+};
 
 async function loadEvents() {
   const params = new URLSearchParams();
