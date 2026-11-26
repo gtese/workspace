@@ -176,10 +176,11 @@ def home_page() -> FileResponse:
 def enterprise_entry(slug: str) -> FileResponse:  # noqa: ARG001
     """企业专属入口：路径里带企业标识，替代 ?app= 查询参数。
 
-    直接渲染登录页（auth.html 会从路径解析出企业标识），不再经过 boot.html 跳板，
-    这样飞书里"点开应用"到出登录界面之间**不发生任何页面跳转**。
+    直接渲染控制台（app.html 内部自带登录门：未登录时在页面内展示登录表单，登录成功
+    reload 同一个 URL），因此"点开应用 → 登录 → 进控制台"全程**同一个 URL、零跳转**，
+    飞书不会把任何一步判成"离开飞书"的外链。
     """
-    return _page("auth.html")
+    return _page("app.html")
 
 
 @app.get("/login", include_in_schema=False)

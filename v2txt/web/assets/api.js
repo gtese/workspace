@@ -48,6 +48,8 @@
       const res = await fetch(path, Object.assign({}, opts, { headers }));
       if (res.status === 401) {
         this.setToken('');
+        // 页内登录门模式（app.html）：不跳转，交给页面自己渲染登录表单
+        if (window.__V2TXT_NO_REDIRECT__) throw new Error('未登录');
         if (!location.pathname.startsWith('/login') && !location.pathname.startsWith('/register')) {
           let app = '';
           try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
@@ -87,7 +89,9 @@
 
   function needAuth() {
     if (!Api.token) {
-      location.href = '/login?next=' + encodeURIComponent(location.pathname + location.hash);
+      if (!window.__V2TXT_NO_REDIRECT__) {
+        location.href = '/login?next=' + encodeURIComponent(location.pathname + location.hash);
+      }
       return false;
     }
     return true;
