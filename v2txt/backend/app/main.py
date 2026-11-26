@@ -174,8 +174,12 @@ def home_page() -> FileResponse:
 
 @app.get("/e/{slug}", include_in_schema=False)
 def enterprise_entry(slug: str) -> FileResponse:  # noqa: ARG001
-    """企业专属入口：路径里带企业标识，替代 ?app= 查询参数。"""
-    return _page("boot.html")
+    """企业专属入口：路径里带企业标识，替代 ?app= 查询参数。
+
+    直接渲染登录页（auth.html 会从路径解析出企业标识），不再经过 boot.html 跳板，
+    这样飞书里"点开应用"到出登录界面之间**不发生任何页面跳转**。
+    """
+    return _page("auth.html")
 
 
 @app.get("/login", include_in_schema=False)

@@ -266,7 +266,8 @@ async function silentFeishuLogin() {
   if (!Api.token) {
     let app = '';
     try { app = sessionStorage.getItem('feishu_app') || ''; } catch (e) { /* 忽略 */ }
-    location.replace('/login' + (app ? '?app=' + encodeURIComponent(app) : ''));
+    // 回企业入口路径而不是 /login：入口路径是飞书后台登记的主页，飞书内不会判成外链
+    location.replace(app ? '/e/' + encodeURIComponent(app) : '/login');
     throw new Error('redirecting');
   }
 })();

@@ -340,8 +340,17 @@ function init() {
   $('resetForm').onsubmit = doReset;
 }
 
-loadFeishuConfig();
+const cfgReady = loadFeishuConfig();
 init();
+
+/* 企业入口 /e/<slug>：已登录直接进控制台；飞书内自动免登，全程不跳外链 */
+cfgReady.then(() => {
+  if (!/^\/e\/[^/]+/.test(location.pathname)) return;
+  if (Api.token) { location.replace('/app'); return; }
+  if (FEISHU.enabled && inFeishuClient()) {
+    feishuLogin().catch(() => { /* 失败时用户仍可手动点"飞书登录" */ });
+  }
+}).catch(() => { /* 忽略 */ });
 </script>
 </body>
 </html>
