@@ -38,7 +38,7 @@
   </div>
 </div>
 
-<div class="row mb-3">
+<div class="row mb-2">
   <div class="col-md-3 col-sm-6 mb-2">
     <div class="card h-100">
       <div class="card-body py-3">
@@ -69,9 +69,92 @@
   <div class="col-md-3 col-sm-6 mb-2">
     <div class="card h-100">
       <div class="card-body py-3">
+        <div class="text-muted small">Average Load</div>
+        <div class="h3 mb-0"><%= format('%.2f', summary[:average_load]) %></div>
+        <div class="small text-muted">1-minute load average</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Today Jobs</div>
+        <div class="h3 mb-0"><%= number_with_delimiter(summary[:today_jobs]) %></div>
+        <div class="small text-muted">submitted today</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">This Week Jobs</div>
+        <div class="h3 mb-0"><%= number_with_delimiter(summary[:week_jobs]) %></div>
+        <div class="small text-muted">since Monday</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">This Month Jobs</div>
+        <div class="h3 mb-0"><%= number_with_delimiter(summary[:month_jobs]) %></div>
+        <div class="small text-muted">since the 1st</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-sm-6 mb-2">
+    <div class="card h-100">
+      <div class="card-body py-3">
         <div class="text-muted small">Historical Jobs</div>
         <div class="h3 mb-0"><%= number_with_delimiter(summary[:historical_job_count]) %></div>
         <div class="small text-muted">from Slurm accounting</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-7 mb-2">
+    <div class="card h-100">
+      <div class="card-header py-2">Top Users (by historical jobs)</div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th class="text-right">Historical Jobs</th>
+              <th class="text-right">Running</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if summary[:top_users].empty? -%>
+              <tr><td colspan="3" class="text-muted">No user data available.</td></tr>
+            <% else -%>
+              <% summary[:top_users].each do |u| -%>
+                <tr>
+                  <td><%= u[:user] %></td>
+                  <td class="text-right"><%= number_with_delimiter(u[:historical]) %></td>
+                  <td class="text-right"><%= number_with_delimiter(u[:running]) %></td>
+                </tr>
+              <% end -%>
+            <% end -%>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-5 mb-2">
+    <div class="card h-100">
+      <div class="card-header py-2">Cluster Load</div>
+      <div class="card-body py-3">
+        <div class="d-flex justify-content-between mb-2"><span class="text-muted">CPU Used</span><strong><%= format('%.1f', summary[:cpu_used_percent]) %>%</strong></div>
+        <div class="progress mb-3" style="height: 8px;"><div class="progress-bar" role="progressbar" style="width: <%= [summary[:cpu_used_percent], 100].min %>%;"></div></div>
+        <div class="d-flex justify-content-between mb-2"><span class="text-muted">Memory Used</span><strong><%= format('%.1f', summary[:memory_used_percent]) %>%</strong></div>
+        <div class="progress mb-3" style="height: 8px;"><div class="progress-bar bg-info" role="progressbar" style="width: <%= [summary[:memory_used_percent], 100].min %>%;"></div></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Average Load</span><strong><%= format('%.2f', summary[:average_load]) %></strong></div>
       </div>
     </div>
   </div>
@@ -89,6 +172,9 @@
           <th>Node</th>
           <th>Partition</th>
           <th>State</th>
+          <th class="text-right">Load</th>
+          <th class="text-right">CPU %</th>
+          <th class="text-right">Mem %</th>
           <th class="text-right">CPUs</th>
           <th class="text-right">Memory</th>
           <th class="text-right">Users</th>
@@ -100,13 +186,16 @@
       </thead>
       <tbody>
         <% if summary[:nodes].empty? -%>
-          <tr><td colspan="10" class="text-muted">No node data available.</td></tr>
+          <tr><td colspan="13" class="text-muted">No node data available.</td></tr>
         <% else -%>
           <% summary[:nodes].each do |node| -%>
             <tr>
               <td><code><%= node[:name] %></code></td>
               <td><%= node[:partitions].join(', ') %></td>
               <td><span class="badge <%= cluster_node_state_class(node[:state], node[:restricted]) %>" title="<%= cluster_node_state_text(node[:state]) %><%= node[:restricted] ? ' This node is in a restricted partition (not available to all users).' : '' %>"><%= node[:state] %></span></td>
+              <td class="text-right"><%= format('%.2f', node[:load]) %></td>
+              <td class="text-right"><%= format('%.1f', node[:cpu_used_percent]) %>%</td>
+              <td class="text-right"><%= format('%.1f', node[:memory_used_percent]) %>%</td>
               <td class="text-right"><%= number_with_delimiter(node[:cpus]) %></td>
               <td class="text-right"><%= cluster_memory_text(node[:memory_mb]) %></td>
               <td class="text-right"><%= node[:current_users] %></td>
