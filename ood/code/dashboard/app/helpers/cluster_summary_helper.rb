@@ -117,6 +117,14 @@ module ClusterSummaryHelper
     }
   end
 
+  # Color for availability columns: >= half green, < half yellow, zero red.
+  def cluster_availability_class(available, total)
+    return 'text-danger' if available.to_i <= 0
+    return 'text-warning' if total.to_i > 0 && available.to_f < total.to_f / 2.0
+
+    'text-success'
+  end
+
   def cluster_memory_text(memory_mb)
     return '0G' if memory_mb.to_i <= 0
 

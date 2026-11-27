@@ -199,8 +199,8 @@
               <td class="text-right"><%= number_with_delimiter(node[:cpus]) %></td>
               <td class="text-right"><%= cluster_memory_text(node[:memory_mb]) %></td>
               <td class="text-right"><%= node[:current_users] %></td>
-              <td class="text-right"><%= number_with_delimiter(node[:available_cpus]) %></td>
-              <td class="text-right"><%= cluster_memory_text(node[:available_memory_mb]) %></td>
+              <td class="text-right <%= cluster_availability_class(node[:available_cpus], node[:cpus]) %>"><strong><%= number_with_delimiter(node[:available_cpus]) %></strong></td>
+              <td class="text-right <%= cluster_availability_class(node[:available_memory_mb], node[:memory_mb]) %>"><strong><%= cluster_memory_text(node[:available_memory_mb]) %></strong></td>
               <td class="text-right"><%= node[:current_jobs] %></td>
               <td class="text-right"><%= node[:historical_jobs] %></td>
             </tr>
