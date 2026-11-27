@@ -1,116 +1,70 @@
 <% summary = cluster_summary -%>
 <div class="row mb-2">
-  <div class="col-md-3 col-sm-6 mb-2">
+  <div class="col-6 col-md mb-2">
     <div class="card h-100">
-      <div class="card-body py-3">
+      <div class="card-body py-2">
         <div class="text-muted small">Nodes</div>
-        <div class="h3 mb-0"><%= summary[:node_count] %></div>
+        <div class="h4 mb-0"><%= summary[:node_count] %></div>
         <div class="small text-muted">idle <%= summary[:idle_nodes] %> / busy <%= summary[:allocated_nodes] %></div>
       </div>
     </div>
   </div>
-  <div class="col-md-3 col-sm-6 mb-2">
+  <div class="col-6 col-md mb-2">
     <div class="card h-100">
-      <div class="card-body py-3">
+      <div class="card-body py-2">
         <div class="text-muted small">Users</div>
-        <div class="h3 mb-0"><%= summary[:users] %></div>
-        <div class="small text-muted">with queued/running jobs</div>
+        <div class="h4 mb-0"><%= summary[:users] %></div>
+        <div class="small text-muted">with active jobs</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3 col-sm-6 mb-2">
+  <div class="col-6 col-md mb-2">
     <div class="card h-100">
-      <div class="card-body py-3">
+      <div class="card-body py-2">
         <div class="text-muted small">Current Jobs</div>
-        <div class="h3 mb-0"><%= summary[:job_count] %></div>
-        <div class="small text-muted">running <%= summary[:running_jobs] %> / pending <%= summary[:pending_jobs] %></div>
+        <div class="h4 mb-0"><%= summary[:job_count] %></div>
+        <div class="small text-muted">run <%= summary[:running_jobs] %> / pend <%= summary[:pending_jobs] %></div>
       </div>
     </div>
   </div>
-  <div class="col-md-3 col-sm-6 mb-2">
+  <div class="col-6 col-md mb-2">
     <div class="card h-100">
-      <div class="card-body py-3">
+      <div class="card-body py-2">
         <div class="text-muted small">CPUs</div>
-        <div class="h3 mb-0"><%= number_with_delimiter(summary[:cpu_count]) %></div>
+        <div class="h4 mb-0"><%= number_with_delimiter(summary[:cpu_count]) %></div>
         <div class="small text-muted">available <%= number_with_delimiter(summary[:available_cpus]) %></div>
       </div>
     </div>
   </div>
-</div>
-
-<div class="row mb-2">
-  <div class="col-md-3 col-sm-6 mb-2">
+  <div class="col-6 col-md mb-2">
     <div class="card h-100">
-      <div class="card-body py-3">
-        <div class="text-muted small">Available CPUs</div>
-        <div class="h3 mb-0"><%= number_with_delimiter(summary[:available_cpus]) %></div>
-        <div class="small text-muted">idle logical CPUs</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-sm-6 mb-2">
-    <div class="card h-100">
-      <div class="card-body py-3">
-        <div class="text-muted small">Available Memory</div>
-        <div class="h3 mb-0"><%= cluster_memory_text(summary[:available_memory_mb]) %></div>
-        <div class="small text-muted">free memory reported by Slurm</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-sm-6 mb-2">
-    <div class="card h-100">
-      <div class="card-body py-3">
+      <div class="card-body py-2">
         <div class="text-muted small">Memory</div>
-        <div class="h3 mb-0"><%= cluster_memory_text(summary[:memory_mb]) %></div>
-        <div class="small text-muted">total cluster memory</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-sm-6 mb-2">
-    <div class="card h-100">
-      <div class="card-body py-3">
-        <div class="text-muted small">Average Load</div>
-        <div class="h3 mb-0"><%= format('%.2f', summary[:average_load]) %></div>
-        <div class="small text-muted">1-minute load average</div>
+        <div class="h4 mb-0"><%= cluster_memory_text(summary[:memory_mb]) %></div>
+        <div class="small text-muted">available <%= cluster_memory_text(summary[:available_memory_mb]) %></div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="row mb-3">
-  <div class="col-md-3 col-sm-6 mb-2">
-    <div class="card h-100">
-      <div class="card-body py-3">
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row text-center">
+      <div class="col-6 col-md-3">
         <div class="text-muted small">Today Jobs</div>
-        <div class="h3 mb-0"><%= number_with_delimiter(summary[:today_jobs]) %></div>
-        <div class="small text-muted">submitted today</div>
+        <div class="h4 mb-0"><%= number_with_delimiter(summary[:today_jobs]) %></div>
       </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-sm-6 mb-2">
-    <div class="card h-100">
-      <div class="card-body py-3">
+      <div class="col-6 col-md-3">
         <div class="text-muted small">This Week Jobs</div>
-        <div class="h3 mb-0"><%= number_with_delimiter(summary[:week_jobs]) %></div>
-        <div class="small text-muted">since Monday</div>
+        <div class="h4 mb-0"><%= number_with_delimiter(summary[:week_jobs]) %></div>
       </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-sm-6 mb-2">
-    <div class="card h-100">
-      <div class="card-body py-3">
+      <div class="col-6 col-md-3">
         <div class="text-muted small">This Month Jobs</div>
-        <div class="h3 mb-0"><%= number_with_delimiter(summary[:month_jobs]) %></div>
-        <div class="small text-muted">since the 1st</div>
+        <div class="h4 mb-0"><%= number_with_delimiter(summary[:month_jobs]) %></div>
       </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-sm-6 mb-2">
-    <div class="card h-100">
-      <div class="card-body py-3">
+      <div class="col-6 col-md-3">
         <div class="text-muted small">Historical Jobs</div>
-        <div class="h3 mb-0"><%= number_with_delimiter(summary[:historical_job_count]) %></div>
-        <div class="small text-muted">from Slurm accounting</div>
+        <div class="h4 mb-0"><%= number_with_delimiter(summary[:historical_job_count]) %></div>
       </div>
     </div>
   </div>
@@ -149,19 +103,19 @@
   <div class="col-md-5 mb-2">
     <div class="card h-100">
       <div class="card-header py-2">Cluster Load</div>
-      <div class="card-body py-3">
-        <div class="d-flex justify-content-between mb-2"><span class="text-muted">CPU Used</span><strong><%= format('%.1f', summary[:cpu_used_percent]) %>%</strong></div>
-        <div class="progress mb-3" style="height: 8px;"><div class="progress-bar" role="progressbar" style="width: <%= [summary[:cpu_used_percent], 100].min %>%;"></div></div>
-        <div class="d-flex justify-content-between mb-2"><span class="text-muted">Memory Used</span><strong><%= format('%.1f', summary[:memory_used_percent]) %>%</strong></div>
-        <div class="progress mb-3" style="height: 8px;"><div class="progress-bar bg-info" role="progressbar" style="width: <%= [summary[:memory_used_percent], 100].min %>%;"></div></div>
-        <div class="d-flex justify-content-between"><span class="text-muted">Average Load</span><strong><%= format('%.2f', summary[:average_load]) %></strong></div>
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between mb-1"><span class="text-muted small">CPU Used</span><strong><%= format('%.1f', summary[:cpu_used_percent]) %>%</strong></div>
+        <div class="progress mb-2" style="height: 6px;"><div class="progress-bar" role="progressbar" style="width: <%= [summary[:cpu_used_percent], 100].min %>%;"></div></div>
+        <div class="d-flex justify-content-between mb-1"><span class="text-muted small">Memory Used</span><strong><%= format('%.1f', summary[:memory_used_percent]) %>%</strong></div>
+        <div class="progress mb-2" style="height: 6px;"><div class="progress-bar bg-info" role="progressbar" style="width: <%= [summary[:memory_used_percent], 100].min %>%;"></div></div>
+        <div class="d-flex justify-content-between small"><span class="text-muted">Average Load</span><strong><%= format('%.2f', summary[:average_load]) %></strong></div>
       </div>
     </div>
   </div>
 </div>
 
 <div class="card mb-4">
-  <div class="card-header d-flex justify-content-between align-items-center">
+  <div class="card-header d-flex justify-content-between align-items-center py-2">
     <span>Cluster Nodes</span>
     <span class="text-muted small">Updated <%= summary[:generated_at].strftime('%Y-%m-%d %H:%M:%S') %></span>
   </div>
