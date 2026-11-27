@@ -5,7 +5,7 @@ module ActiveJobs
     attr_reader :controller, :params, :response, :filter_id, :cluster_id
 
     # additional attrs to request when calling info_all
-    JOB_ATTRS = [:accounting_id, :allocated_nodes, :job_name, :job_owner, :queue_name, :wallclock_time, :procs, :min_memory ]
+    JOB_ATTRS = [:accounting_id, :allocated_nodes, :job_name, :job_owner, :queue_name, :wallclock_time, :procs, :min_memory, :submission_time, :dispatch_time ]
 
     def initialize(filter_id:, cluster_id:, controller:, params:, response:)
       @filter_id = filter_id
@@ -90,6 +90,8 @@ module ActiveJobs
           hosts: j.allocated_nodes.map{ |node| node.name }.reject(&:blank?).join(', '),
           memory: (j.native && j.native[:min_memory]).to_s,
           cpus: (j.procs || (j.native && j.native[:cpus])).to_s,
+          submission_time: j.submission_time&.iso8601,
+          start_time: j.dispatch_time&.iso8601,
           can_manage: can_manage?(j.job_owner),
           extended_available: extended_available,
           nodes: j.allocated_nodes.map{ |node| node.name }.reject(&:blank?),

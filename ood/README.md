@@ -15,7 +15,7 @@
 - 所有作业（含 Desktop）最长 128 小时
 - 节点分区：150/151/152/153/155 使用 `eda15x`；154 使用 `node154`（仅 `group_dedv` 成员可提交）
 - 首页新增集群概览：节点数、用户数、当前/历史作业、CPU、可用 CPU、总内存与可用内存、节点明细
-- Active Jobs 增加 Partition/Host/Memory/CPUs 列，以及 Stop、Remove from List 操作
+- Active Jobs 增加 Submit Time、Start Time、Partition/Host/Memory/CPUs 列，以及 Stop、Remove from List 操作
 - 新增 Node Isolation 管理应用：把节点隔离给指定 AD 组（创建 `iso_<host>` 分区），带审计
 
 ## 2. 文档

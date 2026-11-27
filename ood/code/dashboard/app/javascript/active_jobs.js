@@ -160,6 +160,16 @@ function memory_in_gb(data) {
     return (Math.round(g * 100) / 100) + 'G';
 }
 
+function format_job_time(data) {
+    if (!data) return '-';
+    const d = new Date(data);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleString(undefined, {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+    });
+}
+
 function create_datatable(options){
     if (!options) options = {};
     if (!options.drawCallback) options.drawCallback = null;
@@ -252,6 +262,22 @@ function create_datatable(options){
                 "render":           function(data) {
                   var data = escapeHtml(data || '');
                   return `<span title="${data}">${data || '-'}</span>`;
+                }
+            },
+            {
+                data:               "submission_time",
+                "autoWidth":        true,
+                "render":           function(data) {
+                  const t = format_job_time(data);
+                  return `<span title="${escapeHtml(t)}">${escapeHtml(t)}</span>`;
+                }
+            },
+            {
+                data:               "start_time",
+                "autoWidth":        true,
+                "render":           function(data) {
+                  const t = format_job_time(data);
+                  return `<span title="${escapeHtml(t)}">${escapeHtml(t)}</span>`;
                 }
             },
             {
