@@ -155,7 +155,7 @@ class FeishuDocClient:
                 json={"member_type": "openid", "member_id": open_id, "perm": "full_access"},
                 timeout=20,
             )
-            httpx.post(
+            tr = httpx.post(
                 f"{BASE}/drive/v1/permissions/{doc}/members/transfer_owner?type=docx",
                 headers=h,
                 json={
@@ -167,6 +167,10 @@ class FeishuDocClient:
                 },
                 timeout=20,
             )
+            if tr.status_code >= 300 or (tr.json().get("code") not in (0, None) if tr.content else False):
+                log.warning(
+                    "文档转交本人失败: HTTP %s %s", tr.status_code, tr.text[:300]
+                )
         except Exception:  # noqa: BLE001
             log.exception("文档转交失败（保留在应用空间）")
 

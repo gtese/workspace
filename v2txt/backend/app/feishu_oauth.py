@@ -162,6 +162,12 @@ def user_token_for(db, user) -> str:  # noqa: ANN001
     cached = cache_get(open_id)
     if cached:
         return cached
+    # 数据库里持久化的 access token（容器重启后内存缓存会丢）
+    stored = getattr(user, "feishu_access_token", "") or ""
+    stored_exp = float(getattr(user, "feishu_token_exp", 0) or 0)
+    if stored and stored_exp > time.time():
+        cache_put(open_id, stored, int(stored_exp - time.time()))
+        return stored
     token = getattr(user, "feishu_refresh_token", "") or ""
     if not token:
         return ""
@@ -184,7 +190,10 @@ def user_token_for(db, user) -> str:  # noqa: ANN001
     access = data.get("access_token", "")
     if data.get("refresh_token"):
         user.feishu_refresh_token = data["refresh_token"]
-        db.commit()
     if access:
-        cache_put(open_id, access, int(data.get("expires_in") or 3600))
+        ttl = int(data.get("expires_in") or 3600)
+        cache_put(open_id, access, ttl)
+        user.feishu_access_token = access
+        user.feishu_token_exp = time.time() + max(300, ttl - 120)
+    db.commit()
     return access

@@ -16,6 +16,8 @@ ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("feishu_union_id", "VARCHAR(64) DEFAULT ''"),
         ("feishu_tenant_key", "VARCHAR(64) DEFAULT ''"),
         ("feishu_refresh_token", "TEXT DEFAULT ''"),
+        ("feishu_access_token", "TEXT DEFAULT ''"),
+        ("feishu_token_exp", "FLOAT DEFAULT 0"),
         ("feishu_app_slug", "VARCHAR(40) DEFAULT ''"),
         ("ops_role", "VARCHAR(20) DEFAULT ''"),
     ],

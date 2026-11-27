@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy.orm import Session
 
-from . import audio, feishu_oauth, mailer, storage
+from . import audio, feishu_oauth, mailer, oss, storage
 from .asr import get_asr_provider
 from .asr.base import AudioChunk
 from .config import get_settings
@@ -149,10 +149,31 @@ def _run(db: Session, rec: Recording, settings) -> None:  # noqa: ANN001
         )
         offset += float(seg.duration_sec or 0.0)
 
+    # 转写音频优先走 OSS：阿里云拉公网音频时走 Cloudflare 隧道极慢（2MB WAV 能卡到超时）
+    asr_url = public_url
+    asr_oss_key = ""
+    if oss.enabled():
+        try:
+            suffix = source.suffix or ".wav"
+            asr_oss_key = f"{oss.object_key('asr', rec.id, suffix)}"
+            ctype = "audio/wav" if suffix == ".wav" else "audio/mp4"
+            asr_url = oss.upload(asr_oss_key, source.read_bytes(), content_type=ctype)
+            log.info("转写音频已上传 OSS %s (%.1fMB)", asr_oss_key, source.stat().st_size / 1048576)
+        except Exception as exc:  # noqa: BLE001  # OSS 不可用时回退隧道 URL
+            log.warning("上传 OSS 失败，回退隧道 URL: %s", exc)
+            asr_oss_key = ""
+
     t_asr = time.time()
-    transcript = get_asr_provider().transcribe(
-        source, float(rec.duration_sec or 0.0), public_url, chunks=chunks
-    )
+    try:
+        transcript = get_asr_provider().transcribe(
+            source, float(rec.duration_sec or 0.0), asr_url, chunks=chunks
+        )
+    finally:
+        if asr_oss_key:
+            try:
+                oss.delete(asr_oss_key)
+            except Exception:  # noqa: BLE001  # 清理失败不影响主流程
+                pass
     log.info("转写 %s: %d 段文本，耗时 %.2fs", rec.id, len(transcript.segments), time.time() - t_asr)
     rec.transcript_json = json.dumps(transcript.to_dict(), ensure_ascii=False)
     rec.status = STATUS_TRANSCRIBED

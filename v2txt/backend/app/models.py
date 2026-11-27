@@ -58,6 +58,8 @@ class User(Base):
     feishu_tenant_key: Mapped[str] = mapped_column(String(64), default="", index=True)
     # 长期保存刷新令牌：服务重启后仍能以用户身份操作云盘（建目录/移动）
     feishu_refresh_token: Mapped[str] = mapped_column(Text, default="")
+    feishu_access_token: Mapped[str] = mapped_column(Text, default="")
+    feishu_token_exp: Mapped[float] = mapped_column(Float, default=0.0)
     feishu_app_slug: Mapped[str] = mapped_column(String(40), default="")
     # 运营后台角色：""（无）| viewer | support | finance | superadmin
     ops_role: Mapped[str] = mapped_column(String(20), default="")

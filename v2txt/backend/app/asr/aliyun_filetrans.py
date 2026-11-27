@@ -72,7 +72,9 @@ class AliyunFiletransASR(ASRProvider):
         task_id = r.json()["output"]["task_id"]
         log.info("转写任务已提交: %s", task_id)
 
-        deadline = time.time() + self.timeout_seconds
+        # 超时按音频时长收敛：正常情况下 60 秒音频几秒就完成，卡住应当尽快失败重试
+        budget = max(300.0, min(float(self.timeout_seconds), float(duration or 0) * 8 + 120))
+        deadline = time.time() + budget
         transcription_url = ""
         while time.time() < deadline:
             time.sleep(self.poll_seconds)
@@ -93,7 +95,7 @@ class AliyunFiletransASR(ASRProvider):
                     )
                 raise RuntimeError(f"转写任务失败: {out}")
         if not transcription_url:
-            raise RuntimeError("转写任务超时")
+            raise RuntimeError(f"转写任务超时（{int(budget)} 秒内未完成）")
 
         data = httpx.get(transcription_url, timeout=60).json()
         segments: list[Segment] = []

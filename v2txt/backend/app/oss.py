@@ -50,6 +50,20 @@ def presign(verb: str, key: str, ttl: int | None = None, content_type: str = "")
     )
 
 
+def upload(
+    key: str, data: bytes, content_type: str = "application/octet-stream", ttl: int | None = None
+) -> str:
+    """服务端直接上传对象，返回 6 小时有效的签名 GET URL（给 ASR 之类的外部服务拉取）。
+
+    走 OSS 而不是走 Cloudflare 隧道：ASR 厂商拉 2MB WAV 走隧道会卡到超时。
+    """
+    put_url = presign("PUT", key, ttl=ttl or 900, content_type=content_type)
+    resp = httpx.put(put_url, content=data, headers={"Content-Type": content_type}, timeout=180)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"上传到 OSS 失败: HTTP {resp.status_code} {resp.text[:200]}")
+    return presign("GET", key, ttl=6 * 3600)
+
+
 def object_key(org_id: str, recording_id: str, suffix: str) -> str:
     s = get_settings()
     return f"{s.oss_prefix}/{org_id}/{recording_id}/source{suffix}"

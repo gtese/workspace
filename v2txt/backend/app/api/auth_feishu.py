@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -188,10 +189,22 @@ def feishu_login(body: FeishuLoginIn, request: Request, db: Session = Depends(ge
         user.name = name
     db.commit()
 
-    put_user_token(open_id, token_data.get("access_token", ""))
+    access_token = token_data.get("access_token", "") or ""
+    expires_in = int(token_data.get("expires_in") or 7200)
+    put_user_token(open_id, access_token, expires_in)
+    # 落库：容器重启后内存缓存会丢，否则文档只能建在应用空间
+    user.feishu_access_token = access_token
+    user.feishu_token_exp = time.time() + max(300, expires_in - 120)
     if token_data.get("refresh_token"):
         user.feishu_refresh_token = token_data["refresh_token"]
-        db.commit()
+    db.commit()
+    log.info(
+        "飞书 user token 已保存 open_id=%s 有效期=%ss refresh_token=%s 响应字段=%s",
+        open_id,
+        expires_in,
+        "有" if token_data.get("refresh_token") else "无",
+        sorted(k for k in token_data if k not in ("access_token", "refresh_token")),
+    )
     # 后台对齐云盘「AI录音」目录，失败不影响登录
     from ..feishu.folder_sync import ensure_folder_from_user
 
