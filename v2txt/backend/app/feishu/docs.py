@@ -93,11 +93,22 @@ class FeishuDocClient:
         share_url: str,
         open_id: str,
         folder_token: str = "",
+        user_token: str = "",
     ) -> dict:
-        token = self._token()
+        """建纪要文档。
+
+        - 有 user_token：**以用户身份**直接建在目标目录里，天生归用户所有，
+          不需要转交，飞书也不会生成 "Content transferred from ..." 这种目录。
+        - 无 user_token：只能以应用身份建在应用空间，此时只加协作者、**不转交**
+          （一旦转交，飞书会把文档塞进 "Content transferred from 应用名" 目录）。
+        """
+        token = user_token or self._token()
         h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-        r = httpx.post(f"{BASE}/docx/v1/documents", headers=h, json={"title": title}, timeout=20)
+        body: dict = {"title": title}
+        if user_token and folder_token:
+            body["folder_token"] = folder_token
+        r = httpx.post(f"{BASE}/docx/v1/documents", headers=h, json=body, timeout=20)
         r.raise_for_status()
         data = r.json()
         if data.get("code") != 0:
@@ -134,6 +145,21 @@ class FeishuDocClient:
         if r.json().get("code") != 0:
             raise RuntimeError(f"写入文档失败: {r.json().get('msg')}")
 
+        if user_token:
+            # 用户身份创建：已经在用户自己的目录里，无需移动、无需转交
+            url = f"https://feishu.cn/docx/{doc}"
+            try:
+                meta = httpx.post(
+                    f"{BASE}/drive/v1/metas/batch_query",
+                    headers=h,
+                    json={"request_docs": [{"doc_token": doc, "doc_type": "docx"}], "with_url": True},
+                    timeout=20,
+                ).json()
+                url = meta["data"]["metas"][0].get("url") or url
+            except Exception:  # noqa: BLE001
+                log.warning("取文档 URL 失败，使用默认链接")
+            return {"document_id": doc, "url": url, "folder_ok": bool(folder_token)}
+
         moved = False
         # 先移动到员工云盘的「AI录音」目录（此时文档仍归应用，移动权限足够）
         if folder_token:
@@ -147,7 +173,23 @@ class FeishuDocClient:
             if not moved:
                 log.warning("移动到 AI录音 目录失败: %s", m.text[:200])
 
-        # 交给员工本人（失败不影响文档可用，只是仍在应用空间）
+        # 交给员工本人：只有放进用户目录后才转交，否则飞书会新建
+        # "Content transferred from <应用名>" 目录
+        if not folder_token:
+            log.warning("没有目标目录，文档保留在应用空间（不转交，避免生成 Content transferred 目录）")
+            url = f"https://feishu.cn/docx/{doc}"
+            try:
+                meta = httpx.post(
+                    f"{BASE}/drive/v1/metas/batch_query",
+                    headers=h,
+                    json={"request_docs": [{"doc_token": doc, "doc_type": "docx"}], "with_url": True},
+                    timeout=20,
+                ).json()
+                url = meta["data"]["metas"][0].get("url") or url
+            except Exception:  # noqa: BLE001
+                log.warning("取文档 URL 失败，使用默认链接")
+            return {"document_id": doc, "url": url, "folder_ok": False}
+
         try:
             httpx.post(
                 f"{BASE}/drive/v1/permissions/{doc}/members?type=docx",

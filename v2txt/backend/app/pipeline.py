@@ -232,26 +232,30 @@ def _distribute(db: Session, rec: Recording, summary: dict, settings) -> None:  
         try:
             client = FeishuDocClient()
             folder_token = ""
+            user_token = ""
             owner = db.get(User, rec.owner_user_id) if rec.owner_user_id else None
             try:
                 from .feishu.folder_sync import ensure_folder_from_user
 
-                row = db.get(DriveFolder, open_id)
-                if row and row.folder_token:
-                    folder_token = row.folder_token
+                user_token = feishu_oauth.user_token_for(db, owner) if owner else ""
+                if user_token:
+                    row = db.get(DriveFolder, open_id)
+                    if row and row.folder_token:
+                        folder_token = row.folder_token
+                    if not folder_token:
+                        folder_token = ensure_folder_from_user(open_id, user_token) or ""
+                        if folder_token and db.get(DriveFolder, open_id) is None:
+                            db.add(DriveFolder(open_id=open_id, folder_token=folder_token))
+                            db.commit()
                 if not folder_token:
-                    token = feishu_oauth.user_token_for(db, owner) if owner else ""
-                    folder_token = ensure_folder_from_user(open_id, token) or ""
-                if not folder_token:
-                    log.warning("拿不到「AI录音」目录（缺少用户授权），文档将留在应用空间")
-                elif db.get(DriveFolder, open_id) is None:
-                    db.add(DriveFolder(open_id=open_id, folder_token=folder_token))
-                    db.commit()
+                    log.warning(
+                        "没有可用的飞书用户令牌/目录，文档先以应用身份创建（不转交，避免生成 Content transferred 目录）"
+                    )
             except Exception:  # noqa: BLE001
                 log.exception("准备「AI录音」目录失败")
                 folder_token = ""
             info = client.create_minutes_doc(
-                rec.title, summary, detail_url, open_id, folder_token
+                rec.title, summary, detail_url, open_id, folder_token, user_token=user_token
             )
             doc_url = info["url"]
             if not info.get("folder_ok") and folder_token:

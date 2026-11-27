@@ -124,15 +124,31 @@ def user_info(user_access_token: str) -> dict[str, Any]:
     return info
 
 
-def authorize_url(redirect_uri: str, state: str = "login", app_id: str = "") -> str:
+# 用户身份需要的权限：offline_access 是拿到 refresh_token 的前提（否则令牌 2 小时就废）
+USER_SCOPES = (
+    "offline_access drive:drive docx:document contact:user.base:readonly"
+)
+
+
+def authorize_url(
+    redirect_uri: str, state: str = "login", app_id: str = "", scope: str = ""
+) -> str:
+    """飞书网页授权地址（v2 规范的授权端点）。
+
+    必须用 accounts.feishu.cn + client_id + response_type=code，并显式声明
+    scope（含 offline_access），否则换取 token 时不会返回 refresh_token。
+    """
     settings = get_settings()
     app_id = app_id or settings.feishu_app_id
     from urllib.parse import quote
 
+    scopes = scope or USER_SCOPES
     return (
-        "https://open.feishu.cn/open-apis/authen/v1/authorize"
-        f"?app_id={quote(app_id)}"
+        "https://accounts.feishu.cn/open-apis/authen/v1/authorize"
+        f"?client_id={quote(app_id)}"
+        "&response_type=code"
         f"&redirect_uri={quote(redirect_uri, safe='')}"
+        f"&scope={quote(scopes)}"
         f"&state={quote(state)}"
     )
 

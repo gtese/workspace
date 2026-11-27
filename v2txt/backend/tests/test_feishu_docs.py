@@ -38,10 +38,22 @@ class FakeDocClient:
         return "fld_new"
 
     def create_minutes_doc(
-        self, title: str, summary: dict, share_url: str, open_id: str, folder_token: str = ""
+        self,
+        title: str,
+        summary: dict,
+        share_url: str,
+        open_id: str,
+        folder_token: str = "",
+        user_token: str = "",
     ) -> dict:
         self.created.append(
-            {"title": title, "open_id": open_id, "folder": folder_token, "url": share_url}
+            {
+                "title": title,
+                "open_id": open_id,
+                "folder": folder_token,
+                "url": share_url,
+                "user_token": user_token,
+            }
         )
         return {
             "document_id": "doc_test",
