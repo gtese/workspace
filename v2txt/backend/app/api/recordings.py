@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from .. import audio, audit, mailer, storage
 from ..config import get_settings
@@ -64,7 +65,7 @@ class ClientLogIn(BaseModel):
     detail: str = Field(default="", max_length=1000)
 
 
-@router.post("/recordings/{recording_id}/client-log", status_code=204)
+@router.post("/recordings/{recording_id}/client-log", status_code=204, response_class=Response)
 def client_log(
     recording_id: str,
     body: ClientLogIn,
@@ -275,7 +276,7 @@ async def upload_segment(
     return to_out(rec)
 
 
-@router.delete("/recordings/{recording_id}", status_code=204)
+@router.delete("/recordings/{recording_id}", status_code=204, response_class=Response)
 def delete_recording(
     recording_id: str,
     user: User = Depends(current_user),

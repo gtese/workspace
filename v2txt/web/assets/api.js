@@ -63,7 +63,13 @@
       }
       let data = null;
       const ct = res.headers.get('content-type') || '';
-      if (ct.includes('application/json')) data = await res.json();
+      // 204 / 空响应体不能走 res.json()，否则 Chrome 抛 "Unexpected end of JSON input"
+      if (res.status !== 204 && res.status !== 205 && ct.includes('application/json')) {
+        const text = await res.text();
+        if (text) {
+          try { data = JSON.parse(text); } catch (e) { data = null; }
+        }
+      }
       if (!res.ok) {
         const msg = (data && (data.detail || data.message)) || ('HTTP ' + res.status);
         const err = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));

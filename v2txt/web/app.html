@@ -6,7 +6,7 @@
 <title>V2TXT · 控制台</title>
 <link rel="preconnect" href="https://open.feishu.cn" crossorigin>
 <link rel="dns-prefetch" href="https://open.feishu.cn">
-<link rel="stylesheet" href="/static/assets/style.css?v=20261126d">
+<link rel="stylesheet" href="/static/assets/style.css?v=20261127a">
 <style>
   body { padding-bottom: 40px; }
   header.top { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
@@ -234,7 +234,7 @@ try { if (localStorage.getItem('vt_token')) { document.getElementById('gate').cl
 </div>
 
 <script src="https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.40.js"></script>
-<script src="/static/assets/api.js?v=20261126d"></script>
+<script src="/static/assets/api.js?v=20261127a"></script>
 <script>
 const { Api, toast, needAuth, fmtDate, fmtMin } = UI;
 const zh = Api.lang === 'zh';
@@ -655,7 +655,7 @@ class Recorder {
         try { const j = await res.json(); msg = j.detail || msg; } catch (e) { /* 非 JSON */ }
         throw new Error(msg);
       }
-      return res.json();
+      try { return await res.json(); } catch (e) { return null; }
     }).catch((e) => {
       clearTimeout(timer);
       throw e.name === 'AbortError' ? new Error(zh ? '上传超时' : 'Upload timeout') : e;
