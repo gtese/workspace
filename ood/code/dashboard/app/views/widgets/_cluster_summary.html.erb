@@ -193,9 +193,9 @@
               <td><code><%= node[:name] %></code></td>
               <td><%= node[:partitions].join(', ') %></td>
               <td><span class="badge <%= cluster_node_state_class(node[:state], node[:restricted]) %>" title="<%= cluster_node_state_text(node[:state]) %><%= node[:restricted] ? ' This node is in a restricted partition (not available to all users).' : '' %>"><%= node[:state] %></span></td>
-              <td class="text-right"><%= format('%.2f', node[:load]) %></td>
-              <td class="text-right"><%= format('%.1f', node[:cpu_used_percent]) %>%</td>
-              <td class="text-right"><%= format('%.1f', node[:memory_used_percent]) %>%</td>
+              <td class="text-right <%= cluster_load_class(node[:load], node[:cpus]) %>"><strong><%= format('%.2f', node[:load]) %></strong></td>
+              <td class="text-right <%= cluster_usage_class(node[:cpu_used_percent]) %>"><strong><%= format('%.1f', node[:cpu_used_percent]) %>%</strong></td>
+              <td class="text-right <%= cluster_usage_class(node[:memory_used_percent]) %>"><strong><%= format('%.1f', node[:memory_used_percent]) %>%</strong></td>
               <td class="text-right"><%= number_with_delimiter(node[:cpus]) %></td>
               <td class="text-right"><%= cluster_memory_text(node[:memory_mb]) %></td>
               <td class="text-right"><%= node[:current_users] %></td>

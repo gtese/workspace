@@ -18,8 +18,8 @@ module ClusterSummaryHelper
         node_partitions = partitions.to_s.split(',').map { |p| p.sub(/\*\z/, '') }
         total_cpus = cpus.to_i
         total_mem = memory_mb.to_i
-        avail_cpus = idle.to_i
-        avail_mem = free_memory_mb.to_i
+        avail_cpus = [idle.to_i, total_cpus].min
+        avail_mem = [free_memory_mb.to_i, total_mem].min
         nodes << {
           name: name.sub(/\*\z/, ''),
           partitions: node_partitions,
@@ -30,8 +30,8 @@ module ClusterSummaryHelper
           available_memory_mb: avail_mem,
           available_cpus: avail_cpus,
           load: load.to_f,
-          cpu_used_percent: total_cpus > 0 ? ((total_cpus - avail_cpus).to_f / total_cpus * 100.0) : 0.0,
-          memory_used_percent: total_mem > 0 ? ((total_mem - avail_mem).to_f / total_mem * 100.0) : 0.0,
+          cpu_used_percent: total_cpus > 0 ? [[(total_cpus - avail_cpus).to_f / total_cpus * 100.0, 0.0].max, 100.0].min : 0.0,
+          memory_used_percent: total_mem > 0 ? [[(total_mem - avail_mem).to_f / total_mem * 100.0, 0.0].max, 100.0].min : 0.0,
           current_users: 0,
           current_jobs: 0,
           historical_jobs: 0
@@ -89,8 +89,8 @@ module ClusterSummaryHelper
       memory_mb: total_mem,
       available_cpus: avail_cpus,
       available_memory_mb: avail_mem,
-      cpu_used_percent: total_cpus > 0 ? ((total_cpus - avail_cpus).to_f / total_cpus * 100.0) : 0.0,
-      memory_used_percent: total_mem > 0 ? ((total_mem - avail_mem).to_f / total_mem * 100.0) : 0.0,
+      cpu_used_percent: total_cpus > 0 ? [[(total_cpus - avail_cpus).to_f / total_cpus * 100.0, 0.0].max, 100.0].min : 0.0,
+      memory_used_percent: total_mem > 0 ? [[(total_mem - avail_mem).to_f / total_mem * 100.0, 0.0].max, 100.0].min : 0.0,
       average_load: nodes.empty? ? 0.0 : (nodes.sum { |n| n[:load] }.to_f / nodes.size),
       users: jobs.map { |j| j[:user] }.uniq.size,
       job_count: jobs.size,
@@ -124,6 +124,25 @@ module ClusterSummaryHelper
 
     'text-success'
   end
+  # Color for node utilization columns: low green, medium yellow, high red.
+  def cluster_usage_class(percent)
+    value = percent.to_f
+    return 'text-danger' if value >= 80.0
+    return 'text-warning' if value >= 50.0
+
+    'text-success'
+  end
+
+  # Load average is shown relative to the node CPU count:
+  # < 50% green, 50-80% yellow, >= 80% red.
+  def cluster_load_class(load, cpus)
+    ratio = cpus.to_i > 0 ? load.to_f / cpus.to_f : 0.0
+    return 'text-danger' if ratio >= 0.8
+    return 'text-warning' if ratio >= 0.5
+
+    'text-success'
+  end
+
 
   def cluster_memory_text(memory_mb)
     return '0G' if memory_mb.to_i <= 0
