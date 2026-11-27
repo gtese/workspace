@@ -225,7 +225,7 @@ function create_datatable(options){
             },
             {
                 data:               "jobname",
-                width:              '25%',
+                width:              '16%',
                 render: function (data) {
                   var data = escapeHtml(data)
                   return `<span title="${data}" class="text-break">${data}</span>`;
@@ -300,10 +300,6 @@ function create_datatable(options){
                 "render":           function(data) {
                   return status_label(data);
                 }
-            },
-            {
-                data:               "cluster_title",
-                "autoWidth":        true
             },
             {
                 data:               null,
